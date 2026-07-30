@@ -20,6 +20,7 @@
       "predictiveBackGestureEnabled": false
     },
     "web": {
+      "bundler": "metro",
       "output": "static",
       "favicon": "./assets/images/favicon.png"
     },
@@ -31,6 +32,19 @@
           "backgroundColor": "#208AEF",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
+        }
+      ],
+      [
+        "expo-font",
+        {
+          "fonts": [
+            "./assets/fonts/Inter-Regular.otf",
+            "./assets/fonts/Inter-Medium.otf",
+            "./assets/fonts/Inter-SemiBold.otf",
+            "./assets/fonts/Inter-Bold.otf",
+            "./assets/fonts/Inter-Italic.otf",
+            "./assets/fonts/Inter-BoldItalic.otf"
+          ]
         }
       ]
     ],

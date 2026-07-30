@@ -1,9 +1,72 @@
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/preflight.css" layer(base);
+@import "tailwindcss/utilities.css";
+ 
+@import "nativewind/theme";
+
+@theme {
+    --color-main-background: "#0B0F14";
+    --color-card-background: "#121821";
+    --color-lines-divisions: "#232C3B";
+    --strong-border: "#2F3A4D";;
+    
+    --color-main-text: "#E6EDF3";
+    --color-second-text: "#AAB4C3";
+    --color-desactived-text: "#6B778C";
+    --color-green-money: "#22C55E";
+
+    --color-warn-color: "#F59E0B";
+    --color-error-color: "#EF4444";
+    --color-sucess-color: "#10B981";
+
+    --color-input-background: "#0F141B";
+    --color-input-border: "#2F3A4D";
+    --color-active-icon: "#8D51E6";
+
+    --color-inter-bank: "#FF7A01";
+    --color-nubank: "#8D11DA";
+    --color-bancoDoBrasil: "#FDFC30";
+    
+
+    /* FONTES */
+
+    --font-Inter-Regular: "Inter-Regular";
+    --font-Inter-Medium: "Inter-Medium";
+    --font-Inter-SemiBold: "Inter-SemiBold";
+    --font-Inter-Bold: "Inter-Bold";
+    --font-Inter-Italic: "Inter-Italic";
+    --font-Inter-BoldItalic: "Inter-BoldItalic";
+}
+
 :root {
-  --font-display:
-    Spline Sans, Inter, ui-sans-serif, system-ui, sans-serif, Apple Color Emoji, Segoe UI Emoji,
-    Segoe UI Symbol, Noto Color Emoji;
-  --font-mono:
-    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, Courier New, monospace;
-  --font-rounded: 'SF Pro Rounded', 'Hiragino Maru Gothic ProN', Meiryo, 'MS PGothic', sans-serif;
-  --font-serif: Georgia, 'Times New Roman', serif;
+    --color-main-background: "#0B0F14";
+    --color-card-background: "#121821";
+    --color-lines-divisions: "#232C3B";
+    --strong-border: "#2F3A4D";;
+    
+    --color-main-text: "#E6EDF3";
+    --color-second-text: "#AAB4C3";
+    --color-desactived-text: "#6B778C";
+    --color-green-money: "#22C55E";
+
+    --color-warn-color: "#F59E0B";
+    --color-error-color: "#EF4444";
+    --color-sucess-color: "#10B981";
+
+    --color-input-background: "#0F141B";
+    --color-input-border: "#2F3A4D";
+    --color-active-icon: "#8D51E6";
+
+    --color-inter-bank: "#FF7A01";
+    --color-nubank: "#8D11DA";
+    --color-bancoDoBrasil: "#FDFC30";
+
+        /* FONTES */
+
+    --font-Inter-Regular: "Inter-Regular";
+    --font-Inter-Medium: "Inter-Medium";
+    --font-Inter-SemiBold: "Inter-SemiBold";
+    --font-Inter-Bold: "Inter-Bold";
+    --font-Inter-Italic: "Inter-Italic";
+    --font-Inter-BoldItalic: "Inter-BoldItalic";
 }
