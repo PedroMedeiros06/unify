@@ -6,7 +6,7 @@ const tabs = [
   { name: "home", label: "Início", icon: "home-sharp" },
   { name: "transations", label: "Transações", icon: "swap-horizontal-sharp" },
   { name: "Add", label: "", icon: "add-circle-sharp" }, 
-  { name: "calendar", label: "Planejamento", icon: "calendar-sharp" },
+  { name: "planejamento", label: "Planejamento", icon: "calendar-sharp" },
   { name: "user", label: "Perfil", icon: "person-sharp" },
 ] as const;
 

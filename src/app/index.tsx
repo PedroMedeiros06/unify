@@ -5,13 +5,14 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Footer } from "../components/footer";
 
 import { Home } from "../pages/home";
+import { Planejamento } from "@/pages/Planejamento";
+import { Perfil } from "@/pages/Perfil";
 // import { Wallet } from "../pages/Wallet";
-// import { UserCalendar } from "../pages/Calendar";
 
 const Screens = {
   home: Home,
-//   calendar: UserCalendar,
-//   wallet: Wallet,
+  planejamento: Planejamento,
+  user: Perfil
 };
 
 export type ScreenType = keyof typeof Screens;

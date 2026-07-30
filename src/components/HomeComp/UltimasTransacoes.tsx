@@ -26,7 +26,12 @@ export function UltimasTransacoes() {
             Últimas transações
           </Text>
           
-          <Pressable className="flex-row items-center gap-1 active:opacity-60" hitSlop={10}>
+          <Pressable
+            className="flex-row items-center gap-1 active:opacity-60"
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel="Ver todas as transações"
+          >
             <Text 
               style={{ fontSize: actionTextSize }}
               className="text-active-icon font-Inter-Medium"
@@ -42,26 +47,43 @@ export function UltimasTransacoes() {
           <View className="flex-row flex-wrap gap-1.5 flex-1 pr-1">
             
             {/* Dropdown 1 */}
-            <Pressable className="bg-input-background/50 px-2 py-1.5 rounded-lg border border-lines-divisions flex-row items-center gap-1">
+            <Pressable
+              className="bg-input-background/50 px-2 py-1.5 rounded-lg border border-lines-divisions flex-row items-center gap-1"
+              accessibilityRole="button"
+              accessibilityLabel="Filtrar por banco"
+            >
               <Text style={{ fontSize: actionTextSize }} className="text-main-text font-Inter-Regular">Todos os bancos</Text>
               <Ionicons name="chevron-down" color={colors["second-text"]} size={10} />
             </Pressable>
             
             {/* Dropdown 2 */}
-            <Pressable className="bg-input-background/50 px-2 py-1.5 rounded-lg border border-lines-divisions flex-row items-center gap-1">
+            <Pressable
+              className="bg-input-background/50 px-2 py-1.5 rounded-lg border border-lines-divisions flex-row items-center gap-1"
+              accessibilityRole="button"
+              accessibilityLabel="Filtrar por período"
+            >
               <Text style={{ fontSize: actionTextSize }} className="text-main-text font-Inter-Regular">Hoje</Text>
               <Ionicons name="chevron-down" color={colors["second-text"]} size={10} />
             </Pressable>
 
             {/* Dropdown 3 */}
-            <Pressable className="bg-input-background/50 px-2 py-1.5 rounded-lg border border-lines-divisions flex-row items-center gap-1">
+            <Pressable
+              className="bg-input-background/50 px-2 py-1.5 rounded-lg border border-lines-divisions flex-row items-center gap-1"
+              accessibilityRole="button"
+              accessibilityLabel="Filtrar por categoria"
+            >
               <Text style={{ fontSize: actionTextSize }} className="text-main-text font-Inter-Regular">Categorias</Text>
               <Ionicons name="chevron-down" color={colors["second-text"]} size={10} />
             </Pressable>
           </View>
 
           {/* Ícone de Lupa para pesquisa */}
-          <Pressable className="p-1 active:opacity-60" hitSlop={8}>
+          <Pressable
+            className="p-1 active:opacity-60"
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Pesquisar transações"
+          >
             <Ionicons name="search-outline" color={colors["second-text"]} size={18} />
           </Pressable>
         </View>
@@ -121,7 +143,11 @@ export function UltimasTransacoes() {
       </View>
 
       {/* 3. BOTÃO ADICIONAR TRANSAÇÃO */}
-      <Pressable className="w-full py-2 rounded-xl border border-dashed border-input-border flex-row items-center justify-center gap-2 active:opacity-60">1
+      <Pressable
+        className="w-full py-2 rounded-xl border border-dashed border-input-border flex-row items-center justify-center gap-2 active:opacity-60"
+        accessibilityRole="button"
+        accessibilityLabel="Adicionar transação"
+      >
         <Ionicons name="add" color={colors["active-icon"]} size={18} />
         <Text style={{ fontSize: itemTitleSize }} className="text-active-icon font-Inter-Medium">
           Adicionar transação

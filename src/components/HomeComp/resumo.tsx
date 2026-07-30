@@ -1,5 +1,5 @@
 import { colors } from "@/theme/colors";
-import { moderateScale, scale } from "@/utils/scale";
+import { moderateScale } from "@/utils/scale";
 import { Ionicons } from "@expo/vector-icons";
 import { View, Text, Pressable } from "react-native";
 import { FormatToCurrency } from "@/utils/formatNumber";
@@ -12,22 +12,31 @@ const DEBUG = {
 
 const DEBUG_MODE = true;
 
+// Mantém o mesmo número de caracteres do valor real para não "pular" o layout
+function maskCurrency(formatted: string) {
+  return formatted.replace(/[0-9]/g, "•");
+}
+
 export function Resumo() {
   const title = moderateScale(28);
   const subtilte = moderateScale(12);
 
-  const [visible, setVisible] = useState(false)
+  // `visible` = true significa "saldo visível na tela" (estado inicial oculto por padrão,
+  // mais seguro para apps financeiros — o usuário revela quando quiser).
+  const [visible, setVisible] = useState(false);
 
-  const currentData = DEBUG_MODE ? DEBUG : null; 
+  const currentData = DEBUG_MODE ? DEBUG : null;
 
   const saldoAtual = currentData?.Saldo_Total ?? 0;
   const saldoAnterior = currentData?.Saldo_Total_Anterior ?? 0;
 
-  
-  const variacaoPercentual = saldoAnterior > 0 
-    ? Math.round(((saldoAtual - saldoAnterior) / saldoAnterior) * 100): 0;
+  const variacaoPercentual = saldoAnterior > 0
+    ? Math.round(((saldoAtual - saldoAnterior) / saldoAnterior) * 100) : 0;
 
   const prefixoPercentual = variacaoPercentual > 0 ? "+" : "";
+
+  const saldoFormatado = FormatToCurrency(saldoAtual);
+  const saldoExibido = visible ? saldoFormatado : maskCurrency(saldoFormatado);
 
   return (
     <View className="bg-card-background border border-lines-divisions rounded-xl">
@@ -40,14 +49,21 @@ export function Resumo() {
           >
             Saldo total consolidado
           </Text>
-          <Pressable>
-            <Ionicons name={visible ? "eye-off" : "eye" } color={colors["main-text"]} size={10} onPress={() => setVisible(!visible)}/>
+          <Pressable
+            onPress={() => setVisible(!visible)}
+            hitSlop={12}
+            accessibilityRole="button"
+            accessibilityLabel={visible ? "Ocultar saldo" : "Mostrar saldo"}
+          >
+            <Ionicons name={visible ? "eye-off" : "eye"} color={colors["main-text"]} size={10} />
           </Pressable>
         </View>
             <Pressable 
                 onPress={() => console.log('Importar')}
                 className="p-2 active:opacity-60"
                 hitSlop={12} // Aumenta a área de clique mesmo o ícone sendo pequeno
+                accessibilityRole="button"
+                accessibilityLabel="Importar extrato"
                 >
                 <Ionicons name="document-attach-outline" color={colors["second-text"]} size={20} />
             </Pressable>
@@ -59,7 +75,7 @@ export function Resumo() {
           style={{ fontSize: title, letterSpacing: title * -0.04 }}
           className="text-main-text font-Inter-Bold"
         >
-          {FormatToCurrency(saldoAtual)}
+          {saldoExibido}
         </Text>
         
         <View className="flex-row items-center gap-1.5 mt-1">
@@ -67,7 +83,7 @@ export function Resumo() {
             style={{ fontSize: subtilte }}
             className={variacaoPercentual >= 0 ? "text-sucess-color font-Inter-SemiBold" : "text-error-color font-Inter-SemiBold"}
           >
-            {prefixoPercentual}{variacaoPercentual}%
+            {visible ? `${prefixoPercentual}${variacaoPercentual}%` : "••%"}
           </Text>
           <Text 
             style={{ fontSize: subtilte }}
