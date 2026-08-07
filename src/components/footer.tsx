@@ -1,3 +1,4 @@
+import { ScreenType } from "@/context/NavigationContext";
 import { Ionicons } from "@expo/vector-icons";
 import { Pressable, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -10,11 +11,13 @@ const tabs = [
   { name: "user", label: "Perfil", icon: "person-sharp" },
 ] as const;
 
-type ScreenName = (typeof tabs)[number]["name"];
+
+
+export type ScreenName = (typeof tabs)[number]["name"];
 
 type FooterProps = {
-  activeScreen: ScreenName;
-  onChangeScreen: (screen: ScreenName) => void;
+  activeScreen: ScreenType;
+  onChangeScreen: (screen: any) => void;
 };
 
 export function Footer({ activeScreen, onChangeScreen }: FooterProps) {

@@ -3,6 +3,8 @@ import "../global.css"
 import { Slot } from "expo-router";
 import { ThemeProvider } from "../components/theme.provider"
 import { useAppFonts } from "@/theme/fonts";
+import { TransacoesProvider } from "@/context/TransacoesContext";
+import { NavigationProvider } from "@/context/NavigationContext";
 
 
 export default function RootLayout() {
@@ -12,7 +14,11 @@ export default function RootLayout() {
 
   return (
     <ThemeProvider name="default">
-      <Slot />
+      <NavigationProvider>
+        <TransacoesProvider>
+          <Slot />
+        </TransacoesProvider>
+      </NavigationProvider>
     </ThemeProvider>
   );
 }

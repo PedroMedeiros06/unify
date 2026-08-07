@@ -17,7 +17,8 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.pedro_medeiros08.Unify"
     },
     "web": {
       "bundler": "metro",
@@ -46,11 +47,18 @@
             "./assets/fonts/Inter-BoldItalic.otf"
           ]
         }
-      ]
+      ],
+      "expo-sqlite"
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "fc019956-7e65-49a1-88aa-de85cbd8ad40"
+      }
     }
   }
 }
