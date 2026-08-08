@@ -23,6 +23,7 @@ export function ImportarExtrato() {
     parsersDisponiveis,
     selecionarArquivo,
     selecionarBancoManualmente,
+    alternarTransacao,
     confirmarImportacao,
     reiniciar,
   } = useImportacaoCsv();
@@ -105,12 +106,25 @@ export function ImportarExtrato() {
           />
         )}
 
+        {/* ESTADO: VERIFICANDO DUPLICATAS */}
+        {estado.fase === "verificando_duplicatas" && (
+          <View className="bg-card-background border border-lines-divisions rounded-xl p-8 items-center">
+            <ActivityIndicator color={colors["active-icon"]} size="large" />
+            <Text style={{ fontSize: emptySubtitleSize }} className="text-desactived-text mt-3">
+              Verificando transações já importadas...
+            </Text>
+          </View>
+        )}
+
         {/* ESTADO: PREVIEW */}
         {estado.fase === "preview" && (
           <PreviewImportacao
-            resultado={estado.resultado}
-            nomeBanco={nomeBancoPorId(estado.resultado.bancoDetectado, parsersDisponiveis)}
+            transacoes={estado.transacoes}
+            transacoesExcluidas={estado.transacoesExcluidas}
+            linhasComErro={estado.linhasComErro}
+            nomeBanco={nomeBancoPorId(estado.bancoId, parsersDisponiveis)}
             nomeArquivo={estado.nomeArquivo}
+            onToggleTransacao={alternarTransacao}
             onConfirmar={confirmarImportacao}
             onCancelar={reiniciar}
             salvando={false}

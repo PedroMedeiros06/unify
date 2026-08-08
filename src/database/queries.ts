@@ -1,4 +1,5 @@
 import { getDatabase } from "./database";
+import { dataHojeIso } from "@/utils/dateUtils";
 
 export type TipoTransacao = "entrada" | "saida";
 export type StatusTransacao = "concluida" | "pendente" | "agendada";
@@ -16,25 +17,19 @@ export type Transacao = {
   subtitulo: string;
   valor: number;
   tipo: TipoTransacao;
-  data: string;
+  data: string; // formato ISO "aaaa-mm-dd" — ver src/utils/dateUtils.ts
   hora: string | null;
   bancoId: string;
   status: StatusTransacao;
   categoriaIcone: string | null;
   criadoEm: string;
+  identificadorExterno: string | null; // UUID do banco de origem, quando disponível (ex: Nubank)
 };
 
-// Formato "achatado" que a UI já espera (banco embutido no objeto,
-// igual ao TransacoesContext original) — evita reescrever as telas.
 export type TransacaoComBanco = Omit<Transacao, "bancoId"> & {
   banco: Banco;
 };
 
-/**
- * Insere um banco (instituição financeira) se ele ainda não existir.
- * Usar ON CONFLICT para permitir chamar isso repetidamente sem erro
- * (por exemplo, toda vez que o app carrega os bancos "padrão").
- */
 export async function upsertBanco(banco: Banco): Promise<void> {
   const db = await getDatabase();
   await db.runAsync(
@@ -50,16 +45,11 @@ export async function listarBancos(): Promise<Banco[]> {
   return db.getAllAsync<Banco>(`SELECT id, nome, sigla, cor FROM bancos ORDER BY nome ASC;`);
 }
 
-/**
- * Insere uma nova transação. O `id` deve ser gerado antes de chamar
- * (ex: com um UUID), para manter a camada de banco "burra" — ela só
- * grava o que recebe, sem gerar identificadores por conta própria.
- */
 export async function inserirTransacao(transacao: Transacao): Promise<void> {
   const db = await getDatabase();
   await db.runAsync(
-    `INSERT INTO transacoes (id, nome, subtitulo, valor, tipo, data, hora, banco_id, status, categoria_icone)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+    `INSERT INTO transacoes (id, nome, subtitulo, valor, tipo, data, hora, banco_id, status, categoria_icone, identificador_externo)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
     [
       transacao.id,
       transacao.nome,
@@ -71,15 +61,11 @@ export async function inserirTransacao(transacao: Transacao): Promise<void> {
       transacao.bancoId,
       transacao.status,
       transacao.categoriaIcone,
+      transacao.identificadorExterno,
     ]
   );
 }
 
-/**
- * Lista transações já com os dados do banco embutidos (JOIN),
- * ordenadas da mais recente para a mais antiga.
- * `limite` é opcional — útil para telas que só mostram as N mais recentes (Home).
- */
 export async function listarTransacoes(limite?: number): Promise<TransacaoComBanco[]> {
   const db = await getDatabase();
 
@@ -87,10 +73,11 @@ export async function listarTransacoes(limite?: number): Promise<TransacaoComBan
     SELECT
       t.id, t.nome, t.subtitulo, t.valor, t.tipo, t.data, t.hora,
       t.status, t.categoria_icone as categoriaIcone, t.criado_em as criadoEm,
+      t.identificador_externo as identificadorExterno,
       b.id as banco_id, b.nome as banco_nome, b.sigla as banco_sigla, b.cor as banco_cor
     FROM transacoes t
     INNER JOIN bancos b ON b.id = t.banco_id
-    ORDER BY t.criado_em DESC
+    ORDER BY t.data DESC, t.criado_em DESC
     ${limite ? `LIMIT ${limite}` : ""};
   `;
 
@@ -105,6 +92,7 @@ export async function listarTransacoes(limite?: number): Promise<TransacaoComBan
     status: StatusTransacao;
     categoriaIcone: string | null;
     criadoEm: string;
+    identificadorExterno: string | null;
     banco_id: string;
     banco_nome: string;
     banco_sigla: string;
@@ -124,6 +112,7 @@ export async function listarTransacoes(limite?: number): Promise<TransacaoComBan
     status: linha.status,
     categoriaIcone: linha.categoriaIcone,
     criadoEm: linha.criadoEm,
+    identificadorExterno: linha.identificadorExterno,
     banco: {
       id: linha.banco_id,
       nome: linha.banco_nome,
@@ -134,11 +123,44 @@ export async function listarTransacoes(limite?: number): Promise<TransacaoComBan
 }
 
 /**
- * Popula o banco com dados iniciais na primeira execução do app —
- * útil tanto para demonstração (TCC) quanto para o usuário não abrir
- * o app em um estado totalmente vazio. Seguro para chamar sempre:
- * só insere se a tabela de bancos estiver vazia.
+ * Busca transações de um banco específico dentro de um intervalo de datas
+ * (ambas em ISO, inclusivas). Usada pela deduplicação: antes de importar
+ * um CSV, buscamos só as transações já existentes no período coberto pelo
+ * arquivo, em vez de carregar a tabela inteira — mais rápido e escalável
+ * conforme o histórico do usuário cresce.
  */
+export async function listarTransacoesPorPeriodo(
+  bancoId: string,
+  dataInicioIso: string,
+  dataFimIso: string
+): Promise<Transacao[]> {
+  const db = await getDatabase();
+
+  return db.getAllAsync<Transacao>(
+    `SELECT
+       id, nome, subtitulo, valor, tipo, data, hora, banco_id as bancoId,
+       status, categoria_icone as categoriaIcone, criado_em as criadoEm,
+       identificador_externo as identificadorExterno
+     FROM transacoes
+     WHERE banco_id = ? AND data >= ? AND data <= ?;`,
+    [bancoId, dataInicioIso, dataFimIso]
+  );
+}
+
+/**
+ * Verifica rapidamente se um identificador externo (UUID do Nubank, por
+ * exemplo) já existe no banco — comparação exata, usada quando o banco
+ * de origem fornece um ID único e confiável para a transação.
+ */
+export async function existeIdentificadorExterno(identificadorExterno: string): Promise<boolean> {
+  const db = await getDatabase();
+  const resultado = await db.getFirstAsync<{ total: number }>(
+    `SELECT COUNT(*) as total FROM transacoes WHERE identificador_externo = ?;`,
+    [identificadorExterno]
+  );
+  return (resultado?.total ?? 0) > 0;
+}
+
 export async function seedDadosIniciaisSeNecessario(): Promise<void> {
   const bancosExistentes = await listarBancos();
   if (bancosExistentes.length > 0) return;
@@ -151,51 +173,5 @@ export async function seedDadosIniciaisSeNecessario(): Promise<void> {
 
   for (const banco of bancosPadrao) {
     await upsertBanco(banco);
-  }
-
-  const transacoesIniciais: Transacao[] = [
-    {
-      id: "seed-1",
-      nome: "UBER",
-      subtitulo: "Transporte",
-      valor: 25.5,
-      tipo: "saida",
-      data: "05/06/2026",
-      hora: null,
-      bancoId: "nubank",
-      status: "concluida",
-      categoriaIcone: "car-outline",
-      criadoEm: new Date().toISOString(),
-    },
-    {
-      id: "seed-2",
-      nome: "Transferência recebida",
-      subtitulo: "Transferência",
-      valor: 2500,
-      tipo: "entrada",
-      data: "05/06/2026",
-      hora: null,
-      bancoId: "inter",
-      status: "concluida",
-      categoriaIcone: "swap-horizontal-outline",
-      criadoEm: new Date().toISOString(),
-    },
-    {
-      id: "seed-3",
-      nome: "Pão de Açúcar",
-      subtitulo: "Mercado",
-      valor: 140.9,
-      tipo: "saida",
-      data: "05/06/2026",
-      hora: null,
-      bancoId: "bb",
-      status: "concluida",
-      categoriaIcone: "cart-outline",
-      criadoEm: new Date().toISOString(),
-    },
-  ];
-
-  for (const transacao of transacoesIniciais) {
-    await inserirTransacao(transacao);
   }
 }

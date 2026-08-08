@@ -8,6 +8,7 @@ import { Sparkline } from "@/components/HomeComp/Sparkline";
 import { BancosConectados } from "@/components/HomeComp/BancosConectados";
 import { useNavigation } from "@/context/NavigationContext";
 
+
 const DEBUG = {
   Saldo_Total: 6782.91,
   Saldo_Total_Anterior: 5968.96,

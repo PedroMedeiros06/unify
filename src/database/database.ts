@@ -1,25 +1,20 @@
 import * as SQLite from "expo-sqlite";
-import { ALL_MIGRATIONS } from "./schema";
+import { rodarMigrations } from "./migrations";
 
 const DATABASE_NAME = "unify.db";
 
 let dbInstance: SQLite.SQLiteDatabase | null = null;
 
 /**
- * Retorna a instância do banco, abrindo e rodando as migrations
- * apenas na primeira chamada (padrão singleton). Chamadas seguintes
- * reaproveitam a mesma conexão.
+ * Retorna a instância do banco, abrindo e aplicando as migrations
+ * pendentes apenas na primeira chamada (padrão singleton). Chamadas
+ * seguintes reaproveitam a mesma conexão, sem rodar migrations de novo.
  */
 export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
   if (dbInstance) return dbInstance;
 
   const db = await SQLite.openDatabaseAsync(DATABASE_NAME);
-
-  // Roda cada CREATE TABLE/INDEX em sequência. Usar execAsync porque
-  // são comandos DDL (estrutura), não precisam de parâmetros.
-  for (const migration of ALL_MIGRATIONS) {
-    await db.execAsync(migration);
-  }
+  await rodarMigrations(db);
 
   dbInstance = db;
   return db;
@@ -28,6 +23,8 @@ export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
 /**
  * Utilitário para resetar o banco durante desenvolvimento/testes.
  * NUNCA chamar isso em produção — apaga todos os dados do usuário.
+ * Útil quando o schema muda de forma incompatível com dados de teste
+ * já existentes, ou para simular a experiência de um usuário novo.
  */
 export async function resetDatabaseForDev(): Promise<void> {
   if (!__DEV__) {
@@ -38,8 +35,9 @@ export async function resetDatabaseForDev(): Promise<void> {
   const db = await getDatabase();
   await db.execAsync(`DROP TABLE IF EXISTS transacoes;`);
   await db.execAsync(`DROP TABLE IF EXISTS bancos;`);
+  await db.execAsync(`PRAGMA user_version = 0;`);
 
-  for (const migration of ALL_MIGRATIONS) {
-    await db.execAsync(migration);
-  }
+  // Fecha a conexão em cache para forçar reabertura + remigração do zero
+  dbInstance = null;
+  await getDatabase();
 }

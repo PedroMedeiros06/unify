@@ -2,19 +2,28 @@ import { useCallback, useState } from "react";
 import * as DocumentPicker from "expo-document-picker";
 import { File } from "expo-file-system";
 import { importarCsv, obterParserPorId, PARSERS_DISPONIVEIS } from "@/database/parsers";
-import { ResultadoParse, TransacaoImportada } from "@/database/parsers/TransacaoImportada";
+import { marcarPossiveisDuplicatas, TransacaoComStatusDuplicata } from "@/database/deduplicacao";
 import { useTransacoes } from "@/context/TransacoesContext";
+import { dataIsoParaBR } from "@/utils/dateUtils";
 
 export type EstadoImportacao =
   | { fase: "ocioso" }
   | { fase: "lendo_arquivo" }
   | { fase: "banco_nao_identificado"; conteudoCsv: string; nomeArquivo: string }
-  | { fase: "preview"; resultado: ResultadoParse; nomeArquivo: string }
+  | { fase: "verificando_duplicatas" }
+  | {
+      fase: "preview";
+      bancoId: string;
+      nomeArquivo: string;
+      transacoes: TransacaoComStatusDuplicata[];
+      linhasComErro: { numeroLinha: number; conteudoOriginal: string; motivo: string }[];
+      // ids (índice) das transações que o usuário optou por NÃO importar
+      // — por padrão, duplicatas já vêm desmarcadas, tudo mais vem marcado
+      transacoesExcluidas: Set<number>;
+    }
   | { fase: "salvando" }
   | { fase: "concluido"; totalImportado: number }
   | { fase: "erro"; mensagem: string };
-
-const ICONE_CATEGORIA_PADRAO = "swap-horizontal-outline";
 
 const REGRAS_CATEGORIA: { palavras: string[]; categoria: string; icone: string }[] = [
   { palavras: ["uber", "99", "taxi"], categoria: "Transporte", icone: "car-outline" },
@@ -32,33 +41,18 @@ function categorizarPorPalavraChave(descricao: string): { categoria: string; ico
       return { categoria: regra.categoria, icone: regra.icone };
     }
   }
-  return { categoria: "Outros", icone: ICONE_CATEGORIA_PADRAO };
+  return { categoria: "Outros", icone: "swap-horizontal-outline" };
 }
 
-/**
- * Lê o conteúdo de texto de um arquivo selecionado pelo DocumentPicker.
- *
- * Por que isso precisa de tratamento especial: no Android, o DocumentPicker
- * frequentemente retorna uma URI do tipo `content://` (Storage Access
- * Framework), não um caminho de arquivo `file://` direto — mesmo quando
- * `copyToCacheDirectory: true` é usado. A API antiga de expo-file-system
- * (`readAsStringAsync`) podia falhar nesses casos com "Location isn't
- * readable". A classe `File` da API nova lida melhor com isso, mas ainda
- * assim mantemos um fallback via fetch(), que funciona tanto para
- * `content://` quanto para `file://` em praticamente todos os casos.
- */
 async function lerConteudoArquivo(uri: string): Promise<string> {
   try {
     const file = new File(uri);
     return await file.text();
-  } catch (erroApiNova) {
-    // Fallback: fetch() consegue ler tanto content:// quanto file://
-    // através do bridge nativo do React Native, sem depender da mesma
-    // camada de acesso a arquivo que falhou acima.
+  } catch {
     try {
       const resposta = await fetch(uri);
       return await resposta.text();
-    } catch (erroFetch) {
+    } catch {
       throw new Error(
         "Não foi possível ler o arquivo selecionado. Tente selecionar o arquivo novamente ou verifique se ele não foi movido/excluído."
       );
@@ -72,6 +66,39 @@ export function useImportacaoCsv() {
 
   const reiniciar = useCallback(() => {
     setEstado({ fase: "ocioso" });
+  }, []);
+
+  const prepararPreview = useCallback(async (bancoId: string, nomeArquivo: string, resultadoParse: ReturnType<typeof importarCsv>) => {
+    setEstado({ fase: "verificando_duplicatas" });
+
+    try {
+      const transacoesComStatus = await marcarPossiveisDuplicatas(resultadoParse.transacoes, bancoId);
+
+      // Por padrão: transações marcadas como possível duplicata começam
+      // DESMARCADAS (excluídas da importação) — o usuário precisa incluir
+      // manualmente se quiser importar mesmo assim. Todas as outras
+      // começam marcadas para importar.
+      const transacoesExcluidas = new Set<number>(
+        transacoesComStatus.reduce<number[]>((acc, t, index) => {
+          if (t.possivelDuplicata) acc.push(index);
+          return acc;
+        }, [])
+      );
+
+      setEstado({
+        fase: "preview",
+        bancoId,
+        nomeArquivo,
+        transacoes: transacoesComStatus,
+        linhasComErro: resultadoParse.linhasComErro,
+        transacoesExcluidas,
+      });
+    } catch (e) {
+      setEstado({
+        fase: "erro",
+        mensagem: e instanceof Error ? e.message : "Erro ao verificar duplicatas.",
+      });
+    }
   }, []);
 
   const selecionarArquivo = useCallback(async () => {
@@ -105,49 +132,74 @@ export function useImportacaoCsv() {
       const resultadoParse = importarCsv(conteudoCsv);
 
       if (!resultadoParse.bancoDetectado) {
-        setEstado({
-          fase: "banco_nao_identificado",
-          conteudoCsv,
-          nomeArquivo: arquivo.name,
-        });
+        setEstado({ fase: "banco_nao_identificado", conteudoCsv, nomeArquivo: arquivo.name });
         return;
       }
 
-      setEstado({ fase: "preview", resultado: resultadoParse, nomeArquivo: arquivo.name });
+      await prepararPreview(resultadoParse.bancoDetectado, arquivo.name, resultadoParse);
     } catch (e) {
       setEstado({
         fase: "erro",
         mensagem: e instanceof Error ? e.message : "Erro inesperado ao ler o arquivo.",
       });
     }
-  }, []);
+  }, [prepararPreview]);
 
-  const selecionarBancoManualmente = useCallback((idBanco: string, conteudoCsv: string, nomeArquivo: string) => {
-    const parser = obterParserPorId(idBanco);
-    if (!parser) {
-      setEstado({ fase: "erro", mensagem: "Banco selecionado não é suportado." });
-      return;
-    }
+  const selecionarBancoManualmente = useCallback(
+    async (idBanco: string, conteudoCsv: string, nomeArquivo: string) => {
+      const parser = obterParserPorId(idBanco);
+      if (!parser) {
+        setEstado({ fase: "erro", mensagem: "Banco selecionado não é suportado." });
+        return;
+      }
 
-    const resultadoParse = parser.parse(conteudoCsv);
-    setEstado({ fase: "preview", resultado: resultadoParse, nomeArquivo });
+      const resultadoParse = parser.parse(conteudoCsv);
+      await prepararPreview(idBanco, nomeArquivo, resultadoParse);
+    },
+    [prepararPreview]
+  );
+
+  // Alterna se uma transação específica (pelo índice na lista de preview)
+  // será importada ou não — usado tanto para desmarcar duplicatas
+  // indesejadas quanto para o usuário decidir incluir uma mesmo assim.
+  const alternarTransacao = useCallback((index: number) => {
+    setEstado((prev) => {
+      if (prev.fase !== "preview") return prev;
+
+      const novasExcluidas = new Set(prev.transacoesExcluidas);
+      if (novasExcluidas.has(index)) {
+        novasExcluidas.delete(index);
+      } else {
+        novasExcluidas.add(index);
+      }
+
+      return { ...prev, transacoesExcluidas: novasExcluidas };
+    });
   }, []);
 
   const confirmarImportacao = useCallback(async () => {
     if (estado.fase !== "preview") return;
 
+    const transacoesParaImportar = estado.transacoes.filter(
+      (_, index) => !estado.transacoesExcluidas.has(index)
+    );
+
+    if (transacoesParaImportar.length === 0) {
+      setEstado({ fase: "erro", mensagem: "Nenhuma transação selecionada para importar." });
+      return;
+    }
+
     setEstado({ fase: "salvando" });
 
-    const bancoId = estado.resultado.bancoDetectado;
-    const parser = bancoId ? obterParserPorId(bancoId) : null;
+    const parser = obterParserPorId(estado.bancoId);
 
-    if (!bancoId || !parser) {
+    if (!parser) {
       setEstado({ fase: "erro", mensagem: "Banco de destino inválido para salvar as transações." });
       return;
     }
 
     try {
-      for (const transacao of estado.resultado.transacoes) {
+      for (const transacao of transacoesParaImportar) {
         const { categoria, icone } = categorizarPorPalavraChave(transacao.descricao);
 
         await adicionarTransacao({
@@ -155,15 +207,16 @@ export function useImportacaoCsv() {
           subtitulo: transacao.extra?.categoria ?? categoria,
           valor: transacao.valor,
           tipo: transacao.tipo,
-          data: formatarDataParaExibicao(transacao.data),
-          banco: { sigla: siglaPorBanco(bancoId), cor: corPorBanco(bancoId) },
-          bancoId,
+          data: dataIsoParaBR(transacao.data),
+          banco: { sigla: siglaPorBanco(estado.bancoId), cor: corPorBanco(estado.bancoId) },
+          bancoId: estado.bancoId,
           status: "concluida",
           categoriaIcone: icone,
+          identificadorExterno: transacao.extra?.identificadorExterno ?? null,
         });
       }
 
-      setEstado({ fase: "concluido", totalImportado: estado.resultado.transacoes.length });
+      setEstado({ fase: "concluido", totalImportado: transacoesParaImportar.length });
     } catch (e) {
       setEstado({
         fase: "erro",
@@ -177,14 +230,10 @@ export function useImportacaoCsv() {
     parsersDisponiveis: PARSERS_DISPONIVEIS,
     selecionarArquivo,
     selecionarBancoManualmente,
+    alternarTransacao,
     confirmarImportacao,
     reiniciar,
   };
-}
-
-function formatarDataParaExibicao(dataIso: string): string {
-  const [ano, mes, dia] = dataIso.split("-");
-  return `${dia}/${mes}/${ano}`;
 }
 
 function siglaPorBanco(idBanco: string): string {

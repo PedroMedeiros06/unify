@@ -5,16 +5,15 @@ import {
   seedDadosIniciaisSeNecessario,
   TransacaoComBanco,
 } from "@/database/queries";
+import { dataIsoParaBR, dataBRParaIso, dataHojeIso } from "@/utils/dateUtils";
 
-// Tipo público exposto às telas — igual ao formato que já era usado
-// antes da migração para SQLite, para não precisar alterar componentes.
 export type Transacao = {
   id: string;
   nome: string;
   subtitulo: string;
   valor: number;
   tipo: "entrada" | "saida";
-  data: string;
+  data: string; // formato dd/mm/aaaa — já convertido para exibição
   hora?: string;
   banco: {
     sigla: string;
@@ -25,7 +24,8 @@ export type Transacao = {
 };
 
 type NovaTransacaoInput = Omit<Transacao, "id"> & {
-  bancoId: string; // precisa apontar para um banco já cadastrado na tabela `bancos`
+  bancoId: string;
+  identificadorExterno?: string | null;
 };
 
 type TransacoesContextValue = {
@@ -45,7 +45,7 @@ function mapearParaTransacaoUI(t: TransacaoComBanco): Transacao {
     subtitulo: t.subtitulo,
     valor: t.valor,
     tipo: t.tipo,
-    data: t.data,
+    data: dataIsoParaBR(t.data), // banco guarda ISO, UI recebe dd/mm/aaaa
     hora: t.hora ?? undefined,
     banco: { sigla: t.banco.sigla, cor: t.banco.cor },
     status: t.status,
@@ -64,14 +64,11 @@ export function TransacoesProvider({ children }: { children: ReactNode }) {
       const linhas = await listarTransacoes();
       setTransacoes(linhas.map(mapearParaTransacaoUI));
     } catch (e) {
-      // Erro de leitura do banco (ex: disco corrompido, migration falhou).
-      // Mantemos a lista vazia em vez de travar a tela.
       setErro(e instanceof Error ? e.message : "Erro ao carregar transações");
       console.error("[TransacoesContext] Falha ao carregar transações:", e);
     }
   }, []);
 
-  // Inicialização: garante dados-semente na primeira vez e carrega a lista
   useEffect(() => {
     let ativo = true;
 
@@ -96,6 +93,14 @@ export function TransacoesProvider({ children }: { children: ReactNode }) {
     async (novaTransacao: NovaTransacaoInput) => {
       const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
+      // A entrada pode vir em dd/mm/aaaa (telas que já usam esse formato,
+      // como o formulário de transferência) — normalizamos para ISO antes
+      // de gravar. Se já vier em ISO (ex: aaaa-mm-dd, começa com 4 dígitos),
+      // mantemos como está.
+      const dataIso = /^\d{4}-\d{2}-\d{2}$/.test(novaTransacao.data)
+        ? novaTransacao.data
+        : dataBRParaIso(novaTransacao.data);
+
       try {
         await inserirTransacao({
           id,
@@ -103,16 +108,15 @@ export function TransacoesProvider({ children }: { children: ReactNode }) {
           subtitulo: novaTransacao.subtitulo,
           valor: novaTransacao.valor,
           tipo: novaTransacao.tipo,
-          data: novaTransacao.data,
+          data: dataIso,
           hora: novaTransacao.hora ?? null,
           bancoId: novaTransacao.bancoId,
           status: novaTransacao.status ?? "concluida",
           categoriaIcone: novaTransacao.categoriaIcone ?? null,
+          identificadorExterno: novaTransacao.identificadorExterno ?? null,
           criadoEm: new Date().toISOString(),
         });
 
-        // Atualização otimista: insere no estado local imediatamente,
-        // sem esperar um novo SELECT completo no banco.
         setTransacoes((prev) => [
           {
             id,
@@ -120,7 +124,7 @@ export function TransacoesProvider({ children }: { children: ReactNode }) {
             subtitulo: novaTransacao.subtitulo,
             valor: novaTransacao.valor,
             tipo: novaTransacao.tipo,
-            data: novaTransacao.data,
+            data: dataIsoParaBR(dataIso),
             hora: novaTransacao.hora,
             banco: novaTransacao.banco,
             status: novaTransacao.status ?? "concluida",
@@ -131,7 +135,7 @@ export function TransacoesProvider({ children }: { children: ReactNode }) {
       } catch (e) {
         setErro(e instanceof Error ? e.message : "Erro ao salvar transação");
         console.error("[TransacoesContext] Falha ao inserir transação:", e);
-        throw e; // deixa a tela que chamou decidir como tratar (ex: mostrar alerta)
+        throw e;
       }
     },
     []
