@@ -2,10 +2,12 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, R
 import {
   listarTransacoes,
   inserirTransacao,
+  atualizarTransacao,
+  excluirTransacao,
   seedDadosIniciaisSeNecessario,
   TransacaoComBanco,
 } from "@/database/queries";
-import { dataIsoParaBR, dataBRParaIso, dataHojeIso } from "@/utils/dateUtils";
+import { dataIsoParaBR, dataBRParaIso } from "@/utils/dateUtils";
 
 export type Transacao = {
   id: string;
@@ -28,11 +30,22 @@ type NovaTransacaoInput = Omit<Transacao, "id"> & {
   identificadorExterno?: string | null;
 };
 
+export type CamposEditaveis = {
+  nome: string;
+  subtitulo: string;
+  valor: number;
+  tipo: "entrada" | "saida";
+  data: string;
+  categoriaIcone?: string;
+};
+
 type TransacoesContextValue = {
   transacoes: Transacao[];
   carregando: boolean;
   erro: string | null;
   adicionarTransacao: (transacao: NovaTransacaoInput) => Promise<void>;
+  editarTransacao: (id: string, campos: CamposEditaveis) => Promise<void>;
+  removerTransacao: (id: string) => Promise<void>;
   recarregar: () => Promise<void>;
 };
 
@@ -45,12 +58,16 @@ function mapearParaTransacaoUI(t: TransacaoComBanco): Transacao {
     subtitulo: t.subtitulo,
     valor: t.valor,
     tipo: t.tipo,
-    data: dataIsoParaBR(t.data), // banco guarda ISO, UI recebe dd/mm/aaaa
+    data: dataIsoParaBR(t.data),
     hora: t.hora ?? undefined,
     banco: { sigla: t.banco.sigla, cor: t.banco.cor },
     status: t.status,
     categoriaIcone: t.categoriaIcone ?? undefined,
   };
+}
+
+function normalizarParaIso(data: string): string {
+  return /^\d{4}-\d{2}-\d{2}$/.test(data) ? data : dataBRParaIso(data);
 }
 
 export function TransacoesProvider({ children }: { children: ReactNode }) {
@@ -92,14 +109,7 @@ export function TransacoesProvider({ children }: { children: ReactNode }) {
   const adicionarTransacao = useCallback(
     async (novaTransacao: NovaTransacaoInput) => {
       const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-
-      // A entrada pode vir em dd/mm/aaaa (telas que já usam esse formato,
-      // como o formulário de transferência) — normalizamos para ISO antes
-      // de gravar. Se já vier em ISO (ex: aaaa-mm-dd, começa com 4 dígitos),
-      // mantemos como está.
-      const dataIso = /^\d{4}-\d{2}-\d{2}$/.test(novaTransacao.data)
-        ? novaTransacao.data
-        : dataBRParaIso(novaTransacao.data);
+      const dataIso = normalizarParaIso(novaTransacao.data);
 
       try {
         await inserirTransacao({
@@ -141,9 +151,63 @@ export function TransacoesProvider({ children }: { children: ReactNode }) {
     []
   );
 
+  const editarTransacao = useCallback(async (id: string, campos: CamposEditaveis) => {
+    const dataIso = normalizarParaIso(campos.data);
+
+    try {
+      await atualizarTransacao(id, {
+        nome: campos.nome,
+        subtitulo: campos.subtitulo,
+        valor: campos.valor,
+        tipo: campos.tipo,
+        data: dataIso,
+        categoriaIcone: campos.categoriaIcone ?? null,
+      });
+
+      setTransacoes((prev) =>
+        prev.map((t) =>
+          t.id === id
+            ? {
+                ...t,
+                nome: campos.nome,
+                subtitulo: campos.subtitulo,
+                valor: campos.valor,
+                tipo: campos.tipo,
+                data: dataIsoParaBR(dataIso),
+                categoriaIcone: campos.categoriaIcone,
+              }
+            : t
+        )
+      );
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Erro ao editar transação");
+      console.error("[TransacoesContext] Falha ao editar transação:", e);
+      throw e;
+    }
+  }, []);
+
+  const removerTransacao = useCallback(async (id: string) => {
+    try {
+      await excluirTransacao(id);
+      setTransacoes((prev) => prev.filter((t) => t.id !== id));
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Erro ao excluir transação");
+      console.error("[TransacoesContext] Falha ao excluir transação:", e);
+      throw e;
+    }
+  }, []);
+
   const value = useMemo(
-    () => ({ transacoes, carregando, erro, adicionarTransacao, recarregar: carregarDoBanco }),
-    [transacoes, carregando, erro, adicionarTransacao, carregarDoBanco]
+    () => ({
+      transacoes,
+      carregando,
+      erro,
+      adicionarTransacao,
+      editarTransacao,
+      removerTransacao,
+      recarregar: carregarDoBanco,
+    }),
+    [transacoes, carregando, erro, adicionarTransacao, editarTransacao, removerTransacao, carregarDoBanco]
   );
 
   return (

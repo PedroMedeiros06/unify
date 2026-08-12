@@ -1,25 +1,10 @@
 import { SQLiteDatabase } from "expo-sqlite";
 
 /**
- * Sistema de migrations versionado.
- *
- * Por que isso existe: `CREATE TABLE IF NOT EXISTS` só cria a tabela se
- * ela ainda não existe — se o schema mudar (nova coluna, novo índice),
- * um banco já criado com o schema antigo NÃO é atualizado automaticamente,
- * e a query falha com erros como "no such column".
- *
- * A solução é versionar o schema: cada mudança estrutural vira uma
- * "migration" numerada. O SQLite tem um contador embutido para isso
- * (`PRAGMA user_version`, começa em 0). Ao abrir o banco, comparamos a
- * versão atual do banco com a versão mais recente conhecida pelo app e
- * aplicamos só as migrations que faltam, em ordem — nunca recriamos ou
- * apagamos dados existentes.
- *
- * IMPORTANTE: migrations já publicadas (rodando no dispositivo de algum
- * usuário) NUNCA devem ser editadas depois — sempre adicionar uma nova
- * migration ao final da lista, mesmo para corrigir um erro em uma anterior.
- * Editar uma migration antiga faz o app achar que ela já rodou (pela
- * versão) quando na verdade rodou uma versão diferente do código.
+ * Sistema de migrations versionado. Ver documentação completa no topo
+ * deste arquivo em versões anteriores do projeto — resumo: cada mudança
+ * de schema é uma migration numerada, aplicada uma única vez por
+ * dispositivo, nunca editada retroativamente após publicada.
  */
 
 type Migration = {
@@ -66,51 +51,65 @@ const MIGRATIONS: Migration[] = [
     versao: 2,
     descricao: "Adiciona coluna identificador_externo (para deduplicação por ID do banco de origem)",
     async executar(db) {
-      // Bancos que já rodaram a migration 1 têm a tabela `transacoes`
-      // sem essa coluna — ALTER TABLE ADD COLUMN é seguro e não apaga
-      // dados existentes. Bancos NOVOS (nunca rodaram nenhuma migration)
-      // vão ter passado pela migration 1 já sem essa coluna também,
-      // então essa migration roda igual para todo mundo, sempre em sequência.
-      await db.execAsync(`
-        ALTER TABLE transacoes ADD COLUMN identificador_externo TEXT;
-      `);
-      await db.execAsync(`
-        CREATE INDEX IF NOT EXISTS idx_transacoes_id_externo ON transacoes (identificador_externo);
-      `);
+      await db.execAsync(`ALTER TABLE transacoes ADD COLUMN identificador_externo TEXT;`);
+      await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_transacoes_id_externo ON transacoes (identificador_externo);`);
     },
   },
   {
     versao: 3,
     descricao: "Migra coluna 'data' de dd/mm/aaaa para formato ISO (aaaa-mm-dd) e recria índice",
     async executar(db) {
-      // Bancos criados ANTES desta migration podem ter dados na coluna
-      // `data` em formato dd/mm/aaaa (formato antigo). Convertemos in-place
-      // com uma expressão SQL, sem perder nenhuma linha:
-      // "05/07/2026" → substr(data,7,4) || '-' || substr(data,4,2) || '-' || substr(data,1,2)
-      // Só converte linhas que ainda estão no formato antigo (contêm "/"),
-      // então é seguro rodar mesmo que a tabela já tenha alguns registros
-      // em ISO e outros não.
       await db.execAsync(`
         UPDATE transacoes
         SET data = substr(data, 7, 4) || '-' || substr(data, 4, 2) || '-' || substr(data, 1, 2)
         WHERE data LIKE '__/__/____';
       `);
-
-      // O índice antigo (idx_transacoes_criado_em) continua válido, mas
-      // adicionamos um índice por `data` também, já que passa a ser
-      // comparável/ordenável corretamente como texto puro em formato ISO.
+      await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_transacoes_data ON transacoes (data DESC);`);
+    },
+  },
+  {
+    versao: 4,
+    descricao: "Cria tabelas metas e compromissos",
+    async executar(db) {
+      // `progresso_atual` começa em 0 e, nesta versão, só é alterado
+      // manualmente por edição da meta (sem vínculo automático com
+      // transações ainda — isso fica para uma versão futura).
       await db.execAsync(`
-        CREATE INDEX IF NOT EXISTS idx_transacoes_data ON transacoes (data DESC);
+        CREATE TABLE IF NOT EXISTS metas (
+          id TEXT PRIMARY KEY NOT NULL,
+          nome TEXT NOT NULL,
+          valor_meta REAL NOT NULL,
+          progresso_atual REAL NOT NULL DEFAULT 0,
+          icone TEXT NOT NULL,
+          cor TEXT NOT NULL,
+          criado_em TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+      `);
+
+      // `data_vencimento` em ISO (aaaa-mm-dd), mesma convenção usada em
+      // transacoes.data. `notificado` evita reagendar/reenviar a mesma
+      // notificação local toda vez que a lista é recarregada.
+      await db.execAsync(`
+        CREATE TABLE IF NOT EXISTS compromissos (
+          id TEXT PRIMARY KEY NOT NULL,
+          nome TEXT NOT NULL,
+          valor REAL NOT NULL,
+          data_vencimento TEXT NOT NULL,
+          icone TEXT NOT NULL,
+          cor TEXT NOT NULL,
+          pago INTEGER NOT NULL DEFAULT 0 CHECK (pago IN (0, 1)),
+          notificacao_id TEXT,
+          criado_em TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+      `);
+
+      await db.execAsync(`
+        CREATE INDEX IF NOT EXISTS idx_compromissos_vencimento ON compromissos (data_vencimento ASC);
       `);
     },
   },
 ];
 
-/**
- * Aplica todas as migrations pendentes, em ordem, dentro de uma única
- * transação por migration (para que uma falha no meio não deixe o banco
- * em estado parcialmente migrado).
- */
 export async function rodarMigrations(db: SQLiteDatabase): Promise<void> {
   const resultado = await db.getFirstAsync<{ user_version: number }>(`PRAGMA user_version;`);
   const versaoAtual = resultado?.user_version ?? 0;

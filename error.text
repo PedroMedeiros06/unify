@@ -1,0 +1,90 @@
+ ERROR  [Error: Uncaught (in promise, id: 1) Error: Call to function 'NativeDatabase.prepareAsync' has been rejected.
+→ Caused by: java.lang.NullPointerException: java.lang.NullPointerException] 
+
+Code: CodedError.ts
+   9 |
+  10 |   constructor(code: string, message: string) {
+> 11 |     super(message);
+     |          ^
+  12 |     this.code = code;
+  13 |   }
+  14 | }
+Call Stack
+  constructor (node_modules\expo-modules-core\src\errors\CodedError.ts:11:10)
+ ERROR  [Error: Uncaught (in promise, id: 2) Error: Call to function 'NativeDatabase.prepareAsync' has been rejected.
+→ Caused by: java.lang.NullPointerException: java.lang.NullPointerException] 
+
+Code: CodedError.ts
+   9 |
+  10 |   constructor(code: string, message: string) {
+> 11 |     super(message);
+     |          ^
+  12 |     this.code = code;
+  13 |   }
+  14 | }
+Call Stack
+  constructor (node_modules\expo-modules-core\src\errors\CodedError.ts:11:10)
+ ERROR  [Error: Uncaught (in promise, id: 3) Error: Call to function 'NativeDatabase.prepareAsync' has been rejected.
+→ Caused by: java.lang.NullPointerException: java.lang.NullPointerException] 
+
+Code: CodedError.ts
+   9 |
+  10 |   constructor(code: string, message: string) {
+> 11 |     super(message);
+     |          ^
+  12 |     this.code = code;
+  13 |   }
+  14 | }
+Call Stack
+  constructor (node_modules\expo-modules-core\src\errors\CodedError.ts:11:10)
+ ERROR  [Error: Uncaught (in promise, id: 4) Error: Call to function 'NativeDatabase.prepareAsync' has been rejected.
+→ Caused by: java.lang.NullPointerException: java.lang.NullPointerException] 
+
+Code: CodedError.ts
+   9 |
+  10 |   constructor(code: string, message: string) {
+> 11 |     super(message);
+     |          ^
+  12 |     this.code = code;
+  13 |   }
+  14 | }
+Call Stack
+  constructor (node_modules\expo-modules-core\src\errors\CodedError.ts:11:10)
+ ERROR  [Error: Uncaught (in promise, id: 5) Error: Call to function 'NativeDatabase.prepareAsync' has been rejected.
+→ Caused by: java.lang.NullPointerException: java.lang.NullPointerException] 
+
+Code: CodedError.ts
+   9 |
+  10 |   constructor(code: string, message: string) {
+> 11 |     super(message);
+     |          ^
+  12 |     this.code = code;
+  13 |   }
+  14 | }
+Call Stack
+  constructor (node_modules\expo-modules-core\src\errors\CodedError.ts:11:10)
+ ERROR  [Error: Uncaught (in promise, id: 6) Error: Call to function 'NativeDatabase.prepareAsync' has been rejected.
+→ Caused by: java.lang.NullPointerException: java.lang.NullPointerException] 
+
+Code: CodedError.ts
+   9 |
+  10 |   constructor(code: string, message: string) {
+> 11 |     super(message);
+     |          ^
+  12 |     this.code = code;
+  13 |   }
+  14 | }
+Call Stack
+  constructor (node_modules\expo-modules-core\src\errors\CodedError.ts:11:10)
+ ERROR  [Error: Uncaught (in promise, id: 7) Error: Call to function 'NativeDatabase.prepareAsync' has been rejected.
+→ Caused by: java.lang.NullPointerException: java.lang.NullPointerException] 
+
+Code: CodedError.ts
+   9 |
+  10 |   constructor(code: string, message: string) {
+> 11 |     super(message);
+     |          ^
+  12 |     this.code = code;
+  13 |   }
+  14 | }
+Call Stack

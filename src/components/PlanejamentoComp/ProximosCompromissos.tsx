@@ -2,75 +2,153 @@ import { moderateScale } from "@/utils/scale";
 import { FormatToCurrency } from "@/utils/formatNumber";
 import { Ionicons } from "@expo/vector-icons";
 import { colors } from "@/theme/colors";
-import { View, Text, Pressable, FlatList } from "react-native";
-import { memo } from "react";
+import { View, Text, Pressable } from "react-native";
+import { memo, useCallback, useRef, useState } from "react";
+import { useCompromissos } from "@/context/CompromissosContext";
+import { Compromisso, CamposCompromisso } from "@/database/compromissosQueries";
+import { EditarCompromissoModal } from "@/components/PlanejamentoComp/EditarCompromissoModal";
+import { dataIsoParaBR } from "@/utils/dateUtils";
 
-type Compromisso = {
-  id: string;
-  nome: string;
-  vencimento: string;
-  diasRestantes: number;
-  valor: number;
-  icone: keyof typeof Ionicons.glyphMap;
-  cor: string;
-};
+function calcularDiasRestantes(dataVencimentoIso: string): number {
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
 
-const DEBUG_COMPROMISSOS: Compromisso[] = [
-  { id: "1", nome: "Aluguel", vencimento: "05/06/2026", diasRestantes: 3, valor: 1500, icone: "home-outline", cor: colors["active-icon"] },
-  { id: "2", nome: "Conta de água", vencimento: "07/06/2026", diasRestantes: 5, valor: 120.35, icone: "water-outline", cor: "#378ADD" },
-  { id: "3", nome: "Conta de luz", vencimento: "10/06/2026", diasRestantes: 8, valor: 210.40, icone: "flash-outline", cor: colors["warn-color"] },
-];
+  const [ano, mes, dia] = dataVencimentoIso.split("-").map(Number);
+  const vencimento = new Date(ano, mes - 1, dia);
 
-const DEBUG_MODE = true;
+  const diffMs = vencimento.getTime() - hoje.getTime();
+  return Math.round(diffMs / (1000 * 60 * 60 * 24));
+}
 
 const CompromissoItem = memo(function CompromissoItem({
-  item,
-  isLast,
+  compromisso,
+  onLongPress,
+  onTogglePago,
 }: {
-  item: Compromisso;
-  isLast: boolean;
+  compromisso: Compromisso;
+  onLongPress: (c: Compromisso) => void;
+  onTogglePago: (id: string, pago: boolean) => void;
 }) {
   const itemTitleSize = moderateScale(13);
   const itemSubtitleSize = moderateScale(10);
   const valueSize = moderateScale(13);
   const badgeSize = moderateScale(9);
 
+  const processando = useRef(false);
+
+  const handleTogglePago = useCallback(() => {
+    if (processando.current) return;
+    processando.current = true;
+
+    onTogglePago(compromisso.id, !compromisso.pago);
+
+    setTimeout(() => {
+      processando.current = false;
+    }, 400);
+  }, [compromisso.id, compromisso.pago, onTogglePago]);
+
+  const diasRestantes = calcularDiasRestantes(compromisso.dataVencimento);
+  const vencido = diasRestantes < 0 && !compromisso.pago;
+
+  const textoPrazo = compromisso.pago
+    ? "Pago"
+    : vencido
+      ? `Venceu há ${Math.abs(diasRestantes)} dias`
+      : diasRestantes === 0
+        ? "Vence hoje"
+        : `Em ${diasRestantes} dias`;
+
+  const corBadge = compromisso.pago ? colors["sucess-color"] : vencido ? colors["error-color"] : colors["active-icon"];
+
   return (
-    <View className={`flex-row justify-between items-center py-2.5 ${isLast ? "" : "border-b border-lines-divisions"}`}>
-      <View className="flex-row items-center gap-2.5 flex-1 pr-2">
+    <Pressable
+      onLongPress={() => onLongPress(compromisso)}
+      delayLongPress={350}
+      className="flex-row items-center justify-between py-2.5 border-b border-lines-divisions active:opacity-70"
+      accessibilityRole="button"
+      accessibilityLabel={`${compromisso.nome}, ${FormatToCurrency(compromisso.valor)}, ${textoPrazo}. Toque e segure para editar.`}
+    >
+      <Pressable
+        onPress={handleTogglePago}
+        hitSlop={8}
+        className="mr-2.5"
+        accessibilityRole="checkbox"
+        accessibilityState={{ checked: compromisso.pago }}
+        accessibilityLabel={compromisso.pago ? "Marcar como não pago" : "Marcar como pago"}
+      >
         <View
-          style={{ width: 34, height: 34, backgroundColor: `${item.cor}22` }}
-          className="rounded-full items-center justify-center flex-shrink-0"
+          className={`w-5 h-5 rounded-full border items-center justify-center ${compromisso.pago ? "bg-sucess-color border-sucess-color" : "border-input-border"}`}
         >
-          <Ionicons name={item.icone} color={item.cor} size={15} />
+          {compromisso.pago && <Ionicons name="checkmark" color="#fff" size={12} />}
         </View>
-        <View className="flex-1">
-          <Text style={{ fontSize: itemTitleSize }} className="text-main-text font-Inter-Medium" numberOfLines={1}>
-            {item.nome}
-          </Text>
-          <Text style={{ fontSize: itemSubtitleSize }} className="text-desactived-text" numberOfLines={1}>
-            Vencimento: {item.vencimento}
-          </Text>
-        </View>
+      </Pressable>
+
+      <View
+        style={{ backgroundColor: `${compromisso.cor}22` }}
+        className="w-9 h-9 rounded-full items-center justify-center flex-shrink-0 mr-2.5"
+      >
+        <Ionicons name={compromisso.icone as keyof typeof Ionicons.glyphMap} color={compromisso.cor} size={15} />
+      </View>
+
+      <View className="flex-1">
+        <Text
+          style={{ fontSize: itemTitleSize }}
+          className={compromisso.pago ? "text-desactived-text font-Inter-Medium line-through" : "text-main-text font-Inter-Medium"}
+          numberOfLines={1}
+        >
+          {compromisso.nome}
+        </Text>
+        <Text style={{ fontSize: itemSubtitleSize }} className="text-desactived-text" numberOfLines={1}>
+          Vencimento: {dataIsoParaBR(compromisso.dataVencimento)}
+        </Text>
       </View>
 
       <View className="items-end flex-shrink-0">
         <Text style={{ fontSize: valueSize }} className="text-main-text font-Inter-Medium mb-1" numberOfLines={1}>
-          {FormatToCurrency(item.valor)}
+          {FormatToCurrency(compromisso.valor)}
         </Text>
-        <View className="bg-active-icon/20 px-2 py-0.5 rounded-full">
-          <Text style={{ fontSize: badgeSize }} className="text-active-icon font-Inter-Medium">
-            Em {item.diasRestantes} dias
+        <View style={{ backgroundColor: `${corBadge}22` }} className="px-2 py-0.5 rounded-full">
+          <Text style={{ fontSize: badgeSize, color: corBadge }} className="font-Inter-Medium">
+            {textoPrazo}
           </Text>
         </View>
       </View>
-    </View>
+    </Pressable>
   );
 });
 
 function ProximosCompromissosBase() {
   const cardTitleSize = moderateScale(15);
-  const compromissos = DEBUG_MODE ? DEBUG_COMPROMISSOS : [];
+  const { compromissos, adicionarCompromisso, editarCompromisso, marcarPago, removerCompromisso } = useCompromissos();
+
+  const [modalVisivel, setModalVisivel] = useState(false);
+  const [compromissoEditando, setCompromissoEditando] = useState<Compromisso | null>(null);
+
+  const handleAbrirNovo = useCallback(() => {
+    setCompromissoEditando(null);
+    setModalVisivel(true);
+  }, []);
+
+  const handleLongPress = useCallback((c: Compromisso) => {
+    setCompromissoEditando(c);
+    setModalVisivel(true);
+  }, []);
+
+  const handleFechar = useCallback(() => {
+    setModalVisivel(false);
+    setCompromissoEditando(null);
+  }, []);
+
+  const handleSalvar = useCallback(
+    async (id: string | null, campos: CamposCompromisso) => {
+      if (id) {
+        await editarCompromisso(id, campos);
+      } else {
+        await adicionarCompromisso(campos);
+      }
+    },
+    [adicionarCompromisso, editarCompromisso]
+  );
 
   return (
     <View className="bg-card-background border border-lines-divisions rounded-xl p-4">
@@ -78,23 +156,35 @@ function ProximosCompromissosBase() {
         <Text style={{ fontSize: cardTitleSize }} className="text-main-text font-Inter-Medium">
           Próximos compromissos
         </Text>
-        <Pressable hitSlop={10} accessibilityRole="button" accessibilityLabel="Ver todos os compromissos">
-          <Text style={{ fontSize: moderateScale(12) }} className="text-active-icon font-Inter-Medium">
-            Ver todos
-          </Text>
+        <Pressable onPress={handleAbrirNovo} hitSlop={10} accessibilityRole="button" accessibilityLabel="Adicionar compromisso">
+          <Ionicons name="add-circle-outline" color={colors["active-icon"]} size={20} />
         </Pressable>
       </View>
 
-      {/* FlatList em vez de .map(): dentro de listas maiores no futuro isso
-          evita montar tudo de uma vez. Com poucos itens o ganho é pequeno,
-          mas já deixa a base pronta para crescer sem precisar refatorar. */}
-      <FlatList
-        data={compromissos}
-        keyExtractor={(item) => item.id}
-        scrollEnabled={false}
-        renderItem={({ item, index }) => (
-          <CompromissoItem item={item} isLast={index === compromissos.length - 1} />
-        )}
+      {compromissos.length === 0 ? (
+        <View className="items-center py-6">
+          <Ionicons name="calendar-outline" color={colors["desactived-text"]} size={26} />
+          <Text style={{ fontSize: moderateScale(12) }} className="text-desactived-text text-center mt-2">
+            Nenhum compromisso cadastrado. Toque no + para adicionar.
+          </Text>
+        </View>
+      ) : (
+        compromissos.map((compromisso) => (
+          <CompromissoItem
+            key={compromisso.id}
+            compromisso={compromisso}
+            onLongPress={handleLongPress}
+            onTogglePago={marcarPago}
+          />
+        ))
+      )}
+
+      <EditarCompromissoModal
+        visivel={modalVisivel}
+        compromissoEditando={compromissoEditando}
+        onFechar={handleFechar}
+        onSalvar={handleSalvar}
+        onExcluir={removerCompromisso}
       />
     </View>
   );

@@ -3,15 +3,18 @@ import { moderateScale } from "@/utils/scale";
 import { FormatToCurrency } from "@/utils/formatNumber";
 import { Ionicons } from "@expo/vector-icons";
 import { Text, View, Pressable, FlatList } from "react-native";
-import { memo } from "react";
+import { memo, useCallback, useState } from "react";
 import { useTransacoes, Transacao } from "@/context/TransacoesContext";
+import { EditarTransacaoModal } from "@/components/TransacoesComp/EditarTransacaoModal";
 
 const TransacaoItem = memo(function TransacaoItem({
   item,
   isLast,
+  onLongPress,
 }: {
   item: Transacao;
   isLast: boolean;
+  onLongPress: (transacao: Transacao) => void;
 }) {
   const itemTitleSize = moderateScale(14);
   const itemSubtitleSize = moderateScale(12);
@@ -20,7 +23,13 @@ const TransacaoItem = memo(function TransacaoItem({
   const isEntrada = item.tipo === "entrada";
 
   return (
-    <View className={`py-3 flex-row justify-between items-center ${isLast ? "" : "border-b border-lines-divisions/30"}`}>
+    <Pressable
+      onLongPress={() => onLongPress(item)}
+      delayLongPress={350}
+      className={`py-3 flex-row justify-between items-center active:opacity-70 ${isLast ? "" : "border-b border-lines-divisions/30"}`}
+      accessibilityRole="button"
+      accessibilityLabel={`${item.nome}, ${FormatToCurrency(item.valor)}. Toque e segure para editar ou excluir.`}
+    >
       <View className="flex-row items-center gap-3 flex-1 pr-2">
         <View className="w-10 h-10 rounded-full bg-active-icon/20 items-center justify-center flex-shrink-0">
           <Ionicons
@@ -62,7 +71,7 @@ const TransacaoItem = memo(function TransacaoItem({
           </Text>
         </View>
       </View>
-    </View>
+    </Pressable>
   );
 });
 
@@ -71,14 +80,21 @@ function UltimasTransacoesBase() {
   const actionTextSize = moderateScale(12);
   const itemTitleSize = moderateScale(14);
 
-  const { transacoes } = useTransacoes();
+  const { transacoes, editarTransacao, removerTransacao } = useTransacoes();
+  const [transacaoSelecionada, setTransacaoSelecionada] = useState<Transacao | null>(null);
 
-  // Mostra só as 5 mais recentes na Home — "Ver todas" leva pra tela cheia
   const transacoesRecentes = transacoes.slice(0, 5);
+
+  const handleLongPress = useCallback((transacao: Transacao) => {
+    setTransacaoSelecionada(transacao);
+  }, []);
+
+  const handleFecharModal = useCallback(() => {
+    setTransacaoSelecionada(null);
+  }, []);
 
   return (
     <View className="bg-card-background border border-lines-divisions rounded-xl px-4 py-4 flex-col gap-4">
-      {/* 1. HEADER */}
       <View className="flex-col gap-4">
         <View className="flex-row justify-between items-center">
           <Text
@@ -120,17 +136,19 @@ function UltimasTransacoesBase() {
         </View>
       </View>
 
-      {/* 2. LISTA */}
       <FlatList
         data={transacoesRecentes}
         keyExtractor={(item) => item.id}
         scrollEnabled={false}
         renderItem={({ item, index }) => (
-          <TransacaoItem item={item} isLast={index === transacoesRecentes.length - 1} />
+          <TransacaoItem
+            item={item}
+            isLast={index === transacoesRecentes.length - 1}
+            onLongPress={handleLongPress}
+          />
         )}
       />
 
-      {/* 3. BOTÃO ADICIONAR */}
       <Pressable
         className="w-full py-2 rounded-xl border border-dashed border-input-border flex-row items-center justify-center gap-2 active:opacity-60"
         accessibilityRole="button"
@@ -141,6 +159,13 @@ function UltimasTransacoesBase() {
           Adicionar transação
         </Text>
       </Pressable>
+
+      <EditarTransacaoModal
+        transacao={transacaoSelecionada}
+        onFechar={handleFecharModal}
+        onSalvar={editarTransacao}
+        onExcluir={removerTransacao}
+      />
     </View>
   );
 }

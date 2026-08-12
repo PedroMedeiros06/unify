@@ -5,6 +5,8 @@ import { ThemeProvider } from "../components/theme.provider"
 import { useAppFonts } from "@/theme/fonts";
 import { TransacoesProvider } from "@/context/TransacoesContext";
 import { NavigationProvider } from "@/context/NavigationContext";
+import { MetasProvider } from "@/context/MetasContext";
+import { CompromissosProvider } from "@/context/CompromissosContext";
 
 
 export default function RootLayout() {
@@ -16,7 +18,11 @@ export default function RootLayout() {
     <ThemeProvider name="default">
       <NavigationProvider>
         <TransacoesProvider>
-          <Slot />
+          <MetasProvider>
+            <CompromissosProvider>
+              <Slot />
+            </CompromissosProvider>
+          </MetasProvider>
         </TransacoesProvider>
       </NavigationProvider>
     </ThemeProvider>

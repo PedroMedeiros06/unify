@@ -3,15 +3,18 @@ import { moderateScale } from "@/utils/scale";
 import { FormatToCurrency } from "@/utils/formatNumber";
 import { Ionicons } from "@expo/vector-icons";
 import { View, Text, Pressable, FlatList } from "react-native";
-import { memo } from "react";
+import { memo, useCallback, useState } from "react";
 import { useTransacoes, Transacao } from "@/context/TransacoesContext";
+import { EditarTransacaoModal } from "@/components/TransacoesComp/EditarTransacaoModal";
 
 const TransferenciaItem = memo(function TransferenciaItem({
   item,
   isLast,
+  onLongPress,
 }: {
   item: Transacao;
   isLast: boolean;
+  onLongPress: (transacao: Transacao) => void;
 }) {
   const nomeSize = moderateScale(13);
   const subtituloSize = moderateScale(11);
@@ -24,9 +27,11 @@ const TransferenciaItem = memo(function TransferenciaItem({
 
   return (
     <Pressable
+      onLongPress={() => onLongPress(item)}
+      delayLongPress={350}
       className={`flex-row items-center justify-between py-3 active:opacity-70 ${isLast ? "" : "border-b border-lines-divisions"}`}
       accessibilityRole="button"
-      accessibilityLabel={`Ver detalhes: ${item.nome}, ${FormatToCurrency(item.valor)}`}
+      accessibilityLabel={`${item.nome}, ${FormatToCurrency(item.valor)}. Toque e segure para editar ou excluir.`}
     >
       <View className="flex-row items-center gap-3 flex-1 pr-2">
         <View
@@ -74,8 +79,18 @@ const TransferenciaItem = memo(function TransferenciaItem({
 function TransacoesRecentesTransferenciaBase() {
   const cardTitleSize = moderateScale(15);
 
-  const { transacoes } = useTransacoes();
+  const { transacoes, editarTransacao, removerTransacao } = useTransacoes();
+  const [transacaoSelecionada, setTransacaoSelecionada] = useState<Transacao | null>(null);
+
   const recentes = transacoes.slice(0, 4);
+
+  const handleLongPress = useCallback((transacao: Transacao) => {
+    setTransacaoSelecionada(transacao);
+  }, []);
+
+  const handleFecharModal = useCallback(() => {
+    setTransacaoSelecionada(null);
+  }, []);
 
   return (
     <View className="bg-card-background border border-lines-divisions rounded-xl p-4">
@@ -95,8 +110,19 @@ function TransacoesRecentesTransferenciaBase() {
         keyExtractor={(item) => item.id}
         scrollEnabled={false}
         renderItem={({ item, index }) => (
-          <TransferenciaItem item={item} isLast={index === recentes.length - 1} />
+          <TransferenciaItem
+            item={item}
+            isLast={index === recentes.length - 1}
+            onLongPress={handleLongPress}
+          />
         )}
+      />
+
+      <EditarTransacaoModal
+        transacao={transacaoSelecionada}
+        onFechar={handleFecharModal}
+        onSalvar={editarTransacao}
+        onExcluir={removerTransacao}
       />
     </View>
   );

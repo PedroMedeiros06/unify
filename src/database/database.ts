@@ -5,11 +5,6 @@ const DATABASE_NAME = "unify.db";
 
 let dbInstance: SQLite.SQLiteDatabase | null = null;
 
-/**
- * Retorna a instância do banco, abrindo e aplicando as migrations
- * pendentes apenas na primeira chamada (padrão singleton). Chamadas
- * seguintes reaproveitam a mesma conexão, sem rodar migrations de novo.
- */
 export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
   if (dbInstance) return dbInstance;
 
@@ -21,11 +16,30 @@ export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
 }
 
 /**
- * Utilitário para resetar o banco durante desenvolvimento/testes.
- * NUNCA chamar isso em produção — apaga todos os dados do usuário.
- * Útil quando o schema muda de forma incompatível com dados de teste
- * já existentes, ou para simular a experiência de um usuário novo.
+ * Fila serializada de execução de queries.
+ *
+ * Por que isso existe: o driver nativo do expo-sqlite não lida bem com
+ * múltiplas chamadas concorrentes de `runAsync`/`getAllAsync`/etc. na
+ * mesma conexão — quando o usuário interage rápido (ex: tocar "marcar
+ * como pago" várias vezes seguidas), várias promises disparam ao mesmo
+ * tempo e o `prepareAsync` nativo pode receber um ponteiro de statement
+ * nulo/inconsistente, gerando NullPointerException.
+ *
+ * `executarNaFila` garante que cada operação só começa depois que a
+ * anterior terminou por completo, mesmo que várias sejam disparadas
+ * "ao mesmo tempo" do lado do JavaScript. Toda função em queries.ts /
+ * metasQueries.ts / compromissosQueries.ts que acessa o banco deve
+ * passar sua operação por aqui, em vez de chamar db.runAsync/getAllAsync
+ * diretamente.
  */
+let filaExecucao: Promise<unknown> = Promise.resolve();
+
+export function executarNaFila<T>(operacao: () => Promise<T>): Promise<T> {
+  const resultado = filaExecucao.then(operacao, operacao);
+  filaExecucao = resultado.catch(() => {});
+  return resultado;
+}
+
 export async function resetDatabaseForDev(): Promise<void> {
   if (!__DEV__) {
     console.warn("resetDatabaseForDev chamado fora de ambiente de desenvolvimento — ignorado.");
@@ -35,9 +49,10 @@ export async function resetDatabaseForDev(): Promise<void> {
   const db = await getDatabase();
   await db.execAsync(`DROP TABLE IF EXISTS transacoes;`);
   await db.execAsync(`DROP TABLE IF EXISTS bancos;`);
+  await db.execAsync(`DROP TABLE IF EXISTS metas;`);
+  await db.execAsync(`DROP TABLE IF EXISTS compromissos;`);
   await db.execAsync(`PRAGMA user_version = 0;`);
 
-  // Fecha a conexão em cache para forçar reabertura + remigração do zero
   dbInstance = null;
   await getDatabase();
 }

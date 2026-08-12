@@ -3,51 +3,41 @@ import { FormatToCurrency } from "@/utils/formatNumber";
 import { Ionicons } from "@expo/vector-icons";
 import { colors } from "@/theme/colors";
 import { View, Text, Pressable } from "react-native";
-import { memo } from "react";
+import { memo, useCallback, useState } from "react";
+import { useMetas } from "@/context/MetasContext";
+import { Meta, CamposMeta } from "@/database/metasQueries";
+import { EditarMetaModal } from "@/components/PlanejamentoComp/EditarMetaModal";
 
-type Meta = {
-  id: string;
-  nome: string;
-  metaValor: number;
-  valorAtual: number;
-  icone: keyof typeof Ionicons.glyphMap;
-  cor: string;
-};
-
-const DEBUG_METAS: Meta[] = [
-  { id: "1", nome: "Viagem férias", metaValor: 5000, valorAtual: 3250, icone: "airplane-outline", cor: colors["active-icon"] },
-  { id: "2", nome: "Curso", metaValor: 2000, valorAtual: 1400, icone: "school-outline", cor: colors["sucess-color"] },
-  { id: "3", nome: "Novo notebook", metaValor: 4500, valorAtual: 2025, icone: "laptop-outline", cor: colors["warn-color"] },
-];
-
-const DEBUG_MODE = true;
-
-// Componente de item extraído e memoizado: cada meta só re-renderiza
-// se os seus próprios dados mudarem, não quando a lista inteira renderiza.
-const MetaItem = memo(function MetaItem({ meta }: { meta: Meta }) {
+const MetaItem = memo(function MetaItem({ meta, onLongPress }: { meta: Meta; onLongPress: (meta: Meta) => void }) {
   const metaTitleSize = moderateScale(13);
   const metaSubtitleSize = moderateScale(10);
   const valueSize = moderateScale(12);
 
-  const percentual = meta.metaValor > 0
-    ? Math.min(100, Math.round((meta.valorAtual / meta.metaValor) * 100))
+  const percentual = meta.valorMeta > 0
+    ? Math.min(100, Math.round((meta.progressoAtual / meta.valorMeta) * 100))
     : 0;
 
   return (
-    <View className="bg-input-background border border-lines-divisions rounded-xl p-3">
+    <Pressable
+      onLongPress={() => onLongPress(meta)}
+      delayLongPress={350}
+      className="bg-input-background border border-lines-divisions rounded-xl p-3 active:opacity-70"
+      accessibilityRole="button"
+      accessibilityLabel={`${meta.nome}, toque e segure para editar`}
+    >
       <View className="flex-row items-center gap-2.5 mb-2.5">
         <View
           style={{ width: 34, height: 34, backgroundColor: `${meta.cor}22` }}
           className="rounded-full items-center justify-center"
         >
-          <Ionicons name={meta.icone} color={meta.cor} size={16} />
+          <Ionicons name={meta.icone as keyof typeof Ionicons.glyphMap} color={meta.cor} size={16} />
         </View>
         <View className="flex-1">
           <Text style={{ fontSize: metaTitleSize }} className="text-main-text font-Inter-Medium" numberOfLines={1}>
             {meta.nome}
           </Text>
           <Text style={{ fontSize: metaSubtitleSize }} className="text-desactived-text" numberOfLines={1}>
-            Meta de {FormatToCurrency(meta.metaValor)}
+            Meta de {FormatToCurrency(meta.valorMeta)}
           </Text>
         </View>
       </View>
@@ -57,16 +47,47 @@ const MetaItem = memo(function MetaItem({ meta }: { meta: Meta }) {
       </View>
 
       <Text style={{ fontSize: valueSize }} className="text-main-text font-Inter-Medium" numberOfLines={1}>
-        {FormatToCurrency(meta.valorAtual)}
+        {FormatToCurrency(meta.progressoAtual)}
         <Text className="text-desactived-text font-Inter-Regular"> · {percentual}% concluído</Text>
       </Text>
-    </View>
+    </Pressable>
   );
 });
 
 function MetasFinanceirasBase() {
   const cardTitleSize = moderateScale(15);
-  const metas = DEBUG_MODE ? DEBUG_METAS : [];
+  const { metas, adicionarMeta, editarMeta, removerMeta } = useMetas();
+
+  const [modalVisivel, setModalVisivel] = useState(false);
+  const [metaEditando, setMetaEditando] = useState<Meta | null>(null);
+
+  const handleAbrirNova = useCallback(() => {
+    setMetaEditando(null);
+    setModalVisivel(true);
+  }, []);
+
+  const handleLongPress = useCallback((meta: Meta) => {
+    setMetaEditando(meta);
+    setModalVisivel(true);
+  }, []);
+
+  const handleFechar = useCallback(() => {
+    setModalVisivel(false);
+    setMetaEditando(null);
+  }, []);
+
+  // Assinatura corrigida: id explícito (null = criar) em vez de inferir
+  // a partir do estado externo, eliminando a ambiguidade que causava erro.
+  const handleSalvar = useCallback(
+    async (id: string | null, campos: CamposMeta) => {
+      if (id) {
+        await editarMeta(id, campos);
+      } else {
+        await adicionarMeta(campos);
+      }
+    },
+    [adicionarMeta, editarMeta]
+  );
 
   return (
     <View className="bg-card-background border border-lines-divisions rounded-xl p-4">
@@ -74,18 +95,33 @@ function MetasFinanceirasBase() {
         <Text style={{ fontSize: cardTitleSize }} className="text-main-text font-Inter-Medium">
           Metas financeiras
         </Text>
-        <Pressable hitSlop={10} accessibilityRole="button" accessibilityLabel="Ver todas as metas">
-          <Text style={{ fontSize: moderateScale(12) }} className="text-active-icon font-Inter-Medium">
-            Ver todas
-          </Text>
+        <Pressable onPress={handleAbrirNova} hitSlop={10} accessibilityRole="button" accessibilityLabel="Adicionar meta">
+          <Ionicons name="add-circle-outline" color={colors["active-icon"]} size={20} />
         </Pressable>
       </View>
 
-      <View className="gap-2.5">
-        {metas.map((meta) => (
-          <MetaItem key={meta.id} meta={meta} />
-        ))}
-      </View>
+      {metas.length === 0 ? (
+        <View className="items-center py-6">
+          <Ionicons name="flag-outline" color={colors["desactived-text"]} size={26} />
+          <Text style={{ fontSize: moderateScale(12) }} className="text-desactived-text text-center mt-2">
+            Nenhuma meta criada ainda. Toque no + para começar.
+          </Text>
+        </View>
+      ) : (
+        <View className="gap-2.5">
+          {metas.map((meta) => (
+            <MetaItem key={meta.id} meta={meta} onLongPress={handleLongPress} />
+          ))}
+        </View>
+      )}
+
+      <EditarMetaModal
+        visivel={modalVisivel}
+        metaEditando={metaEditando}
+        onFechar={handleFechar}
+        onSalvar={handleSalvar}
+        onExcluir={removerMeta}
+      />
     </View>
   );
 }
