@@ -8,6 +8,7 @@ import { useCompromissos } from "@/context/CompromissosContext";
 import { Compromisso, CamposCompromisso } from "@/database/compromissosQueries";
 import { EditarCompromissoModal } from "@/components/PlanejamentoComp/EditarCompromissoModal";
 import { dataIsoParaBR } from "@/utils/dateUtils";
+import { CompromissosSkeleton } from "@/components/common/CompromissosSkeleton";
 
 function calcularDiasRestantes(dataVencimentoIso: string): number {
   const hoje = new Date();
@@ -119,7 +120,7 @@ const CompromissoItem = memo(function CompromissoItem({
 
 function ProximosCompromissosBase() {
   const cardTitleSize = moderateScale(15);
-  const { compromissos, adicionarCompromisso, editarCompromisso, marcarPago, removerCompromisso } = useCompromissos();
+  const { compromissos, carregando, adicionarCompromisso, editarCompromisso, marcarPago, removerCompromisso } = useCompromissos();
 
   const [modalVisivel, setModalVisivel] = useState(false);
   const [compromissoEditando, setCompromissoEditando] = useState<Compromisso | null>(null);
@@ -149,6 +150,10 @@ function ProximosCompromissosBase() {
     },
     [adicionarCompromisso, editarCompromisso]
   );
+
+  if (carregando) {
+    return <CompromissosSkeleton />;
+  }
 
   return (
     <View className="bg-card-background border border-lines-divisions rounded-xl p-4">

@@ -6,6 +6,7 @@ import { Text, View, Pressable, FlatList } from "react-native";
 import { memo, useCallback, useState } from "react";
 import { useTransacoes, Transacao } from "@/context/TransacoesContext";
 import { EditarTransacaoModal } from "@/components/TransacoesComp/EditarTransacaoModal";
+import { ListaTransacoesSkeleton } from "@/components/common/ListaTransacoesSkeleton";
 
 const TransacaoItem = memo(function TransacaoItem({
   item,
@@ -79,8 +80,9 @@ function UltimasTransacoesBase() {
   const sectionTitleSize = moderateScale(20);
   const actionTextSize = moderateScale(12);
   const itemTitleSize = moderateScale(14);
+  const emptyTitleSize = moderateScale(13);
 
-  const { transacoes, editarTransacao, removerTransacao } = useTransacoes();
+  const { transacoes, carregando, editarTransacao, removerTransacao } = useTransacoes();
   const [transacaoSelecionada, setTransacaoSelecionada] = useState<Transacao | null>(null);
 
   const transacoesRecentes = transacoes.slice(0, 5);
@@ -92,6 +94,10 @@ function UltimasTransacoesBase() {
   const handleFecharModal = useCallback(() => {
     setTransacaoSelecionada(null);
   }, []);
+
+  if (carregando) {
+    return <ListaTransacoesSkeleton linhas={5} />;
+  }
 
   return (
     <View className="bg-card-background border border-lines-divisions rounded-xl px-4 py-4 flex-col gap-4">
@@ -136,18 +142,27 @@ function UltimasTransacoesBase() {
         </View>
       </View>
 
-      <FlatList
-        data={transacoesRecentes}
-        keyExtractor={(item) => item.id}
-        scrollEnabled={false}
-        renderItem={({ item, index }) => (
-          <TransacaoItem
-            item={item}
-            isLast={index === transacoesRecentes.length - 1}
-            onLongPress={handleLongPress}
-          />
-        )}
-      />
+      {transacoesRecentes.length === 0 ? (
+        <View className="items-center py-8">
+          <Ionicons name="receipt-outline" color={colors["desactived-text"]} size={30} />
+          <Text style={{ fontSize: emptyTitleSize }} className="text-desactived-text text-center mt-2">
+            Nenhuma transação ainda.{"\n"}Importe um extrato ou adicione manualmente.
+          </Text>
+        </View>
+      ) : (
+        <FlatList
+          data={transacoesRecentes}
+          keyExtractor={(item) => item.id}
+          scrollEnabled={false}
+          renderItem={({ item, index }) => (
+            <TransacaoItem
+              item={item}
+              isLast={index === transacoesRecentes.length - 1}
+              onLongPress={handleLongPress}
+            />
+          )}
+        />
+      )}
 
       <Pressable
         className="w-full py-2 rounded-xl border border-dashed border-input-border flex-row items-center justify-center gap-2 active:opacity-60"

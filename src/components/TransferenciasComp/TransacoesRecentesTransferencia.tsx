@@ -2,10 +2,11 @@ import { colors } from "@/theme/colors";
 import { moderateScale } from "@/utils/scale";
 import { FormatToCurrency } from "@/utils/formatNumber";
 import { Ionicons } from "@expo/vector-icons";
-import { View, Text, Pressable, FlatList } from "react-native";
+import { View, Text, Pressable } from "react-native";
 import { memo, useCallback, useState } from "react";
 import { useTransacoes, Transacao } from "@/context/TransacoesContext";
 import { EditarTransacaoModal } from "@/components/TransacoesComp/EditarTransacaoModal";
+import { ListaTransacoesSkeleton } from "@/components/common/ListaTransacoesSkeleton";
 
 const TransferenciaItem = memo(function TransferenciaItem({
   item,
@@ -78,8 +79,9 @@ const TransferenciaItem = memo(function TransferenciaItem({
 
 function TransacoesRecentesTransferenciaBase() {
   const cardTitleSize = moderateScale(15);
+  const emptyTitleSize = moderateScale(13);
 
-  const { transacoes, editarTransacao, removerTransacao } = useTransacoes();
+  const { transacoes, carregando, editarTransacao, removerTransacao } = useTransacoes();
   const [transacaoSelecionada, setTransacaoSelecionada] = useState<Transacao | null>(null);
 
   const recentes = transacoes.slice(0, 4);
@@ -91,6 +93,10 @@ function TransacoesRecentesTransferenciaBase() {
   const handleFecharModal = useCallback(() => {
     setTransacaoSelecionada(null);
   }, []);
+
+  if (carregando) {
+    return <ListaTransacoesSkeleton linhas={4} />;
+  }
 
   return (
     <View className="bg-card-background border border-lines-divisions rounded-xl p-4">
@@ -105,18 +111,23 @@ function TransacoesRecentesTransferenciaBase() {
         </Pressable>
       </View>
 
-      <FlatList
-        data={recentes}
-        keyExtractor={(item) => item.id}
-        scrollEnabled={false}
-        renderItem={({ item, index }) => (
+      {recentes.length === 0 ? (
+        <View className="items-center py-8">
+          <Ionicons name="swap-horizontal-outline" color={colors["desactived-text"]} size={30} />
+          <Text style={{ fontSize: emptyTitleSize }} className="text-desactived-text text-center mt-2">
+            Nenhuma transferência ainda.
+          </Text>
+        </View>
+      ) : (
+        recentes.map((item, index) => (
           <TransferenciaItem
+            key={item.id}
             item={item}
             isLast={index === recentes.length - 1}
             onLongPress={handleLongPress}
           />
-        )}
-      />
+        ))
+      )}
 
       <EditarTransacaoModal
         transacao={transacaoSelecionada}

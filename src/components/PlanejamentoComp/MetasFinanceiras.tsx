@@ -7,6 +7,7 @@ import { memo, useCallback, useState } from "react";
 import { useMetas } from "@/context/MetasContext";
 import { Meta, CamposMeta } from "@/database/metasQueries";
 import { EditarMetaModal } from "@/components/PlanejamentoComp/EditarMetaModal";
+import { MetasSkeleton } from "@/components/common/MetasSkeleton";
 
 const MetaItem = memo(function MetaItem({ meta, onLongPress }: { meta: Meta; onLongPress: (meta: Meta) => void }) {
   const metaTitleSize = moderateScale(13);
@@ -56,7 +57,7 @@ const MetaItem = memo(function MetaItem({ meta, onLongPress }: { meta: Meta; onL
 
 function MetasFinanceirasBase() {
   const cardTitleSize = moderateScale(15);
-  const { metas, adicionarMeta, editarMeta, removerMeta } = useMetas();
+  const { metas, carregando, adicionarMeta, editarMeta, removerMeta } = useMetas();
 
   const [modalVisivel, setModalVisivel] = useState(false);
   const [metaEditando, setMetaEditando] = useState<Meta | null>(null);
@@ -76,8 +77,6 @@ function MetasFinanceirasBase() {
     setMetaEditando(null);
   }, []);
 
-  // Assinatura corrigida: id explícito (null = criar) em vez de inferir
-  // a partir do estado externo, eliminando a ambiguidade que causava erro.
   const handleSalvar = useCallback(
     async (id: string | null, campos: CamposMeta) => {
       if (id) {
@@ -88,6 +87,10 @@ function MetasFinanceirasBase() {
     },
     [adicionarMeta, editarMeta]
   );
+
+  if (carregando) {
+    return <MetasSkeleton />;
+  }
 
   return (
     <View className="bg-card-background border border-lines-divisions rounded-xl p-4">
