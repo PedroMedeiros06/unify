@@ -8,6 +8,9 @@ import {
   TransacaoComBanco,
 } from "@/database/queries";
 import { dataIsoParaBR, dataBRParaIso } from "@/utils/dateUtils";
+import { CategoriaId, obterCategoriaPorId } from "@/database/categorias";
+import { normalizarPadraoDescricao } from "@/database/categorizacao";
+import { salvarRegraCategorizacao } from "@/database/regrasAprendidasQueries";
 
 export type Transacao = {
   id: string;
@@ -23,6 +26,7 @@ export type Transacao = {
   };
   status?: "concluida" | "pendente" | "agendada";
   categoriaIcone?: string;
+  categoriaId: CategoriaId | null;
 };
 
 type NovaTransacaoInput = Omit<Transacao, "id"> & {
@@ -37,6 +41,7 @@ export type CamposEditaveis = {
   tipo: "entrada" | "saida";
   data: string;
   categoriaIcone?: string;
+  categoriaId: CategoriaId | null;
 };
 
 type TransacoesContextValue = {
@@ -63,11 +68,35 @@ function mapearParaTransacaoUI(t: TransacaoComBanco): Transacao {
     banco: { sigla: t.banco.sigla, cor: t.banco.cor },
     status: t.status,
     categoriaIcone: t.categoriaIcone ?? undefined,
+    categoriaId: t.categoriaId,
   };
 }
 
 function normalizarParaIso(data: string): string {
   return /^\d{4}-\d{2}-\d{2}$/.test(data) ? data : dataBRParaIso(data);
+}
+
+/**
+ * Se a categoria informada difere da categoria anterior, grava isso
+ * como regra aprendida (origem 'usuario') para o padrão normalizado
+ * da descrição — é assim que uma edição manual "ensina" o app para
+ * futuras transações com descrição semelhante, sem bloquear a UI
+ * (a gravação da regra roda em paralelo, não é aguardada pelo fluxo
+ * de salvar a transação em si).
+ */
+function aprenderComEdicaoManual(
+  nome: string,
+  categoriaAnterior: CategoriaId | null,
+  categoriaNova: CategoriaId | null
+) {
+  if (!categoriaNova || categoriaNova === categoriaAnterior) return;
+
+  const padrao = normalizarPadraoDescricao(nome);
+  if (!padrao) return;
+
+  salvarRegraCategorizacao(padrao, categoriaNova, "usuario").catch((e) => {
+    console.error("[TransacoesContext] Falha ao salvar regra aprendida:", e);
+  });
 }
 
 export function TransacoesProvider({ children }: { children: ReactNode }) {
@@ -123,6 +152,7 @@ export function TransacoesProvider({ children }: { children: ReactNode }) {
           bancoId: novaTransacao.bancoId,
           status: novaTransacao.status ?? "concluida",
           categoriaIcone: novaTransacao.categoriaIcone ?? null,
+          categoriaId: novaTransacao.categoriaId ?? null,
           identificadorExterno: novaTransacao.identificadorExterno ?? null,
           criadoEm: new Date().toISOString(),
         });
@@ -139,6 +169,7 @@ export function TransacoesProvider({ children }: { children: ReactNode }) {
             banco: novaTransacao.banco,
             status: novaTransacao.status ?? "concluida",
             categoriaIcone: novaTransacao.categoriaIcone,
+            categoriaId: novaTransacao.categoriaId ?? null,
           },
           ...prev,
         ]);
@@ -153,6 +184,7 @@ export function TransacoesProvider({ children }: { children: ReactNode }) {
 
   const editarTransacao = useCallback(async (id: string, campos: CamposEditaveis) => {
     const dataIso = normalizarParaIso(campos.data);
+    const categoriaResolvida = obterCategoriaPorId(campos.categoriaId ?? undefined);
 
     try {
       await atualizarTransacao(id, {
@@ -161,11 +193,22 @@ export function TransacoesProvider({ children }: { children: ReactNode }) {
         valor: campos.valor,
         tipo: campos.tipo,
         data: dataIso,
-        categoriaIcone: campos.categoriaIcone ?? null,
+        categoriaIcone: campos.categoriaIcone ?? categoriaResolvida?.icone ?? null,
+        categoriaId: campos.categoriaId ?? null,
       });
 
-      setTransacoes((prev) =>
-        prev.map((t) =>
+      setTransacoes((prev) => {
+        const transacaoAnterior = prev.find((t) => t.id === id);
+
+        // Categorização manual só "conta como aprendizado" quando a
+        // categoria de fato mudou em relação à que estava salva —
+        // evita gravar regra toda vez que o usuário só edita o nome
+        // ou o valor sem tocar na categoria.
+        if (transacaoAnterior) {
+          aprenderComEdicaoManual(campos.nome, transacaoAnterior.categoriaId, campos.categoriaId);
+        }
+
+        return prev.map((t) =>
           t.id === id
             ? {
                 ...t,
@@ -174,11 +217,12 @@ export function TransacoesProvider({ children }: { children: ReactNode }) {
                 valor: campos.valor,
                 tipo: campos.tipo,
                 data: dataIsoParaBR(dataIso),
-                categoriaIcone: campos.categoriaIcone,
+                categoriaIcone: campos.categoriaIcone ?? categoriaResolvida?.icone,
+                categoriaId: campos.categoriaId ?? null,
               }
             : t
-        )
-      );
+        );
+      });
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Erro ao editar transação");
       console.error("[TransacoesContext] Falha ao editar transação:", e);

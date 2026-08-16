@@ -108,6 +108,47 @@ const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    versao: 5,
+    descricao: "Adiciona categoria_id em transacoes e cria tabela regras_categorizacao (categorização automática + aprendida)",
+    async executar(db) {
+      // `categoria_id` guarda o slug definido em src/database/categorias.ts
+      // (ex: "transporte", "mercado"). Nullable de propósito: uma
+      // transação pode ficar "sem categoria" quando nenhuma regra bate
+      // com confiança suficiente — nunca inventamos uma categoria por
+      // aproximação. Não há FOREIGN KEY porque a lista de categorias é
+      // fixa em código (não em tabela própria), então a validação do
+      // valor é responsabilidade da camada de aplicação (categorias.ts).
+      await db.execAsync(`ALTER TABLE transacoes ADD COLUMN categoria_id TEXT;`);
+      await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_transacoes_categoria ON transacoes (categoria_id);`);
+
+      // Regras "aprendidas": guardam o mapeamento entre um padrão de
+      // descrição normalizado (ver normalizarPadraoDescricao em
+      // categorizacao.ts) e a categoria escolhida para ele. É uma
+      // tabela separada — e não um campo na transação — porque o
+      // aprendizado é sobre o PADRÃO da descrição, reutilizável em
+      // qualquer transação futura (inclusive de importações que ainda
+      // nem aconteceram), não sobre um registro específico.
+      //
+      // UNIQUE em padrao_normalizado garante, no nível do banco, que
+      // nunca existam duas regras ativas para o mesmo padrão — uma
+      // categorização manual nova sempre substitui (UPSERT) a regra
+      // anterior daquele padrão, nunca duplica.
+      await db.execAsync(`
+        CREATE TABLE IF NOT EXISTS regras_categorizacao (
+          id TEXT PRIMARY KEY NOT NULL,
+          padrao_normalizado TEXT NOT NULL UNIQUE,
+          categoria_id TEXT NOT NULL,
+          origem TEXT NOT NULL CHECK (origem IN ('usuario', 'sistema')),
+          criado_em TEXT NOT NULL DEFAULT (datetime('now')),
+          atualizado_em TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+      `);
+      await db.execAsync(`
+        CREATE INDEX IF NOT EXISTS idx_regras_padrao ON regras_categorizacao (padrao_normalizado);
+      `);
+    },
+  },
 ];
 
 export async function rodarMigrations(db: SQLiteDatabase): Promise<void> {

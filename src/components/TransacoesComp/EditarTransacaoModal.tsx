@@ -7,6 +7,8 @@ import { Transacao, CamposEditaveis } from "@/context/TransacoesContext";
 import { dataBRParaIso } from "@/utils/dateUtils";
 import { SeletorData } from "@/components/common/SeletorData";
 import { IndicadorPassos } from "@/components/common/IndicadorPassos";
+import { SeletorCategoria } from "@/components/common/SeletorCategoria";
+import { CategoriaId, obterCategoriaPorId } from "@/database/categorias";
 
 type Props = {
   transacao: Transacao | null;
@@ -34,6 +36,7 @@ function EditarTransacaoModalBase({
   const [valorTexto, setValorTexto] = useState("");
   const [tipo, setTipo] = useState<"entrada" | "saida">("saida");
   const [dataIso, setDataIso] = useState<string | null>(null);
+  const [categoriaId, setCategoriaId] = useState<CategoriaId | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [excluindo, setExcluindo] = useState(false);
 
@@ -45,6 +48,7 @@ function EditarTransacaoModalBase({
     setValorTexto(String(Math.round(transacao.valor * 100)));
     setTipo(transacao.tipo);
     setDataIso(dataBRParaIso(transacao.data));
+    setCategoriaId(transacao.categoriaId);
   }, [transacao]);
 
   const handleValorChange = useCallback((texto: string) => {
@@ -78,13 +82,15 @@ function EditarTransacaoModalBase({
 
     setSalvando(true);
     try {
+      const categoria = obterCategoriaPorId(categoriaId);
       await onSalvar(transacao.id, {
         nome: nome.trim(),
         subtitulo: subtitulo.trim() || "Outros",
         valor: valorNumerico,
         tipo,
         data: dataIso,
-        categoriaIcone: transacao.categoriaIcone,
+        categoriaIcone: categoria?.icone,
+        categoriaId,
       });
       onFechar();
     } catch {
@@ -104,6 +110,7 @@ function EditarTransacaoModalBase({
     subtitulo,
     valorNumerico,
     tipo,
+    categoriaId,
     onSalvar,
     onFechar,
   ]);
@@ -232,16 +239,22 @@ function EditarTransacaoModalBase({
                 style={{ fontSize: labelSize }}
                 className="text-second-text mb-1.5"
               >
-                Categoria
+                Detalhe (opcional)
               </Text>
               <TextInput
                 value={subtitulo}
                 onChangeText={setSubtitulo}
+                placeholder="Ex.: Descrição extra vinda do banco"
+                placeholderTextColor={colors["desactived-text"]}
                 style={{ fontSize: inputTextSize, color: colors["main-text"] }}
                 className="bg-input-background border border-input-border rounded-xl px-3 py-3 mb-4"
                 editable={!ocupado}
-                accessibilityLabel="Categoria da transação"
+                accessibilityLabel="Detalhe adicional da transação"
               />
+
+              <View className="mb-4">
+                <SeletorCategoria categoriaSelecionada={categoriaId} onSelecionar={setCategoriaId} />
+              </View>
 
               <Text
                 style={{ fontSize: labelSize }}

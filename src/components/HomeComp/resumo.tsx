@@ -64,7 +64,7 @@ function ResumoBase() {
             accessibilityRole="button"
             accessibilityLabel={visible ? "Ocultar saldo" : "Mostrar saldo"}
           >
-            <Ionicons name={visible ? "eye-off" : "eye"} color={colors["main-text"]} size={10} />
+            <Ionicons name={visible ? "eye" : "eye-off"} color={colors["main-text"]} size={10} />
           </Pressable>
         </View>
         <Pressable

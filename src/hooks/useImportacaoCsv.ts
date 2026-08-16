@@ -3,8 +3,18 @@ import * as DocumentPicker from "expo-document-picker";
 import { File } from "expo-file-system";
 import { importarCsv, obterParserPorId, PARSERS_DISPONIVEIS } from "@/database/parsers";
 import { marcarPossiveisDuplicatas, TransacaoComStatusDuplicata } from "@/database/deduplicacao";
+import { categorizarLote, normalizarPadraoDescricao } from "@/database/categorizacao";
+import { salvarRegraCategorizacao } from "@/database/regrasAprendidasQueries";
+import { CategoriaId, obterCategoriaPorId } from "@/database/categorias";
 import { useTransacoes } from "@/context/TransacoesContext";
 import { dataIsoParaBR } from "@/utils/dateUtils";
+
+// Uma transação categorizada automaticamente carrega junto o id da
+// categoria resolvida (ou null, se ficou sem categoria) — o preview
+// usa isso para exibir e para contar quantas ficaram pendentes.
+export type TransacaoComCategoria = TransacaoComStatusDuplicata & {
+  categoriaId: CategoriaId | null;
+};
 
 export type EstadoImportacao =
   | { fase: "ocioso" }
@@ -15,34 +25,15 @@ export type EstadoImportacao =
       fase: "preview";
       bancoId: string;
       nomeArquivo: string;
-      transacoes: TransacaoComStatusDuplicata[];
+      transacoes: TransacaoComCategoria[];
       linhasComErro: { numeroLinha: number; conteudoOriginal: string; motivo: string }[];
       // ids (índice) das transações que o usuário optou por NÃO importar
       // — por padrão, duplicatas já vêm desmarcadas, tudo mais vem marcado
       transacoesExcluidas: Set<number>;
     }
   | { fase: "salvando" }
-  | { fase: "concluido"; totalImportado: number }
+  | { fase: "concluido"; totalImportado: number; totalSemCategoria: number }
   | { fase: "erro"; mensagem: string };
-
-const REGRAS_CATEGORIA: { palavras: string[]; categoria: string; icone: string }[] = [
-  { palavras: ["uber", "99", "taxi"], categoria: "Transporte", icone: "car-outline" },
-  { palavras: ["mercado", "supermercado", "supermarcon"], categoria: "Mercado", icone: "cart-outline" },
-  { palavras: ["pix"], categoria: "Transferência", icone: "swap-horizontal-outline" },
-  { palavras: ["boleto"], categoria: "Boleto", icone: "document-text-outline" },
-  { palavras: ["aplicação", "aplicacao", "rdb", "resgate", "cdb"], categoria: "Investimentos", icone: "trending-up-outline" },
-  { palavras: ["cartão", "cartao", "compra"], categoria: "Compras", icone: "card-outline" },
-];
-
-function categorizarPorPalavraChave(descricao: string): { categoria: string; icone: string } {
-  const descricaoLower = descricao.toLowerCase();
-  for (const regra of REGRAS_CATEGORIA) {
-    if (regra.palavras.some((palavra) => descricaoLower.includes(palavra))) {
-      return { categoria: regra.categoria, icone: regra.icone };
-    }
-  }
-  return { categoria: "Outros", icone: "swap-horizontal-outline" };
-}
 
 async function lerConteudoArquivo(uri: string): Promise<string> {
   try {
@@ -74,12 +65,23 @@ export function useImportacaoCsv() {
     try {
       const transacoesComStatus = await marcarPossiveisDuplicatas(resultadoParse.transacoes, bancoId);
 
+      // Categorização em LOTE: uma única consulta de regras aprendidas
+      // para todas as descrições do arquivo, em vez de uma consulta por
+      // transação — importante porque um CSV pode ter dezenas/centenas
+      // de linhas.
+      const categorias = await categorizarLote(transacoesComStatus.map((t) => t.descricao));
+
+      const transacoesComCategoria: TransacaoComCategoria[] = transacoesComStatus.map((t) => ({
+        ...t,
+        categoriaId: categorias.get(t.descricao)?.categoriaId ?? null,
+      }));
+
       // Por padrão: transações marcadas como possível duplicata começam
       // DESMARCADAS (excluídas da importação) — o usuário precisa incluir
       // manualmente se quiser importar mesmo assim. Todas as outras
       // começam marcadas para importar.
       const transacoesExcluidas = new Set<number>(
-        transacoesComStatus.reduce<number[]>((acc, t, index) => {
+        transacoesComCategoria.reduce<number[]>((acc, t, index) => {
           if (t.possivelDuplicata) acc.push(index);
           return acc;
         }, [])
@@ -89,7 +91,7 @@ export function useImportacaoCsv() {
         fase: "preview",
         bancoId,
         nomeArquivo,
-        transacoes: transacoesComStatus,
+        transacoes: transacoesComCategoria,
         linhasComErro: resultadoParse.linhasComErro,
         transacoesExcluidas,
       });
@@ -177,6 +179,32 @@ export function useImportacaoCsv() {
     });
   }, []);
 
+  // Permite ao usuário corrigir/definir a categoria de uma transação
+  // ainda na tela de preview, ANTES de confirmar a importação. Isso já
+  // conta como categorização manual: salva regra aprendida (origem
+  // 'usuario') para esse padrão de descrição, valendo para importações
+  // futuras — não é preciso esperar editar depois de já importada.
+  const definirCategoriaNoPreview = useCallback(async (index: number, categoriaId: CategoriaId) => {
+    let descricaoAlterada: string | null = null;
+
+    setEstado((prev) => {
+      if (prev.fase !== "preview") return prev;
+
+      const novasTransacoes = prev.transacoes.map((t, i) => {
+        if (i !== index) return t;
+        descricaoAlterada = t.descricao;
+        return { ...t, categoriaId };
+      });
+
+      return { ...prev, transacoes: novasTransacoes };
+    });
+
+    if (descricaoAlterada) {
+      const padrao = normalizarPadraoDescricao(descricaoAlterada);
+      await salvarRegraCategorizacao(padrao, categoriaId, "usuario");
+    }
+  }, []);
+
   const confirmarImportacao = useCallback(async () => {
     if (estado.fase !== "preview") return;
 
@@ -199,24 +227,31 @@ export function useImportacaoCsv() {
     }
 
     try {
+      let totalSemCategoria = 0;
+
       for (const transacao of transacoesParaImportar) {
-        const { categoria, icone } = categorizarPorPalavraChave(transacao.descricao);
+        const categoria = obterCategoriaPorId(transacao.categoriaId);
+        if (!categoria) totalSemCategoria += 1;
 
         await adicionarTransacao({
           nome: transacao.descricao,
-          subtitulo: transacao.extra?.categoria ?? categoria,
+          // subtitulo continua com o texto vindo do banco (ou nome da
+          // categoria como fallback legível) — categoria é um campo
+          // separado, ver categoriaId abaixo.
+          subtitulo: transacao.extra?.categoria ?? categoria?.nome ?? "Outros",
           valor: transacao.valor,
           tipo: transacao.tipo,
           data: dataIsoParaBR(transacao.data),
           banco: { sigla: siglaPorBanco(estado.bancoId), cor: corPorBanco(estado.bancoId) },
           bancoId: estado.bancoId,
           status: "concluida",
-          categoriaIcone: icone,
+          categoriaIcone: categoria?.icone,
+          categoriaId: transacao.categoriaId,
           identificadorExterno: transacao.extra?.identificadorExterno ?? null,
         });
       }
 
-      setEstado({ fase: "concluido", totalImportado: transacoesParaImportar.length });
+      setEstado({ fase: "concluido", totalImportado: transacoesParaImportar.length, totalSemCategoria });
     } catch (e) {
       setEstado({
         fase: "erro",
@@ -231,6 +266,7 @@ export function useImportacaoCsv() {
     selecionarArquivo,
     selecionarBancoManualmente,
     alternarTransacao,
+    definirCategoriaNoPreview,
     confirmarImportacao,
     reiniciar,
   };

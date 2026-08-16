@@ -1,5 +1,6 @@
 import { getDatabase, executarNaFila } from "./database";
 import { dataHojeIso } from "@/utils/dateUtils";
+import { CategoriaId } from "./categorias";
 
 export type TipoTransacao = "entrada" | "saida";
 export type StatusTransacao = "concluida" | "pendente" | "agendada";
@@ -22,6 +23,7 @@ export type Transacao = {
   bancoId: string;
   status: StatusTransacao;
   categoriaIcone: string | null;
+  categoriaId: CategoriaId | null;
   criadoEm: string;
   identificadorExterno: string | null;
 };
@@ -37,6 +39,7 @@ export type CamposEditaveisTransacao = {
   tipo: TipoTransacao;
   data: string;
   categoriaIcone: string | null;
+  categoriaId: CategoriaId | null;
 };
 
 export async function upsertBanco(banco: Banco): Promise<void> {
@@ -62,8 +65,8 @@ export async function inserirTransacao(transacao: Transacao): Promise<void> {
   return executarNaFila(async () => {
     const db = await getDatabase();
     await db.runAsync(
-      `INSERT INTO transacoes (id, nome, subtitulo, valor, tipo, data, hora, banco_id, status, categoria_icone, identificador_externo)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+      `INSERT INTO transacoes (id, nome, subtitulo, valor, tipo, data, hora, banco_id, status, categoria_icone, categoria_id, identificador_externo)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
       [
         transacao.id,
         transacao.nome,
@@ -75,6 +78,7 @@ export async function inserirTransacao(transacao: Transacao): Promise<void> {
         transacao.bancoId,
         transacao.status,
         transacao.categoriaIcone,
+        transacao.categoriaId,
         transacao.identificadorExterno,
       ]
     );
@@ -89,9 +93,18 @@ export async function atualizarTransacao(
     const db = await getDatabase();
     await db.runAsync(
       `UPDATE transacoes
-       SET nome = ?, subtitulo = ?, valor = ?, tipo = ?, data = ?, categoria_icone = ?
+       SET nome = ?, subtitulo = ?, valor = ?, tipo = ?, data = ?, categoria_icone = ?, categoria_id = ?
        WHERE id = ?;`,
-      [campos.nome, campos.subtitulo, campos.valor, campos.tipo, campos.data, campos.categoriaIcone, id]
+      [
+        campos.nome,
+        campos.subtitulo,
+        campos.valor,
+        campos.tipo,
+        campos.data,
+        campos.categoriaIcone,
+        campos.categoriaId,
+        id,
+      ]
     );
   });
 }
@@ -110,8 +123,8 @@ export async function listarTransacoes(limite?: number): Promise<TransacaoComBan
     const query = `
       SELECT
         t.id, t.nome, t.subtitulo, t.valor, t.tipo, t.data, t.hora,
-        t.status, t.categoria_icone as categoriaIcone, t.criado_em as criadoEm,
-        t.identificador_externo as identificadorExterno,
+        t.status, t.categoria_icone as categoriaIcone, t.categoria_id as categoriaId,
+        t.criado_em as criadoEm, t.identificador_externo as identificadorExterno,
         b.id as banco_id, b.nome as banco_nome, b.sigla as banco_sigla, b.cor as banco_cor
       FROM transacoes t
       INNER JOIN bancos b ON b.id = t.banco_id
@@ -129,6 +142,7 @@ export async function listarTransacoes(limite?: number): Promise<TransacaoComBan
       hora: string | null;
       status: StatusTransacao;
       categoriaIcone: string | null;
+      categoriaId: CategoriaId | null;
       criadoEm: string;
       identificadorExterno: string | null;
       banco_id: string;
@@ -149,6 +163,7 @@ export async function listarTransacoes(limite?: number): Promise<TransacaoComBan
       hora: linha.hora,
       status: linha.status,
       categoriaIcone: linha.categoriaIcone,
+      categoriaId: linha.categoriaId,
       criadoEm: linha.criadoEm,
       identificadorExterno: linha.identificadorExterno,
       banco: {
@@ -171,8 +186,8 @@ export async function listarTransacoesPorPeriodo(
     return db.getAllAsync<Transacao>(
       `SELECT
          id, nome, subtitulo, valor, tipo, data, hora, banco_id as bancoId,
-         status, categoria_icone as categoriaIcone, criado_em as criadoEm,
-         identificador_externo as identificadorExterno
+         status, categoria_icone as categoriaIcone, categoria_id as categoriaId,
+         criado_em as criadoEm, identificador_externo as identificadorExterno
        FROM transacoes
        WHERE banco_id = ? AND data >= ? AND data <= ?;`,
       [bancoId, dataInicioIso, dataFimIso]
@@ -188,6 +203,21 @@ export async function existeIdentificadorExterno(identificadorExterno: string): 
       [identificadorExterno]
     );
     return (resultado?.total ?? 0) > 0;
+  });
+}
+
+/**
+ * Conta quantas transações ainda não têm categoria definida
+ * (categoria_id IS NULL). Usado para avisar o usuário depois de uma
+ * importação e, futuramente, em um contador persistente na Home/Perfil.
+ */
+export async function contarTransacoesSemCategoria(): Promise<number> {
+  return executarNaFila(async () => {
+    const db = await getDatabase();
+    const resultado = await db.getFirstAsync<{ total: number }>(
+      `SELECT COUNT(*) as total FROM transacoes WHERE categoria_id IS NULL;`
+    );
+    return resultado?.total ?? 0;
   });
 }
 
@@ -219,6 +249,7 @@ export async function seedDadosIniciaisSeNecessario(): Promise<void> {
       bancoId: "nubank",
       status: "concluida",
       categoriaIcone: "car-outline",
+      categoriaId: "transporte",
       criadoEm: new Date().toISOString(),
       identificadorExterno: null,
     },
@@ -233,6 +264,7 @@ export async function seedDadosIniciaisSeNecessario(): Promise<void> {
       bancoId: "inter",
       status: "concluida",
       categoriaIcone: "swap-horizontal-outline",
+      categoriaId: "transferencia",
       criadoEm: new Date().toISOString(),
       identificadorExterno: null,
     },
@@ -247,6 +279,7 @@ export async function seedDadosIniciaisSeNecessario(): Promise<void> {
       bancoId: "bb",
       status: "concluida",
       categoriaIcone: "cart-outline",
+      categoriaId: "mercado",
       criadoEm: new Date().toISOString(),
       identificadorExterno: null,
     },

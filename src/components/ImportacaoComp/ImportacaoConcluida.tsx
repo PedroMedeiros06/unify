@@ -6,13 +6,20 @@ import { memo } from "react";
 
 type Props = {
   totalImportado: number;
+  totalSemCategoria: number;
   onVoltarInicio: () => void;
   onImportarOutro: () => void;
 };
 
-function ImportacaoConcluidaBase({ totalImportado, onVoltarInicio, onImportarOutro }: Props) {
+function ImportacaoConcluidaBase({
+  totalImportado,
+  totalSemCategoria,
+  onVoltarInicio,
+  onImportarOutro,
+}: Props) {
   const titleSize = moderateScale(17);
   const subtitleSize = moderateScale(13);
+  const avisoSize = moderateScale(12);
   const buttonTextSize = moderateScale(14);
 
   return (
@@ -24,9 +31,19 @@ function ImportacaoConcluidaBase({ totalImportado, onVoltarInicio, onImportarOut
       <Text style={{ fontSize: titleSize }} className="text-main-text font-Inter-SemiBold mb-1 text-center">
         Importação concluída
       </Text>
-      <Text style={{ fontSize: subtitleSize }} className="text-second-text text-center mb-6">
+      <Text style={{ fontSize: subtitleSize }} className="text-second-text text-center mb-4">
         {totalImportado} {totalImportado === 1 ? "transação foi adicionada" : "transações foram adicionadas"} ao seu histórico.
       </Text>
+
+      {totalSemCategoria > 0 && (
+        <View className="w-full flex-row items-start gap-2 bg-warn-color/10 rounded-lg p-3 mb-4">
+          <Ionicons name="pricetag-outline" color={colors["warn-color"]} size={16} style={{ marginTop: 1 }} />
+          <Text style={{ fontSize: avisoSize }} className="text-second-text flex-1">
+            {totalSemCategoria} {totalSemCategoria === 1 ? "transação ficou" : "transações ficaram"} sem categoria.
+            Você pode categorizá-las a qualquer momento tocando e segurando o item na lista de transações.
+          </Text>
+        </View>
+      )}
 
       <Pressable
         onPress={onVoltarInicio}

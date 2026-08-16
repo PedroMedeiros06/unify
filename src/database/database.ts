@@ -28,9 +28,9 @@ export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
  * `executarNaFila` garante que cada operação só começa depois que a
  * anterior terminou por completo, mesmo que várias sejam disparadas
  * "ao mesmo tempo" do lado do JavaScript. Toda função em queries.ts /
- * metasQueries.ts / compromissosQueries.ts que acessa o banco deve
- * passar sua operação por aqui, em vez de chamar db.runAsync/getAllAsync
- * diretamente.
+ * metasQueries.ts / compromissosQueries.ts / regrasAprendidasQueries.ts
+ * que acessa o banco deve passar sua operação por aqui, em vez de
+ * chamar db.runAsync/getAllAsync diretamente.
  */
 let filaExecucao: Promise<unknown> = Promise.resolve();
 
@@ -51,6 +51,7 @@ export async function resetDatabaseForDev(): Promise<void> {
   await db.execAsync(`DROP TABLE IF EXISTS bancos;`);
   await db.execAsync(`DROP TABLE IF EXISTS metas;`);
   await db.execAsync(`DROP TABLE IF EXISTS compromissos;`);
+  await db.execAsync(`DROP TABLE IF EXISTS regras_categorizacao;`);
   await db.execAsync(`PRAGMA user_version = 0;`);
 
   dbInstance = null;

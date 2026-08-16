@@ -2,93 +2,127 @@ import { colors } from "@/theme/colors";
 import { moderateScale } from "@/utils/scale";
 import { FormatToCurrency } from "@/utils/formatNumber";
 import { Ionicons } from "@expo/vector-icons";
-import { View, Text, Pressable, FlatList } from "react-native";
-import { memo } from "react";
-import { TransacaoComStatusDuplicata } from "@/database/deduplicacao";
+import { View, Text, Pressable, FlatList, Modal } from "react-native";
+import { memo, useState } from "react";
+import { TransacaoComCategoria } from "@/hooks/useImportacaoCsv";
+import { obterCategoriaPorId, CategoriaId } from "@/database/categorias";
+import { SeletorCategoria } from "@/components/common/SeletorCategoria";
 
 const ItemPreview = memo(function ItemPreview({
   item,
   index,
   incluida,
   onToggle,
+  onAbrirSeletorCategoria,
   isLast,
 }: {
-  item: TransacaoComStatusDuplicata;
+  item: TransacaoComCategoria;
   index: number;
   incluida: boolean;
   onToggle: (index: number) => void;
+  onAbrirSeletorCategoria: (index: number) => void;
   isLast: boolean;
 }) {
   const nomeSize = moderateScale(12);
   const valorSize = moderateScale(12);
   const avisoSize = moderateScale(10);
+  const categoriaSize = moderateScale(10);
 
   const [ano, mes, dia] = item.data.split("-");
+  const categoria = obterCategoriaPorId(item.categoriaId);
 
   return (
-    <Pressable
-      onPress={() => onToggle(index)}
-      className={`py-2.5 ${isLast ? "" : "border-b border-lines-divisions/50"}`}
-      accessibilityRole="checkbox"
-      accessibilityState={{ checked: incluida }}
-      accessibilityLabel={`${item.descricao}, ${FormatToCurrency(item.valor)}${item.possivelDuplicata ? ", possível duplicata" : ""}`}
-    >
-      <View className="flex-row items-center gap-2.5">
-        <View
-          className={`w-5 h-5 rounded-md border items-center justify-center flex-shrink-0 ${
-            incluida ? "bg-active-icon border-active-icon" : "border-input-border bg-transparent"
-          }`}
-        >
-          {incluida && <Ionicons name="checkmark" color="#fff" size={13} />}
-        </View>
-
-        <View className="flex-1">
-          <Text
-            style={{ fontSize: nomeSize }}
-            className={incluida ? "text-main-text" : "text-desactived-text"}
-            numberOfLines={1}
+    <View className={`py-2.5 ${isLast ? "" : "border-b border-lines-divisions/50"}`}>
+      <Pressable
+        onPress={() => onToggle(index)}
+        accessibilityRole="checkbox"
+        accessibilityState={{ checked: incluida }}
+        accessibilityLabel={`${item.descricao}, ${FormatToCurrency(item.valor)}${item.possivelDuplicata ? ", possível duplicata" : ""}`}
+      >
+        <View className="flex-row items-center gap-2.5">
+          <View
+            className={`w-5 h-5 rounded-md border items-center justify-center flex-shrink-0 ${
+              incluida ? "bg-active-icon border-active-icon" : "border-input-border bg-transparent"
+            }`}
           >
-            {item.descricao}
-          </Text>
-          <Text style={{ fontSize: nomeSize - 1 }} className="text-desactived-text">
-            {dia}/{mes}/{ano}
+            {incluida && <Ionicons name="checkmark" color="#fff" size={13} />}
+          </View>
+
+          <View className="flex-1">
+            <Text
+              style={{ fontSize: nomeSize }}
+              className={incluida ? "text-main-text" : "text-desactived-text"}
+              numberOfLines={1}
+            >
+              {item.descricao}
+            </Text>
+            <Text style={{ fontSize: nomeSize - 1 }} className="text-desactived-text">
+              {dia}/{mes}/{ano}
+            </Text>
+          </View>
+
+          <Text
+            style={{ fontSize: valorSize }}
+            className={
+              !incluida
+                ? "text-desactived-text font-Inter-Medium"
+                : item.tipo === "entrada"
+                  ? "text-sucess-color font-Inter-Medium"
+                  : "text-main-text font-Inter-Medium"
+            }
+          >
+            {item.tipo === "entrada" ? "+ " : "- "}
+            {FormatToCurrency(item.valor)}
           </Text>
         </View>
+      </Pressable>
 
-        <Text
-          style={{ fontSize: valorSize }}
-          className={
-            !incluida
-              ? "text-desactived-text font-Inter-Medium"
-              : item.tipo === "entrada"
-                ? "text-sucess-color font-Inter-Medium"
-                : "text-main-text font-Inter-Medium"
-          }
+      {/* Chip de categoria — toque abre o dropdown para corrigir antes de importar */}
+      <Pressable
+        onPress={() => onAbrirSeletorCategoria(index)}
+        className="flex-row items-center gap-1.5 mt-1.5 ml-7 self-start"
+        accessibilityRole="button"
+        accessibilityLabel={`Categoria: ${categoria?.nome ?? "sem categoria"}. Toque para alterar.`}
+      >
+        <View
+          style={{ backgroundColor: categoria ? `${categoria.cor}22` : `${colors["warn-color"]}22` }}
+          className="flex-row items-center gap-1 px-2 py-1 rounded-full"
         >
-          {item.tipo === "entrada" ? "+ " : "- "}
-          {FormatToCurrency(item.valor)}
-        </Text>
-      </View>
+          <Ionicons
+            name={categoria?.icone ?? "help-circle-outline"}
+            color={categoria?.cor ?? colors["warn-color"]}
+            size={11}
+          />
+          <Text
+            style={{ fontSize: categoriaSize, color: categoria?.cor ?? colors["warn-color"] }}
+            className="font-Inter-Medium"
+          >
+            {categoria?.nome ?? "Sem categoria"}
+          </Text>
+        </View>
+        <Ionicons name="pencil" color={colors["desactived-text"]} size={10} />
+      </Pressable>
 
       {item.possivelDuplicata && (
-        <View className="flex-row items-center gap-1.5 mt-1.5 ml-7">
-          <Ionicons name="alert-circle-outline" color={colors["warn-color"]} size={12} />
+        <View className="flex-row items-start gap-1.5 mt-1.5 ml-7">
+          <Ionicons name="alert-circle-outline" color={colors["warn-color"]} size={12} style={{ marginTop: 1 }} />
           <Text style={{ fontSize: avisoSize }} className="text-warn-color flex-1">
             {item.motivoDuplicata}
           </Text>
         </View>
       )}
-    </Pressable>
+    </View>
   );
 });
 
 type Props = {
-  transacoes: TransacaoComStatusDuplicata[];
+  transacoes: TransacaoComCategoria[];
   transacoesExcluidas: Set<number>;
   linhasComErro: { numeroLinha: number; conteudoOriginal: string; motivo: string }[];
   nomeBanco: string;
   nomeArquivo: string;
   onToggleTransacao: (index: number) => void;
+  onDefinirCategoria: (index: number, categoriaId: CategoriaId) => void;
   onConfirmar: () => void;
   onCancelar: () => void;
   salvando: boolean;
@@ -101,6 +135,7 @@ function PreviewImportacaoBase({
   nomeBanco,
   nomeArquivo,
   onToggleTransacao,
+  onDefinirCategoria,
   onConfirmar,
   onCancelar,
   salvando,
@@ -112,9 +147,22 @@ function PreviewImportacaoBase({
   const sectionTitleSize = moderateScale(12);
   const buttonTextSize = moderateScale(14);
 
+  const [indiceEditandoCategoria, setIndiceEditandoCategoria] = useState<number | null>(null);
+
   const totalDuplicatas = transacoes.filter((t) => t.possivelDuplicata).length;
   const totalSelecionadas = transacoes.length - transacoesExcluidas.size;
   const totalErro = linhasComErro.length;
+  const totalSemCategoria = transacoes.filter((t) => !t.categoriaId).length;
+
+  // No preview, o seletor não oferece "Sem categoria" — o item já
+  // começa sem categoria por padrão quando a categorização automática
+  // não encontra nada; abrir o dropdown aqui é sempre para ATRIBUIR
+  // uma categoria válida, nunca para removê-la.
+  const handleSelecionarCategoria = (categoriaId: CategoriaId | null) => {
+    if (indiceEditandoCategoria === null || !categoriaId) return;
+    onDefinirCategoria(indiceEditandoCategoria, categoriaId);
+    setIndiceEditandoCategoria(null);
+  };
 
   return (
     <View className="bg-card-background border border-lines-divisions rounded-xl p-4">
@@ -161,6 +209,15 @@ function PreviewImportacaoBase({
         )}
       </View>
 
+      {totalSemCategoria > 0 && (
+        <View className="flex-row items-start gap-2 bg-warn-color/10 rounded-lg p-2.5 mb-4">
+          <Ionicons name="pricetag-outline" color={colors["warn-color"]} size={14} style={{ marginTop: 1 }} />
+          <Text style={{ fontSize: countLabelSize }} className="text-second-text flex-1">
+            {totalSemCategoria} {totalSemCategoria === 1 ? "transação ficará" : "transações ficarão"} sem categoria. Toque no chip de categoria de cada linha para definir agora, se quiser.
+          </Text>
+        </View>
+      )}
+
       {totalDuplicatas > 0 && (
         <View className="flex-row items-start gap-2 bg-warn-color/10 rounded-lg p-2.5 mb-4">
           <Ionicons name="information-circle-outline" color={colors["warn-color"]} size={14} style={{ marginTop: 1 }} />
@@ -186,6 +243,7 @@ function PreviewImportacaoBase({
                   index={index}
                   incluida={!transacoesExcluidas.has(index)}
                   onToggle={onToggleTransacao}
+                  onAbrirSeletorCategoria={setIndiceEditandoCategoria}
                   isLast={index === transacoes.length - 1}
                 />
               )}
@@ -229,6 +287,41 @@ function PreviewImportacaoBase({
           </Text>
         </Pressable>
       </View>
+
+      {/* Dropdown de categoria para corrigir uma linha específica —
+          "Sem categoria" não é oferecido aqui, ver comentário acima. */}
+      <Modal
+        visible={indiceEditandoCategoria !== null}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setIndiceEditandoCategoria(null)}
+      >
+        <View className="flex-1 justify-end bg-black/50">
+          <View className="bg-card-background rounded-t-2xl p-5 pb-8">
+            <View className="flex-row justify-between items-center mb-4">
+              <Text style={{ fontSize: titleSize }} className="text-main-text font-Inter-SemiBold">
+                Definir categoria
+              </Text>
+              <Pressable
+                onPress={() => setIndiceEditandoCategoria(null)}
+                hitSlop={10}
+                accessibilityRole="button"
+                accessibilityLabel="Fechar"
+              >
+                <Ionicons name="close" color={colors["second-text"]} size={22} />
+              </Pressable>
+            </View>
+
+            <SeletorCategoria
+              categoriaSelecionada={
+                indiceEditandoCategoria !== null ? transacoes[indiceEditandoCategoria]?.categoriaId ?? null : null
+              }
+              onSelecionar={handleSelecionarCategoria}
+              permitirSemCategoria={false}
+            />
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }

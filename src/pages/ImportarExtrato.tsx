@@ -24,6 +24,7 @@ export function ImportarExtrato() {
     selecionarArquivo,
     selecionarBancoManualmente,
     alternarTransacao,
+    definirCategoriaNoPreview,
     confirmarImportacao,
     reiniciar,
   } = useImportacaoCsv();
@@ -125,6 +126,7 @@ export function ImportarExtrato() {
             nomeBanco={nomeBancoPorId(estado.bancoId, parsersDisponiveis)}
             nomeArquivo={estado.nomeArquivo}
             onToggleTransacao={alternarTransacao}
+            onDefinirCategoria={definirCategoriaNoPreview}
             onConfirmar={confirmarImportacao}
             onCancelar={reiniciar}
             salvando={false}
@@ -145,6 +147,7 @@ export function ImportarExtrato() {
         {estado.fase === "concluido" && (
           <ImportacaoConcluida
             totalImportado={estado.totalImportado}
+            totalSemCategoria={estado.totalSemCategoria}
             onVoltarInicio={goBack}
             onImportarOutro={reiniciar}
           />
