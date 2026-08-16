@@ -2,24 +2,19 @@ import { colors } from "@/theme/colors";
 import { moderateScale } from "@/utils/scale";
 import { FormatToCurrency } from "@/utils/formatNumber";
 import { Ionicons } from "@expo/vector-icons";
-import { View, Text, Pressable, useWindowDimensions } from "react-native";
+import { View, Text, Pressable, useWindowDimensions, ActivityIndicator } from "react-native";
 import Svg, { Circle } from "react-native-svg";
-import { memo, useMemo } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import { EvolucaoMensal } from "@/components/HomeComp/EvolucaoMensal";
 import { ResumoMetrics } from "@/components/HomeComp/ResumoMetrics";
+import { listarResumoPorCategoria, FiltrosTransacao } from "@/database/queries";
+import { obterCategoriaPorId } from "@/database/categorias";
 
-type Categoria = { nome: string; percentual: number; cor: string };
+type Props = {
+  filtrosParaQuery: FiltrosTransacao;
+};
 
-const DEBUG_CATEGORIAS: Categoria[] = [
-  { nome: "Transporte", percentual: 35, cor: "#8D51E6" },
-  { nome: "Mercado", percentual: 25, cor: "#1D9E75" },
-  { nome: "Casa", percentual: 15, cor: "#378ADD" },
-  { nome: "Lazer", percentual: 10, cor: "#EF9F27" },
-  { nome: "Saúde", percentual: 8, cor: "#E24B4A" },
-  { nome: "Outros", percentual: 7, cor: "#888780" },
-];
-
-const DEBUG_TOTAL_GASTOS = 2356.78;
+type FatiaExibicao = { nome: string; cor: string; valor: number; percentual: number };
 
 const DEBUG_EVOLUCAO = [
   { mes: "Jan", valor: 3200 },
@@ -30,27 +25,25 @@ const DEBUG_EVOLUCAO = [
   { mes: "Jun", valor: 7800 },
 ];
 
-const DEBUG_MODE = true;
-
 const RADIUS = 42;
 const STROKE_WIDTH = 12;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 const VIEWBOX_SIZE = 100;
 const DONUT_SIZE = 120;
 
-function useFatias(categorias: Categoria[]) {
+function useFatiasComOffset(fatias: FatiaExibicao[]) {
   return useMemo(() => {
     let offsetAcumulado = 0;
-    return categorias.map((cat) => {
-      const dash = (cat.percentual / 100) * CIRCUMFERENCE;
-      const fatia = { ...cat, dashArray: `${dash} ${CIRCUMFERENCE - dash}`, dashOffset: -offsetAcumulado };
+    return fatias.map((fatia) => {
+      const dash = (fatia.percentual / 100) * CIRCUMFERENCE;
+      const resultado = { ...fatia, dashArray: `${dash} ${CIRCUMFERENCE - dash}`, dashOffset: -offsetAcumulado };
       offsetAcumulado += dash;
-      return fatia;
+      return resultado;
     });
-  }, [categorias]);
+  }, [fatias]);
 }
 
-function AnaliseGraficaBase() {
+function AnaliseGraficaBase({ filtrosParaQuery }: Props) {
   const { width } = useWindowDimensions();
   const isSmallDevice = width < 375;
 
@@ -60,11 +53,53 @@ function AnaliseGraficaBase() {
   const centerValueSize = moderateScale(13);
   const centerLabelSize = moderateScale(9);
   const actionTextSize = moderateScale(12);
+  const emptyTextSize = moderateScale(12);
 
-  const categorias = DEBUG_MODE ? DEBUG_CATEGORIAS : [];
-  const totalGastos = DEBUG_MODE ? DEBUG_TOTAL_GASTOS : 0;
-  const evolucao = DEBUG_MODE ? DEBUG_EVOLUCAO : [];
-  const fatias = useFatias(categorias);
+  const [carregando, setCarregando] = useState(true);
+  const [fatias, setFatias] = useState<FatiaExibicao[]>([]);
+  const [totalGastos, setTotalGastos] = useState(0);
+
+  const evolucao = DEBUG_EVOLUCAO; // fora do escopo desta entrega — ver nota no fim do arquivo
+
+  useEffect(() => {
+    let ativo = true;
+
+    async function carregar() {
+      setCarregando(true);
+      try {
+        const resumo = await listarResumoPorCategoria(filtrosParaQuery);
+        const comSaida = resumo.filter((r) => r.totalSaidas > 0);
+        const totalGeral = comSaida.reduce((acc, r) => acc + r.totalSaidas, 0);
+
+        const fatiasCalculadas: FatiaExibicao[] = comSaida.map((r) => {
+          const categoria = obterCategoriaPorId(r.categoriaId);
+          return {
+            nome: categoria?.nome ?? "Sem categoria",
+            cor: categoria?.cor ?? colors["desactived-text"],
+            valor: r.totalSaidas,
+            percentual: totalGeral > 0 ? (r.totalSaidas / totalGeral) * 100 : 0,
+          };
+        });
+
+        fatiasCalculadas.sort((a, b) => b.valor - a.valor);
+
+        if (ativo) {
+          setFatias(fatiasCalculadas);
+          setTotalGastos(totalGeral);
+        }
+      } finally {
+        if (ativo) setCarregando(false);
+      }
+    }
+
+    carregar();
+
+    return () => {
+      ativo = false;
+    };
+  }, [filtrosParaQuery]);
+
+  const fatiasComOffset = useFatiasComOffset(fatias);
   const totalFormatado = FormatToCurrency(totalGastos);
 
   return (
@@ -85,71 +120,86 @@ function AnaliseGraficaBase() {
         </Pressable>
       </View>
 
-      {/* GASTOS POR CATEGORIA */}
+      {/* GASTOS POR CATEGORIA — conectado a dados reais via listarResumoPorCategoria */}
       <View className="mt-3 mb-4">
         <Text style={{ fontSize: sectionTitleSize }} className="text-main-text font-Inter-Medium mb-3">
           Gastos por categoria
         </Text>
 
-        <View className={isSmallDevice ? "flex-col items-center gap-4" : "flex-row items-center gap-4"}>
-          <View style={{ width: DONUT_SIZE, height: DONUT_SIZE }} className="items-center justify-center flex-shrink-0">
-            <Svg
-              viewBox={`0 0 ${VIEWBOX_SIZE} ${VIEWBOX_SIZE}`}
-              width={DONUT_SIZE}
-              height={DONUT_SIZE}
-              style={{ transform: [{ rotate: "-90deg" }] }}
-            >
-              <Circle
-                cx={VIEWBOX_SIZE / 2}
-                cy={VIEWBOX_SIZE / 2}
-                r={RADIUS}
-                stroke={colors["lines-divisions"]}
-                strokeWidth={STROKE_WIDTH}
-                fill="none"
-              />
-              {fatias.map((fatia) => (
+        {carregando ? (
+          <View className="items-center py-6">
+            <ActivityIndicator color={colors["active-icon"]} />
+          </View>
+        ) : fatias.length === 0 ? (
+          <View className="items-center py-4">
+            <Text style={{ fontSize: emptyTextSize }} className="text-desactived-text text-center">
+              Nenhuma despesa encontrada para os filtros atuais.
+            </Text>
+          </View>
+        ) : (
+          <View className={isSmallDevice ? "flex-col items-center gap-4" : "flex-row items-center gap-4"}>
+            <View style={{ width: DONUT_SIZE, height: DONUT_SIZE }} className="items-center justify-center flex-shrink-0">
+              <Svg
+                viewBox={`0 0 ${VIEWBOX_SIZE} ${VIEWBOX_SIZE}`}
+                width={DONUT_SIZE}
+                height={DONUT_SIZE}
+                style={{ transform: [{ rotate: "-90deg" }] }}
+              >
                 <Circle
-                  key={fatia.nome}
                   cx={VIEWBOX_SIZE / 2}
                   cy={VIEWBOX_SIZE / 2}
                   r={RADIUS}
-                  stroke={fatia.cor}
+                  stroke={colors["lines-divisions"]}
                   strokeWidth={STROKE_WIDTH}
-                  strokeDasharray={fatia.dashArray}
-                  strokeDashoffset={fatia.dashOffset}
                   fill="none"
                 />
-              ))}
-            </Svg>
-            <View className="absolute items-center justify-center px-1">
-              <Text style={{ fontSize: centerValueSize }} className="text-main-text font-Inter-SemiBold" numberOfLines={1}>
-                {totalFormatado}
-              </Text>
-              <Text style={{ fontSize: centerLabelSize }} className="text-desactived-text">
-                Total de gastos
-              </Text>
-            </View>
-          </View>
-
-          <View className={isSmallDevice ? "w-full gap-2" : "flex-1 gap-2"}>
-            {categorias.map((cat) => (
-              <View key={cat.nome} className="flex-row justify-between items-center">
-                <View className="flex-row items-center gap-1.5 flex-shrink">
-                  <View style={{ width: 8, height: 8, backgroundColor: cat.cor }} className="rounded-sm" />
-                  <Text style={{ fontSize: legendTextSize }} className="text-main-text" numberOfLines={1}>
-                    {cat.nome}
-                  </Text>
-                </View>
-                <Text style={{ fontSize: legendTextSize }} className="text-second-text">
-                  {cat.percentual}%
+                {fatiasComOffset.map((fatia, index) => (
+                  <Circle
+                    key={`${fatia.nome}-${index}`}
+                    cx={VIEWBOX_SIZE / 2}
+                    cy={VIEWBOX_SIZE / 2}
+                    r={RADIUS}
+                    stroke={fatia.cor}
+                    strokeWidth={STROKE_WIDTH}
+                    strokeDasharray={fatia.dashArray}
+                    strokeDashoffset={fatia.dashOffset}
+                    fill="none"
+                  />
+                ))}
+              </Svg>
+              <View className="absolute items-center justify-center px-1">
+                <Text style={{ fontSize: centerValueSize }} className="text-main-text font-Inter-SemiBold" numberOfLines={1}>
+                  {totalFormatado}
+                </Text>
+                <Text style={{ fontSize: centerLabelSize }} className="text-desactived-text">
+                  Total de gastos
                 </Text>
               </View>
-            ))}
+            </View>
+
+            <View className={isSmallDevice ? "w-full gap-2" : "flex-1 gap-2"}>
+              {fatias.map((fatia) => (
+                <View key={fatia.nome} className="flex-row justify-between items-center">
+                  <View className="flex-row items-center gap-1.5 flex-shrink">
+                    <View style={{ width: 8, height: 8, backgroundColor: fatia.cor }} className="rounded-sm" />
+                    <Text style={{ fontSize: legendTextSize }} className="text-main-text" numberOfLines={1}>
+                      {fatia.nome}
+                    </Text>
+                  </View>
+                  <Text style={{ fontSize: legendTextSize }} className="text-second-text">
+                    {fatia.percentual.toFixed(0)}%
+                  </Text>
+                </View>
+              ))}
+            </View>
           </View>
-        </View>
+        )}
       </View>
 
-      {/* EVOLUÇÃO MENSAL */}
+      {/* EVOLUÇÃO MENSAL — ainda com dados de exemplo (DEBUG_EVOLUCAO).
+          Fora do escopo desta entrega: exigiria uma nova query agregada
+          por mês (GROUP BY strftime('%Y-%m', data)), que não foi pedida
+          nesta rodada. Sinalizado para não ser confundido com dado real. */}
       <View className="mb-4 items-center">
         <View className="w-full flex-row justify-between items-center mb-3">
           <Text style={{ fontSize: sectionTitleSize }} className="text-main-text font-Inter-Medium">
@@ -162,7 +212,7 @@ function AnaliseGraficaBase() {
         <EvolucaoMensal data={evolucao} />
       </View>
 
-      {/* METRICS */}
+      {/* METRICS — idem, ainda DEBUG_METRICS internamente. Fora do escopo desta entrega. */}
       <ResumoMetrics />
     </View>
   );

@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ScrollView, Text, View, Pressable } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { colors } from "@/theme/colors";
@@ -10,6 +10,10 @@ import { DistribuicaoOrcamento } from "@/components/PlanejamentoComp/Distribuica
 import { MetasFinanceiras } from "@/components/PlanejamentoComp/MetasFinanceiras";
 import { OrcamentoMensal } from "@/components/PlanejamentoComp/OrcamentoMensal";
 import { ProximosCompromissos } from "@/components/PlanejamentoComp/ProximosCompromissos";
+import { BarraFiltros } from "@/components/common/BarraFiltros";
+import { SeletorPeriodoPersonalizado } from "@/components/common/SeletorPeriodoPersonalizado";
+import { useFiltrosTransacao } from "@/hooks/useFiltrosTransacao";
+import { listarBancos, Banco } from "@/database/queries";
 
 export function Planejamento() {
   const [activeTab, setActiveTab] = useState<PlanejamentoTab>("Resumo");
@@ -17,19 +21,46 @@ export function Planejamento() {
   const titleSize = moderateScale(22);
   const subtitleSize = moderateScale(12);
 
-  // useCallback evita recriar a função a cada render do Planejamento,
-  // o que faria o PlanejamentoTabs (mesmo memoizado) re-renderizar à toa.
+  // Estado de filtros LOCAL desta tela — independente do estado de
+  // filtros da Home (cada tela tem sua própria instância, por decisão
+  // de escopo: não há necessidade de sincronizar entre elas agora).
+  const {
+    filtros,
+    alternarBanco,
+    limparFiltroBanco,
+    alternarCategoria,
+    limparFiltroCategoria,
+    definirPeriodoPreset,
+    definirPeriodoPersonalizado,
+    limparTodosFiltros,
+    possuiFiltrosAtivos,
+    filtrosParaQuery,
+  } = useFiltrosTransacao();
+
+  const [bancos, setBancos] = useState<Banco[]>([]);
+  const [modalPeriodoAberto, setModalPeriodoAberto] = useState(false);
+
+  useEffect(() => {
+    listarBancos().then(setBancos);
+  }, []);
+
   const handleChangeTab = useCallback((tab: PlanejamentoTab) => {
     setActiveTab(tab);
   }, []);
+
+  const handleConfirmarPeriodo = useCallback(
+    (inicioIso: string, fimIso: string) => {
+      definirPeriodoPersonalizado(inicioIso, fimIso);
+      setModalPeriodoAberto(false);
+    },
+    [definirPeriodoPersonalizado]
+  );
 
   return (
     <ScrollView
       className="flex-1"
       showsVerticalScrollIndicator={false}
       contentContainerStyle={{ paddingBottom: 100 }}
-      // reduz a frequência de eventos de scroll processados — ajuda em
-      // telas com bastante conteúdo abaixo do fold
       scrollEventThrottle={32}
       removeClippedSubviews
     >
@@ -63,8 +94,20 @@ export function Planejamento() {
             componentes, então não consomem memória/processamento à toa. */}
         {activeTab === "Resumo" && (
           <View className="flex-col gap-3">
+            <BarraFiltros
+              bancos={bancos}
+              filtros={filtros}
+              possuiFiltrosAtivos={possuiFiltrosAtivos}
+              onAlternarBanco={alternarBanco}
+              onLimparBanco={limparFiltroBanco}
+              onAlternarCategoria={alternarCategoria}
+              onLimparCategoria={limparFiltroCategoria}
+              onDefinirPeriodoPreset={definirPeriodoPreset}
+              onAbrirPeriodoPersonalizado={() => setModalPeriodoAberto(true)}
+              onLimparTodos={limparTodosFiltros}
+            />
             <VisaoGeralMes />
-            <DistribuicaoOrcamento />
+            <DistribuicaoOrcamento filtrosParaQuery={filtrosParaQuery} />
             <MetasFinanceiras />
             <OrcamentoMensal />
             <ProximosCompromissos />
@@ -77,6 +120,14 @@ export function Planejamento() {
           </View>
         )}
       </View>
+
+      <SeletorPeriodoPersonalizado
+        visivel={modalPeriodoAberto}
+        inicioIso={filtros.periodoInicioPersonalizado}
+        fimIso={filtros.periodoFimPersonalizado}
+        onConfirmar={handleConfirmarPeriodo}
+        onFechar={() => setModalPeriodoAberto(false)}
+      />
     </ScrollView>
   );
 }

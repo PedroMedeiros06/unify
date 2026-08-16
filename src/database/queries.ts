@@ -42,6 +42,70 @@ export type CamposEditaveisTransacao = {
   categoriaId: CategoriaId | null;
 };
 
+/**
+ * Filtros aceitos pelas queries de agregação (listarResumoPorCategoria,
+ * listarResumoPorBanco) e reaproveitáveis por qualquer query futura que
+ * precise da mesma semântica. Cada campo `null`/ausente significa
+ * "sem filtro nesse eixo" — é assim que o comportamento padrão pedido
+ * (gráficos agrupando tudo, de todos os bancos) é obtido: chamar as
+ * funções de agregação com um objeto de filtros vazio.
+ */
+export type FiltrosTransacao = {
+  bancosIds?: string[] | null; // null/undefined/[] = todos os bancos
+  categoriasIds?: (CategoriaId | null)[] | null; // inclui `null` explícito para filtrar "sem categoria"; null/undefined = todas
+  dataInicio?: string | null; // ISO aaaa-mm-dd, inclusive
+  dataFim?: string | null; // ISO aaaa-mm-dd, inclusive
+};
+
+/**
+ * Monta a cláusula WHERE + parâmetros a partir de FiltrosTransacao.
+ * Centralizado aqui para as duas queries de agregação (e qualquer
+ * outra futura) nunca divergirem na forma de interpretar os filtros.
+ */
+function montarClausulaFiltros(filtros: FiltrosTransacao): { where: string; params: (string | null)[] } {
+  const condicoes: string[] = [];
+  const params: (string | null)[] = [];
+
+  if (filtros.bancosIds && filtros.bancosIds.length > 0) {
+    condicoes.push(`t.banco_id IN (${filtros.bancosIds.map(() => "?").join(", ")})`);
+    params.push(...filtros.bancosIds);
+  }
+
+  if (filtros.categoriasIds && filtros.categoriasIds.length > 0) {
+    // Separamos o caso "sem categoria" (null) do restante, porque
+    // `IN (...)` do SQLite não casa com NULL — precisa de `IS NULL` à parte.
+    const categoriasReais = filtros.categoriasIds.filter((c): c is CategoriaId => c !== null);
+    const incluiSemCategoria = filtros.categoriasIds.includes(null);
+
+    const subCondicoes: string[] = [];
+    if (categoriasReais.length > 0) {
+      subCondicoes.push(`t.categoria_id IN (${categoriasReais.map(() => "?").join(", ")})`);
+      params.push(...categoriasReais);
+    }
+    if (incluiSemCategoria) {
+      subCondicoes.push(`t.categoria_id IS NULL`);
+    }
+    if (subCondicoes.length > 0) {
+      condicoes.push(`(${subCondicoes.join(" OR ")})`);
+    }
+  }
+
+  if (filtros.dataInicio) {
+    condicoes.push(`t.data >= ?`);
+    params.push(filtros.dataInicio);
+  }
+
+  if (filtros.dataFim) {
+    condicoes.push(`t.data <= ?`);
+    params.push(filtros.dataFim);
+  }
+
+  return {
+    where: condicoes.length > 0 ? `WHERE ${condicoes.join(" AND ")}` : "",
+    params,
+  };
+}
+
 export async function upsertBanco(banco: Banco): Promise<void> {
   return executarNaFila(async () => {
     const db = await getDatabase();
@@ -218,6 +282,152 @@ export async function contarTransacoesSemCategoria(): Promise<number> {
       `SELECT COUNT(*) as total FROM transacoes WHERE categoria_id IS NULL;`
     );
     return resultado?.total ?? 0;
+  });
+}
+
+export type ResumoPorCategoria = {
+  categoriaId: CategoriaId | null;
+  totalEntradas: number;
+  totalSaidas: number;
+  quantidade: number;
+};
+
+/**
+ * Agrega o total gasto/recebido por categoria, respeitando os filtros
+ * informados (banco(s), período, categoria(s)). Uma única query com
+ * GROUP BY — não itera transação por transação em JS. É o que alimenta
+ * DistribuicaoOrcamento e AnaliseGrafica.
+ *
+ * Sem filtros (objeto vazio ou tudo null), agrega TODAS as transações
+ * de TODOS os bancos — esse é o comportamento padrão pedido (gráfico
+ * agrupado por categoria, independente de banco).
+ */
+export async function listarResumoPorCategoria(
+  filtros: FiltrosTransacao = {}
+): Promise<ResumoPorCategoria[]> {
+  return executarNaFila(async () => {
+    const db = await getDatabase();
+    const { where, params } = montarClausulaFiltros(filtros);
+
+    return db.getAllAsync<ResumoPorCategoria>(
+      `SELECT
+         t.categoria_id as categoriaId,
+         COALESCE(SUM(CASE WHEN t.tipo = 'entrada' THEN t.valor ELSE 0 END), 0) as totalEntradas,
+         COALESCE(SUM(CASE WHEN t.tipo = 'saida' THEN t.valor ELSE 0 END), 0) as totalSaidas,
+         COUNT(*) as quantidade
+       FROM transacoes t
+       ${where}
+       GROUP BY t.categoria_id
+       ORDER BY totalSaidas DESC;`,
+      params
+    );
+  });
+}
+
+export type ResumoPorBanco = {
+  bancoId: string;
+  bancoNome: string;
+  bancoSigla: string;
+  bancoCor: string;
+  totalEntradas: number;
+  totalSaidas: number;
+  quantidade: number;
+};
+
+/**
+ * Mesma ideia de listarResumoPorCategoria, mas agrupando por banco —
+ * usado para o filtro de banco saber quais bancos têm transações e
+ * para qualquer visão futura de "gastos por banco".
+ */
+export async function listarResumoPorBanco(
+  filtros: FiltrosTransacao = {}
+): Promise<ResumoPorBanco[]> {
+  return executarNaFila(async () => {
+    const db = await getDatabase();
+    const { where, params } = montarClausulaFiltros(filtros);
+
+    return db.getAllAsync<ResumoPorBanco>(
+      `SELECT
+         b.id as bancoId, b.nome as bancoNome, b.sigla as bancoSigla, b.cor as bancoCor,
+         COALESCE(SUM(CASE WHEN t.tipo = 'entrada' THEN t.valor ELSE 0 END), 0) as totalEntradas,
+         COALESCE(SUM(CASE WHEN t.tipo = 'saida' THEN t.valor ELSE 0 END), 0) as totalSaidas,
+         COUNT(*) as quantidade
+       FROM transacoes t
+       INNER JOIN bancos b ON b.id = t.banco_id
+       ${where}
+       GROUP BY b.id
+       ORDER BY b.nome ASC;`,
+      params
+    );
+  });
+}
+
+/**
+ * Lista as transações que casam com os filtros informados, com dados
+ * de banco já resolvidos — usado pela lista de "Últimas transações"
+ * quando os filtros de banco/período/categoria estão ativos.
+ */
+export async function listarTransacoesFiltradas(
+  filtros: FiltrosTransacao = {},
+  limite?: number
+): Promise<TransacaoComBanco[]> {
+  return executarNaFila(async () => {
+    const db = await getDatabase();
+    const { where, params } = montarClausulaFiltros(filtros);
+
+    type LinhaBruta = {
+      id: string;
+      nome: string;
+      subtitulo: string;
+      valor: number;
+      tipo: TipoTransacao;
+      data: string;
+      hora: string | null;
+      status: StatusTransacao;
+      categoriaIcone: string | null;
+      categoriaId: CategoriaId | null;
+      criadoEm: string;
+      identificadorExterno: string | null;
+      banco_id: string;
+      banco_nome: string;
+      banco_sigla: string;
+      banco_cor: string;
+    };
+
+    const linhas = await db.getAllAsync<LinhaBruta>(
+      `SELECT
+         t.id, t.nome, t.subtitulo, t.valor, t.tipo, t.data, t.hora,
+         t.status, t.categoria_icone as categoriaIcone, t.categoria_id as categoriaId,
+         t.criado_em as criadoEm, t.identificador_externo as identificadorExterno,
+         b.id as banco_id, b.nome as banco_nome, b.sigla as banco_sigla, b.cor as banco_cor
+       FROM transacoes t
+       INNER JOIN bancos b ON b.id = t.banco_id
+       ${where}
+       ORDER BY t.data DESC, t.criado_em DESC
+       ${limite ? `LIMIT ${limite}` : ""};`,
+      params
+    );
+
+    return linhas.map((linha) => ({
+      id: linha.id,
+      nome: linha.nome,
+      subtitulo: linha.subtitulo,
+      valor: linha.valor,
+      tipo: linha.tipo,
+      data: linha.data,
+      hora: linha.hora,
+      status: linha.status,
+      categoriaIcone: linha.categoriaIcone,
+      categoriaId: linha.categoriaId,
+      criadoEm: linha.criadoEm,
+      identificadorExterno: linha.identificadorExterno,
+      banco: {
+        id: linha.banco_id,
+        nome: linha.banco_nome,
+        sigla: linha.banco_sigla,
+        cor: linha.banco_cor,
+      },
+    }));
   });
 }
 

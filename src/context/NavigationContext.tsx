@@ -3,7 +3,13 @@ import { createContext, useCallback, useContext, useMemo, useState, ReactNode } 
 // Lista central das telas navegáveis do app. Adicionar uma tela nova
 // (fora do footer) é só acrescentar aqui — nenhum componente que já
 // usa useNavigation() precisa mudar.
-export type ScreenType = "home" | "transations" | "planejamento" | "user" | "importarExtrato";
+export type ScreenType =
+  | "home"
+  | "transations"
+  | "planejamento"
+  | "user"
+  | "importarExtrato"
+  | "todasTransacoes";
 
 type NavigationContextValue = {
   activeScreen: ScreenType;

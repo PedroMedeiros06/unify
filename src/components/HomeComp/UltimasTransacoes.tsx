@@ -2,11 +2,42 @@ import { colors } from "@/theme/colors";
 import { moderateScale } from "@/utils/scale";
 import { FormatToCurrency } from "@/utils/formatNumber";
 import { Ionicons } from "@expo/vector-icons";
-import { Text, View, Pressable, FlatList } from "react-native";
-import { memo, useCallback, useState } from "react";
+import { Text, View, Pressable, FlatList, ScrollView } from "react-native";
+import { memo, useCallback, useEffect, useState } from "react";
 import { useTransacoes, Transacao } from "@/context/TransacoesContext";
 import { EditarTransacaoModal } from "@/components/TransacoesComp/EditarTransacaoModal";
 import { ListaTransacoesSkeleton } from "@/components/common/ListaTransacoesSkeleton";
+import { SeletorBancoMultiplo } from "@/components/common/SeletorBancoMultiplo";
+import { SeletorCategoriaMultiplo } from "@/components/common/SeletorCategoriaMultiplo";
+import { SeletorPeriodoPersonalizado } from "@/components/common/SeletorPeriodoPersonalizado";
+import { useFiltrosTransacao, PeriodoPreset } from "@/hooks/useFiltrosTransacao";
+import { useNavigation } from "@/context/NavigationContext";
+import { listarBancos, listarTransacoesFiltradas, Banco, TransacaoComBanco } from "@/database/queries";
+import { dataIsoParaBR } from "@/utils/dateUtils";
+
+function mapearParaTransacaoUI(t: TransacaoComBanco): Transacao {
+  return {
+    id: t.id,
+    nome: t.nome,
+    subtitulo: t.subtitulo,
+    valor: t.valor,
+    tipo: t.tipo,
+    data: dataIsoParaBR(t.data),
+    hora: t.hora ?? undefined,
+    banco: { sigla: t.banco.sigla, cor: t.banco.cor },
+    status: t.status,
+    categoriaIcone: t.categoriaIcone ?? undefined,
+    categoriaId: t.categoriaId,
+  };
+}
+
+const ROTULOS_PERIODO: Record<PeriodoPreset, string> = {
+  tudo: "Hoje",
+  hoje: "Hoje",
+  "7dias": "7 dias",
+  esteMes: "Este mês",
+  personalizado: "Personalizado",
+};
 
 const TransacaoItem = memo(function TransacaoItem({
   item,
@@ -81,11 +112,54 @@ function UltimasTransacoesBase() {
   const actionTextSize = moderateScale(12);
   const itemTitleSize = moderateScale(14);
   const emptyTitleSize = moderateScale(13);
+  const chipTextSize = moderateScale(12);
 
-  const { transacoes, carregando, editarTransacao, removerTransacao } = useTransacoes();
+  const { transacoes: transacoesDoContext, carregando: carregandoContext, editarTransacao, removerTransacao } = useTransacoes();
+  const { navigate } = useNavigation();
+
+  const {
+    filtros,
+    alternarBanco,
+    limparFiltroBanco,
+    alternarCategoria,
+    limparFiltroCategoria,
+    definirPeriodoPersonalizado,
+    possuiFiltrosAtivos,
+    filtrosParaQuery,
+  } = useFiltrosTransacao();
+
+  const [bancos, setBancos] = useState<Banco[]>([]);
+  const [modalPeriodoAberto, setModalPeriodoAberto] = useState(false);
   const [transacaoSelecionada, setTransacaoSelecionada] = useState<Transacao | null>(null);
 
-  const transacoesRecentes = transacoes.slice(0, 5);
+  const [transacoesFiltradas, setTransacoesFiltradas] = useState<Transacao[]>([]);
+  const [carregandoFiltro, setCarregandoFiltro] = useState(false);
+
+  useEffect(() => {
+    listarBancos().then(setBancos);
+  }, []);
+
+  useEffect(() => {
+    if (!possuiFiltrosAtivos) return;
+
+    let ativo = true;
+    setCarregandoFiltro(true);
+
+    listarTransacoesFiltradas(filtrosParaQuery, 5)
+      .then((linhas) => {
+        if (ativo) setTransacoesFiltradas(linhas.map(mapearParaTransacaoUI));
+      })
+      .finally(() => {
+        if (ativo) setCarregandoFiltro(false);
+      });
+
+    return () => {
+      ativo = false;
+    };
+  }, [possuiFiltrosAtivos, filtrosParaQuery]);
+
+  const carregando = possuiFiltrosAtivos ? carregandoFiltro : carregandoContext;
+  const transacoesRecentes = possuiFiltrosAtivos ? transacoesFiltradas : transacoesDoContext.slice(0, 5);
 
   const handleLongPress = useCallback((transacao: Transacao) => {
     setTransacaoSelecionada(transacao);
@@ -94,6 +168,18 @@ function UltimasTransacoesBase() {
   const handleFecharModal = useCallback(() => {
     setTransacaoSelecionada(null);
   }, []);
+
+  const handleVerTodas = useCallback(() => {
+    navigate("todasTransacoes");
+  }, [navigate]);
+
+  const handleConfirmarPeriodo = useCallback(
+    (inicioIso: string, fimIso: string) => {
+      definirPeriodoPersonalizado(inicioIso, fimIso);
+      setModalPeriodoAberto(false);
+    },
+    [definirPeriodoPersonalizado]
+  );
 
   if (carregando) {
     return <ListaTransacoesSkeleton linhas={5} />;
@@ -110,7 +196,13 @@ function UltimasTransacoesBase() {
             Últimas transações
           </Text>
 
-          <Pressable className="flex-row items-center gap-1 active:opacity-60" hitSlop={10} accessibilityRole="button" accessibilityLabel="Ver todas as transações">
+          <Pressable
+            onPress={handleVerTodas}
+            className="flex-row items-center gap-1 active:opacity-60"
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel="Ver todas as transações"
+          >
             <Text style={{ fontSize: actionTextSize }} className="text-active-icon font-Inter-Medium">
               Ver todas
             </Text>
@@ -118,23 +210,38 @@ function UltimasTransacoesBase() {
           </Pressable>
         </View>
 
-        <View className="flex-row items-center justify-between flex-wrap gap-y-2">
-          <View className="flex-row flex-wrap gap-1.5 flex-1 pr-1">
-            <Pressable className="bg-input-background/50 px-2 py-1.5 rounded-lg border border-lines-divisions flex-row items-center gap-1" accessibilityRole="button" accessibilityLabel="Filtrar por banco">
-              <Text style={{ fontSize: actionTextSize }} className="text-main-text font-Inter-Regular">Todos os bancos</Text>
+        <View className="flex-row items-center justify-between gap-y-2">
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ gap: 6, flexGrow: 1 }}
+            className="flex-1 pr-1"
+          >
+            <SeletorBancoMultiplo
+              bancos={bancos}
+              bancosSelecionados={filtros.bancosSelecionados}
+              onAlternar={alternarBanco}
+              onLimpar={limparFiltroBanco}
+            />
+
+            <Pressable
+              onPress={() => setModalPeriodoAberto(true)}
+              className="bg-input-background/50 px-2 py-1.5 rounded-lg border border-lines-divisions flex-row items-center gap-1"
+              accessibilityRole="button"
+              accessibilityLabel={`Filtrar por período. ${ROTULOS_PERIODO[filtros.periodoPreset]}`}
+            >
+              <Text style={{ fontSize: chipTextSize }} className="text-main-text font-Inter-Regular">
+                {ROTULOS_PERIODO[filtros.periodoPreset]}
+              </Text>
               <Ionicons name="chevron-down" color={colors["second-text"]} size={10} />
             </Pressable>
 
-            <Pressable className="bg-input-background/50 px-2 py-1.5 rounded-lg border border-lines-divisions flex-row items-center gap-1" accessibilityRole="button" accessibilityLabel="Filtrar por período">
-              <Text style={{ fontSize: actionTextSize }} className="text-main-text font-Inter-Regular">Hoje</Text>
-              <Ionicons name="chevron-down" color={colors["second-text"]} size={10} />
-            </Pressable>
-
-            <Pressable className="bg-input-background/50 px-2 py-1.5 rounded-lg border border-lines-divisions flex-row items-center gap-1" accessibilityRole="button" accessibilityLabel="Filtrar por categoria">
-              <Text style={{ fontSize: actionTextSize }} className="text-main-text font-Inter-Regular">Categorias</Text>
-              <Ionicons name="chevron-down" color={colors["second-text"]} size={10} />
-            </Pressable>
-          </View>
+            <SeletorCategoriaMultiplo
+              categoriasSelecionadas={filtros.categoriasSelecionadas}
+              onAlternar={alternarCategoria}
+              onLimpar={limparFiltroCategoria}
+            />
+          </ScrollView>
 
           <Pressable className="p-1 active:opacity-60" hitSlop={8} accessibilityRole="button" accessibilityLabel="Pesquisar transações">
             <Ionicons name="search-outline" color={colors["second-text"]} size={18} />
@@ -146,7 +253,9 @@ function UltimasTransacoesBase() {
         <View className="items-center py-8">
           <Ionicons name="receipt-outline" color={colors["desactived-text"]} size={30} />
           <Text style={{ fontSize: emptyTitleSize }} className="text-desactived-text text-center mt-2">
-            Nenhuma transação ainda.{"\n"}Importe um extrato ou adicione manualmente.
+            {possuiFiltrosAtivos
+              ? "Nenhuma transação encontrada para os filtros atuais."
+              : "Nenhuma transação ainda.\nImporte um extrato ou adicione manualmente."}
           </Text>
         </View>
       ) : (
@@ -174,6 +283,14 @@ function UltimasTransacoesBase() {
           Adicionar transação
         </Text>
       </Pressable>
+
+      <SeletorPeriodoPersonalizado
+        visivel={modalPeriodoAberto}
+        inicioIso={filtros.periodoInicioPersonalizado}
+        fimIso={filtros.periodoFimPersonalizado}
+        onConfirmar={handleConfirmarPeriodo}
+        onFechar={() => setModalPeriodoAberto(false)}
+      />
 
       <EditarTransacaoModal
         transacao={transacaoSelecionada}
