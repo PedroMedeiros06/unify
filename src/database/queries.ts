@@ -431,6 +431,132 @@ export async function listarTransacoesFiltradas(
   });
 }
 
+/**
+ * Calcula o saldo ACUMULADO (soma de todas as entradas menos todas as
+ * saídas, desde o início dos dados) até uma data limite (inclusive),
+ * opcionalmente restrito a um conjunto de bancos. Usado para a
+ * variação percentual do card de Resumo: "saldo até hoje" vs
+ * "saldo até o mesmo dia do mês anterior".
+ *
+ * Não usa FiltrosTransacao/montarClausulaFiltros porque aqui só o
+ * filtro de banco é relevante (a data é sempre um teto "até X", não um
+ * intervalo) — evita reaproveitar uma função pensada para outro formato
+ * de filtro e criar ambiguidade sobre o que dataInicio/dataFim significam.
+ */
+export async function calcularSaldoAcumuladoAte(
+  dataLimiteIso: string,
+  bancosIds?: string[] | null
+): Promise<number> {
+  return executarNaFila(async () => {
+    const db = await getDatabase();
+
+    const condicoes = ["t.data <= ?"];
+    const params: string[] = [dataLimiteIso];
+
+    if (bancosIds && bancosIds.length > 0) {
+      condicoes.push(`t.banco_id IN (${bancosIds.map(() => "?").join(", ")})`);
+      params.push(...bancosIds);
+    }
+
+    const resultado = await db.getFirstAsync<{ saldo: number }>(
+      `SELECT
+         COALESCE(SUM(CASE WHEN t.tipo = 'entrada' THEN t.valor ELSE -t.valor END), 0) as saldo
+       FROM transacoes t
+       WHERE ${condicoes.join(" AND ")};`,
+      params
+    );
+
+    return resultado?.saldo ?? 0;
+  });
+}
+
+export type PontoSaldoDiario = { data: string; saldoAcumulado: number };
+
+/**
+ * Série de saldo acumulado dia a dia, do (hoje - diasAtras) até hoje
+ * (inclusive), opcionalmente restrita a um conjunto de bancos. Usada
+ * pelo Sparkline do card de Resumo.
+ *
+ * Implementação: uma query traz o delta líquido (entradas - saídas)
+ * agrupado por dia dentro da janela solicitada, mais UMA query extra
+ * para o saldo acumulado até o dia anterior ao início da janela (a
+ * "base" sobre a qual os deltas diários se acumulam) — não itera dia a
+ * dia no banco, só em memória sobre um array pequeno (tamanho = diasAtras).
+ */
+export async function listarSerieSaldoDiario(
+  diasAtras: number,
+  bancosIds?: string[] | null
+): Promise<PontoSaldoDiario[]> {
+  return executarNaFila(async () => {
+    const db = await getDatabase();
+
+    const hoje = new Date();
+    const dataInicioObj = new Date(hoje);
+    dataInicioObj.setDate(dataInicioObj.getDate() - (diasAtras - 1));
+
+    const paraIso = (d: Date) => {
+      const ano = d.getFullYear();
+      const mes = String(d.getMonth() + 1).padStart(2, "0");
+      const dia = String(d.getDate()).padStart(2, "0");
+      return `${ano}-${mes}-${dia}`;
+    };
+
+    const dataInicioIso = paraIso(dataInicioObj);
+    const dataFimIso = paraIso(hoje);
+
+    const dataAnteriorObj = new Date(dataInicioObj);
+    dataAnteriorObj.setDate(dataAnteriorObj.getDate() - 1);
+    const dataAnteriorIso = paraIso(dataAnteriorObj);
+
+    const bancoCondicao = bancosIds && bancosIds.length > 0
+      ? `AND t.banco_id IN (${bancosIds.map(() => "?").join(", ")})`
+      : "";
+    const bancoParams = bancosIds && bancosIds.length > 0 ? bancosIds : [];
+
+    // Saldo acumulado até o dia imediatamente anterior ao início da
+    // janela — é a "base" sobre a qual os deltas diários somam.
+    const baseResultado = await db.getFirstAsync<{ saldo: number }>(
+      `SELECT
+         COALESCE(SUM(CASE WHEN t.tipo = 'entrada' THEN t.valor ELSE -t.valor END), 0) as saldo
+       FROM transacoes t
+       WHERE t.data <= ? ${bancoCondicao};`,
+      [dataAnteriorIso, ...bancoParams]
+    );
+    const saldoBase = baseResultado?.saldo ?? 0;
+
+    // Delta líquido por dia dentro da janela — um único GROUP BY, não
+    // uma query por dia.
+    const deltasPorDia = await db.getAllAsync<{ data: string; delta: number }>(
+      `SELECT
+         t.data as data,
+         COALESCE(SUM(CASE WHEN t.tipo = 'entrada' THEN t.valor ELSE -t.valor END), 0) as delta
+       FROM transacoes t
+       WHERE t.data >= ? AND t.data <= ? ${bancoCondicao}
+       GROUP BY t.data;`,
+      [dataInicioIso, dataFimIso, ...bancoParams]
+    );
+
+    const deltaPorData = new Map(deltasPorDia.map((d) => [d.data, d.delta]));
+
+    // Preenche TODOS os dias da janela (mesmo sem transação naquele
+    // dia), acumulando a partir da base — é isso que dá uma série
+    // contínua de 30 pontos para o Sparkline, em vez de só os dias com
+    // movimentação.
+    const serie: PontoSaldoDiario[] = [];
+    let acumulado = saldoBase;
+    const cursor = new Date(dataInicioObj);
+
+    for (let i = 0; i < diasAtras; i++) {
+      const dataIso = paraIso(cursor);
+      acumulado += deltaPorData.get(dataIso) ?? 0;
+      serie.push({ data: dataIso, saldoAcumulado: acumulado });
+      cursor.setDate(cursor.getDate() + 1);
+    }
+
+    return serie;
+  });
+}
+
 export async function seedDadosIniciaisSeNecessario(): Promise<void> {
   const bancosExistentes = await listarBancos();
   if (bancosExistentes.length > 0) return;
