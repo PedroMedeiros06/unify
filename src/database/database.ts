@@ -51,7 +51,13 @@ export async function resetDatabaseForDev(): Promise<void> {
   await db.execAsync(`DROP TABLE IF EXISTS bancos;`);
   await db.execAsync(`DROP TABLE IF EXISTS metas;`);
   await db.execAsync(`DROP TABLE IF EXISTS compromissos;`);
+  // Tabela de regras aprendidas/sistema de categorização — precisa ser
+  // apagada junto no reset de dev, senão sobram regras órfãs (regras
+  // "aprendidas" para transações que não existem mais depois do reset).
   await db.execAsync(`DROP TABLE IF EXISTS regras_categorizacao;`);
+  // Perfil local também é resetado em dev, para simular "primeiro uso"
+  // consistentemente com o resto do banco.
+  await db.execAsync(`DROP TABLE IF EXISTS perfil_usuario;`);
   await db.execAsync(`PRAGMA user_version = 0;`);
 
   dbInstance = null;

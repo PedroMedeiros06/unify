@@ -170,7 +170,7 @@ function UltimasTransacoesBase() {
   }, []);
 
   const handleVerTodas = useCallback(() => {
-    navigate("todasTransacoes");
+    navigate("transations");
   }, [navigate]);
 
   const handleConfirmarPeriodo = useCallback(

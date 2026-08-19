@@ -9,8 +9,8 @@ import { MetasProvider } from "@/context/MetasContext";
 import { CompromissosProvider } from "@/context/CompromissosContext";
 
 
-export default function RootLayout() {
 
+export default function RootLayout() {
   const [LoadedFonts] = useAppFonts()
   if (!LoadedFonts) return null 
 

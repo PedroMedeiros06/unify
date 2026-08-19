@@ -557,6 +557,105 @@ export async function listarSerieSaldoDiario(
   });
 }
 
+export type PontoEvolucaoMensal = { mesAno: string; mesLabel: string; totalSaidas: number };
+
+/**
+ * Total de saídas por mês, para os últimos `quantidadeMeses` meses
+ * (incluindo o mês atual). Usado pelo gráfico EvolucaoMensal. Uma
+ * única query com GROUP BY strftime — não itera mês a mês no banco.
+ *
+ * Meses sem nenhuma transação aparecem com totalSaidas = 0 (preenchidos
+ * em memória), para o gráfico sempre ter os N pontos esperados.
+ */
+export async function listarEvolucaoMensal(quantidadeMeses: number = 6): Promise<PontoEvolucaoMensal[]> {
+  return executarNaFila(async () => {
+    const db = await getDatabase();
+
+    const hoje = new Date();
+    const dataInicioObj = new Date(hoje.getFullYear(), hoje.getMonth() - (quantidadeMeses - 1), 1);
+    const dataInicioIso = `${dataInicioObj.getFullYear()}-${String(dataInicioObj.getMonth() + 1).padStart(2, "0")}-01`;
+
+    const linhas = await db.getAllAsync<{ mesAno: string; totalSaidas: number }>(
+      `SELECT
+         strftime('%Y-%m', t.data) as mesAno,
+         COALESCE(SUM(CASE WHEN t.tipo = 'saida' THEN t.valor ELSE 0 END), 0) as totalSaidas
+       FROM transacoes t
+       WHERE t.data >= ?
+       GROUP BY mesAno;`,
+      [dataInicioIso]
+    );
+
+    const totalPorMes = new Map(linhas.map((l) => [l.mesAno, l.totalSaidas]));
+    const NOMES_MES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+
+    const resultado: PontoEvolucaoMensal[] = [];
+    for (let i = 0; i < quantidadeMeses; i++) {
+      const dataMes = new Date(dataInicioObj.getFullYear(), dataInicioObj.getMonth() + i, 1);
+      const mesAno = `${dataMes.getFullYear()}-${String(dataMes.getMonth() + 1).padStart(2, "0")}`;
+      resultado.push({
+        mesAno,
+        mesLabel: NOMES_MES[dataMes.getMonth()],
+        totalSaidas: totalPorMes.get(mesAno) ?? 0,
+      });
+    }
+
+    return resultado;
+  });
+}
+
+export type ResumoReceitasDespesas = {
+  receitasMesAtual: number;
+  receitasMesAnterior: number;
+  despesasMesAtual: number;
+  despesasMesAnterior: number;
+};
+
+/**
+ * Receitas e despesas do mês atual e do mês anterior (mês calendário
+ * completo, não "últimos 30 dias") — usado por ResumoMetrics para os
+ * cards de Receitas/Despesas/Economia com variação percentual.
+ */
+export async function calcularResumoReceitasDespesas(): Promise<ResumoReceitasDespesas> {
+  return executarNaFila(async () => {
+    const db = await getDatabase();
+
+    const hoje = new Date();
+    const inicioMesAtual = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, "0")}-01`;
+
+    const mesAnteriorData = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
+    const inicioMesAnterior = `${mesAnteriorData.getFullYear()}-${String(mesAnteriorData.getMonth() + 1).padStart(2, "0")}-01`;
+    // Fim do mês anterior = um dia antes do início do mês atual.
+    const fimMesAnterior = new Date(hoje.getFullYear(), hoje.getMonth(), 0);
+    const fimMesAnteriorIso = `${fimMesAnterior.getFullYear()}-${String(fimMesAnterior.getMonth() + 1).padStart(2, "0")}-${String(fimMesAnterior.getDate()).padStart(2, "0")}`;
+
+    const [atual, anterior] = await Promise.all([
+      db.getFirstAsync<{ entradas: number; saidas: number }>(
+        `SELECT
+           COALESCE(SUM(CASE WHEN t.tipo = 'entrada' THEN t.valor ELSE 0 END), 0) as entradas,
+           COALESCE(SUM(CASE WHEN t.tipo = 'saida' THEN t.valor ELSE 0 END), 0) as saidas
+         FROM transacoes t
+         WHERE t.data >= ?;`,
+        [inicioMesAtual]
+      ),
+      db.getFirstAsync<{ entradas: number; saidas: number }>(
+        `SELECT
+           COALESCE(SUM(CASE WHEN t.tipo = 'entrada' THEN t.valor ELSE 0 END), 0) as entradas,
+           COALESCE(SUM(CASE WHEN t.tipo = 'saida' THEN t.valor ELSE 0 END), 0) as saidas
+         FROM transacoes t
+         WHERE t.data >= ? AND t.data <= ?;`,
+        [inicioMesAnterior, fimMesAnteriorIso]
+      ),
+    ]);
+
+    return {
+      receitasMesAtual: atual?.entradas ?? 0,
+      receitasMesAnterior: anterior?.entradas ?? 0,
+      despesasMesAtual: atual?.saidas ?? 0,
+      despesasMesAnterior: anterior?.saidas ?? 0,
+    };
+  });
+}
+
 export async function seedDadosIniciaisSeNecessario(): Promise<void> {
   const bancosExistentes = await listarBancos();
   if (bancosExistentes.length > 0) return;

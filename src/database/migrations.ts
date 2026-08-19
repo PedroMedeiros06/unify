@@ -149,6 +149,25 @@ const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    versao: 6,
+    descricao: "Cria tabela perfil_usuario (cadastro local simples, single-row)",
+    async executar(db) {
+      // App é single-user local, sem login/autenticação — não há
+      // necessidade de múltiplas linhas. `id` fixo em 1 garante que só
+      // existe um registro de perfil por dispositivo (via UPSERT nas
+      // queries que escrevem aqui, nunca INSERT solto).
+      await db.execAsync(`
+        CREATE TABLE IF NOT EXISTS perfil_usuario (
+          id INTEGER PRIMARY KEY CHECK (id = 1),
+          nome TEXT NOT NULL DEFAULT '',
+          email TEXT,
+          criado_em TEXT NOT NULL DEFAULT (datetime('now')),
+          atualizado_em TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+      `);
+    },
+  },
 ];
 
 export async function rodarMigrations(db: SQLiteDatabase): Promise<void> {

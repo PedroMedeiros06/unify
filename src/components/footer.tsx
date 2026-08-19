@@ -18,9 +18,13 @@ export type ScreenName = (typeof tabs)[number]["name"];
 type FooterProps = {
   activeScreen: ScreenType;
   onChangeScreen: (screen: any) => void;
+  // Chamado especificamente quando o botão central "+" é tocado — ele
+  // não é uma tela navegável (ScreenType), então precisa de um handler
+  // próprio em vez de reusar onChangeScreen, que espera um ScreenType válido.
+  onPressAdicionar: () => void;
 };
 
-export function Footer({ activeScreen, onChangeScreen }: FooterProps) {
+export function Footer({ activeScreen, onChangeScreen, onPressAdicionar }: FooterProps) {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const isSmallDevice = width < 375;
@@ -51,12 +55,19 @@ export function Footer({ activeScreen, onChangeScreen }: FooterProps) {
               style={{ height: 40 }}
             >
               <Pressable
-                className="absolute active:scale-95 items-center justify-center"
-                style={{ 
-                  transform: [{ translateY: isSmallDevice ? -10 : -16 }],
-                  elevation: 8,
-                }}
-                onPress={() => onChangeScreen(tab.name)}
+                className="absolute items-center justify-center"
+                style={({ pressed }) => [
+                  {
+                    transform: [
+                      { translateY: isSmallDevice ? -10 : -16 },
+                      { scale: pressed ? 0.95 : 1 },
+                    ],
+                    elevation: 8,
+                  },
+                ]}
+                onPress={onPressAdicionar}
+                accessibilityRole="button"
+                accessibilityLabel="Adicionar"
               >
                 {/* 
                   Fundo Branco do Ícone:

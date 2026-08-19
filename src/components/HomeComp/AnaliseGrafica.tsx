@@ -6,8 +6,14 @@ import { View, Text, Pressable, useWindowDimensions, ActivityIndicator } from "r
 import Svg, { Circle } from "react-native-svg";
 import { memo, useEffect, useMemo, useState } from "react";
 import { EvolucaoMensal } from "@/components/HomeComp/EvolucaoMensal";
-import { ResumoMetrics } from "@/components/HomeComp/ResumoMetrics";
-import { listarResumoPorCategoria, FiltrosTransacao } from "@/database/queries";
+import { ResumoMetrics, MetricasResumo } from "@/components/HomeComp/ResumoMetrics";
+import {
+  listarResumoPorCategoria,
+  listarEvolucaoMensal,
+  calcularResumoReceitasDespesas,
+  FiltrosTransacao,
+} from "@/database/queries";
+import { obterMetaDeMaiorProgresso } from "@/database/metasQueries";
 import { obterCategoriaPorId } from "@/database/categorias";
 
 type Props = {
@@ -16,20 +22,16 @@ type Props = {
 
 type FatiaExibicao = { nome: string; cor: string; valor: number; percentual: number };
 
-const DEBUG_EVOLUCAO = [
-  { mes: "Jan", valor: 3200 },
-  { mes: "Fev", valor: 3600 },
-  { mes: "Mar", valor: 4100 },
-  { mes: "Abr", valor: 5400 },
-  { mes: "Mai", valor: 6300 },
-  { mes: "Jun", valor: 7800 },
-];
-
 const RADIUS = 42;
 const STROKE_WIDTH = 12;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 const VIEWBOX_SIZE = 100;
 const DONUT_SIZE = 120;
+
+function calcularVariacao(atual: number, anterior: number): number | null {
+  if (anterior === 0) return null;
+  return Math.round(((atual - anterior) / Math.abs(anterior)) * 100);
+}
 
 function useFatiasComOffset(fatias: FatiaExibicao[]) {
   return useMemo(() => {
@@ -55,17 +57,20 @@ function AnaliseGraficaBase({ filtrosParaQuery }: Props) {
   const actionTextSize = moderateScale(12);
   const emptyTextSize = moderateScale(12);
 
-  const [carregando, setCarregando] = useState(true);
+  const [carregandoCategoria, setCarregandoCategoria] = useState(true);
   const [fatias, setFatias] = useState<FatiaExibicao[]>([]);
   const [totalGastos, setTotalGastos] = useState(0);
 
-  const evolucao = DEBUG_EVOLUCAO; // fora do escopo desta entrega — ver nota no fim do arquivo
+  const [evolucao, setEvolucao] = useState<{ mes: string; valor: number }[]>([]);
+  const [metricas, setMetricas] = useState<MetricasResumo | null>(null);
 
+  // Donut de categoria — respeita os filtros da BarraFiltros da tela
+  // (banco/período/categoria), igual já estava.
   useEffect(() => {
     let ativo = true;
 
     async function carregar() {
-      setCarregando(true);
+      setCarregandoCategoria(true);
       try {
         const resumo = await listarResumoPorCategoria(filtrosParaQuery);
         const comSaida = resumo.filter((r) => r.totalSaidas > 0);
@@ -88,7 +93,7 @@ function AnaliseGraficaBase({ filtrosParaQuery }: Props) {
           setTotalGastos(totalGeral);
         }
       } finally {
-        if (ativo) setCarregando(false);
+        if (ativo) setCarregandoCategoria(false);
       }
     }
 
@@ -98,6 +103,53 @@ function AnaliseGraficaBase({ filtrosParaQuery }: Props) {
       ativo = false;
     };
   }, [filtrosParaQuery]);
+
+  // Evolução mensal e métricas (receitas/despesas/economia/meta) NÃO
+  // respeitam a BarraFiltros — são sempre "visão geral", igual ao Resumo
+  // consolidado do topo da Home. Filtrar isso junto misturaria duas
+  // semânticas diferentes (análise por categoria filtrada vs panorama
+  // geral do mês), o que não foi pedido.
+  useEffect(() => {
+    let ativo = true;
+
+    async function carregarPanoramaGeral() {
+      const [pontosEvolucao, receitasDespesas, metaTop] = await Promise.all([
+        listarEvolucaoMensal(6),
+        calcularResumoReceitasDespesas(),
+        obterMetaDeMaiorProgresso(),
+      ]);
+
+      if (!ativo) return;
+
+      setEvolucao(pontosEvolucao.map((p) => ({ mes: p.mesLabel, valor: p.totalSaidas })));
+
+      const economiaAtual = receitasDespesas.receitasMesAtual - receitasDespesas.despesasMesAtual;
+      const economiaAnterior = receitasDespesas.receitasMesAnterior - receitasDespesas.despesasMesAnterior;
+
+      const metaPercentual = metaTop && metaTop.valorMeta > 0
+        ? Math.min(100, Math.round((metaTop.progressoAtual / metaTop.valorMeta) * 100))
+        : 0;
+
+      setMetricas({
+        receitas: receitasDespesas.receitasMesAtual,
+        receitasVariacao: calcularVariacao(receitasDespesas.receitasMesAtual, receitasDespesas.receitasMesAnterior),
+        despesas: receitasDespesas.despesasMesAtual,
+        despesasVariacao: calcularVariacao(receitasDespesas.despesasMesAtual, receitasDespesas.despesasMesAnterior),
+        economia: economiaAtual,
+        economiaVariacao: calcularVariacao(economiaAtual, economiaAnterior),
+        metaNome: metaTop?.nome ?? null,
+        metaValor: metaTop?.valorMeta ?? 0,
+        metaProgresso: metaTop?.progressoAtual ?? 0,
+        metaPercentual,
+      });
+    }
+
+    carregarPanoramaGeral();
+
+    return () => {
+      ativo = false;
+    };
+  }, []);
 
   const fatiasComOffset = useFatiasComOffset(fatias);
   const totalFormatado = FormatToCurrency(totalGastos);
@@ -120,13 +172,13 @@ function AnaliseGraficaBase({ filtrosParaQuery }: Props) {
         </Pressable>
       </View>
 
-      {/* GASTOS POR CATEGORIA — conectado a dados reais via listarResumoPorCategoria */}
+      {/* GASTOS POR CATEGORIA */}
       <View className="mt-3 mb-4">
         <Text style={{ fontSize: sectionTitleSize }} className="text-main-text font-Inter-Medium mb-3">
           Gastos por categoria
         </Text>
 
-        {carregando ? (
+        {carregandoCategoria ? (
           <View className="items-center py-6">
             <ActivityIndicator color={colors["active-icon"]} />
           </View>
@@ -196,10 +248,7 @@ function AnaliseGraficaBase({ filtrosParaQuery }: Props) {
         )}
       </View>
 
-      {/* EVOLUÇÃO MENSAL — ainda com dados de exemplo (DEBUG_EVOLUCAO).
-          Fora do escopo desta entrega: exigiria uma nova query agregada
-          por mês (GROUP BY strftime('%Y-%m', data)), que não foi pedida
-          nesta rodada. Sinalizado para não ser confundido com dado real. */}
+      {/* EVOLUÇÃO MENSAL — dados reais via listarEvolucaoMensal */}
       <View className="mb-4 items-center">
         <View className="w-full flex-row justify-between items-center mb-3">
           <Text style={{ fontSize: sectionTitleSize }} className="text-main-text font-Inter-Medium">
@@ -209,11 +258,11 @@ function AnaliseGraficaBase({ filtrosParaQuery }: Props) {
             Últimos 6 meses
           </Text>
         </View>
-        <EvolucaoMensal data={evolucao} />
+        {evolucao.length > 0 && <EvolucaoMensal data={evolucao} />}
       </View>
 
-      {/* METRICS — idem, ainda DEBUG_METRICS internamente. Fora do escopo desta entrega. */}
-      <ResumoMetrics />
+      {/* METRICS — dados reais via calcularResumoReceitasDespesas + obterMetaDeMaiorProgresso */}
+      {metricas && <ResumoMetrics metricas={metricas} />}
     </View>
   );
 }
