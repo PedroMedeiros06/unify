@@ -6,7 +6,7 @@ import { View, Text, Pressable, Image, Modal, TextInput, Alert } from "react-nat
 import { memo, useCallback, useEffect, useState } from "react";
 import { listarResumoPorBanco, calcularResumoReceitasDespesas } from "@/database/queries";
 import { obterMetaDeMaiorProgresso } from "@/database/metasQueries";
-import { obterPerfil, salvarPerfil } from "@/database/perfilQueries";
+import { usePerfil } from "@/context/Perfilcontext";
 
 function PerfilCardBase() {
   const nameSize = moderateScale(18);
@@ -19,8 +19,10 @@ function PerfilCardBase() {
   const labelSize = moderateScale(11);
   const buttonTextSize = moderateScale(14);
 
-  const [nome, setNome] = useState("");
-  const [email, setEmail] = useState<string | null>(null);
+  // Nome/email vêm do PerfilContext (fonte única, compartilhada com a
+  // Home) — este componente não busca mais o perfil por conta própria.
+  const { perfil, atualizarPerfil } = usePerfil();
+
   const [saldoConsolidado, setSaldoConsolidado] = useState(0);
   const [gastosNoMes, setGastosNoMes] = useState(0);
   const [metaAtingida, setMetaAtingida] = useState(0);
@@ -34,15 +36,11 @@ function PerfilCardBase() {
   const carregarDados = useCallback(async () => {
     setCarregando(true);
     try {
-      const [perfil, resumoBancos, receitasDespesas, metaTop] = await Promise.all([
-        obterPerfil(),
+      const [resumoBancos, receitasDespesas, metaTop] = await Promise.all([
         listarResumoPorBanco(),
         calcularResumoReceitasDespesas(),
         obterMetaDeMaiorProgresso(),
       ]);
-
-      setNome(perfil.nome);
-      setEmail(perfil.email);
 
       const saldo = resumoBancos.reduce((acc, r) => acc + (r.totalEntradas - r.totalSaidas), 0);
       setSaldoConsolidado(saldo);
@@ -62,10 +60,10 @@ function PerfilCardBase() {
   }, [carregarDados]);
 
   const handleAbrirEdicao = useCallback(() => {
-    setNomeEdicao(nome);
-    setEmailEdicao(email ?? "");
+    setNomeEdicao(perfil.nome);
+    setEmailEdicao(perfil.email ?? "");
     setModalEdicaoAberto(true);
-  }, [nome, email]);
+  }, [perfil.nome, perfil.email]);
 
   const handleSalvarPerfil = useCallback(async () => {
     if (!nomeEdicao.trim()) {
@@ -75,19 +73,17 @@ function PerfilCardBase() {
 
     setSalvando(true);
     try {
-      await salvarPerfil({ nome: nomeEdicao.trim(), email: emailEdicao.trim() || null });
-      setNome(nomeEdicao.trim());
-      setEmail(emailEdicao.trim() || null);
+      await atualizarPerfil({ nome: nomeEdicao.trim(), email: emailEdicao.trim() || null });
       setModalEdicaoAberto(false);
     } catch {
       Alert.alert("Não foi possível salvar", "Ocorreu um erro ao salvar seu perfil. Tente novamente.");
     } finally {
       setSalvando(false);
     }
-  }, [nomeEdicao, emailEdicao]);
+  }, [nomeEdicao, emailEdicao, atualizarPerfil]);
 
-  const nomeExibido = nome || "Toque para se cadastrar";
-  const emailExibido = email ?? "Adicione um e-mail (opcional)";
+  const nomeExibido = perfil.nome || "Toque para se cadastrar";
+  const emailExibido = perfil.email ?? "Adicione um e-mail (opcional)";
 
   return (
     <View className="bg-active-icon/15 border border-active-icon/30 rounded-xl overflow-hidden">
@@ -110,7 +106,7 @@ function PerfilCardBase() {
         <View className="flex-1">
           <Text
             style={{ fontSize: nameSize }}
-            className={nome ? "text-main-text font-Inter-SemiBold mb-0.5" : "text-desactived-text font-Inter-SemiBold mb-0.5"}
+            className={perfil.nome ? "text-main-text font-Inter-SemiBold mb-0.5" : "text-desactived-text font-Inter-SemiBold mb-0.5"}
             numberOfLines={1}
           >
             {nomeExibido}

@@ -10,11 +10,17 @@ import { BarraFiltros } from "@/components/common/BarraFiltros";
 import { SeletorPeriodoPersonalizado } from "@/components/common/SeletorPeriodoPersonalizado";
 import { useFiltrosTransacao } from "@/hooks/useFiltrosTransacao";
 import { listarBancos, Banco } from "@/database/queries";
+import { usePerfil } from "@/context/Perfilcontext";
 
 export function Home() {
-  const titleSize = moderateScale(20);
+  const titleSize = moderateScale(22);
   const subtitleSize = moderateScale(12);
   const avatarSize = moderateScale(40);
+
+  // Vem do PerfilProvider (carregado uma vez no _layout.tsx) — sem
+  // refetch nem delay a cada vez que a Home remonta.
+  const { perfil } = usePerfil();
+  const nomeUsuario = perfil.nome || "Usuário";
 
   // Estado de filtros LOCAL desta tela — independente do Planejamento
   // (ver decisão de escopo em useFiltrosTransacao.ts).
@@ -60,8 +66,9 @@ export function Home() {
             <Text
               style={{ fontSize: titleSize, letterSpacing: titleSize * -0.05 }}
               className="text-main-text font-Inter-SemiBold"
+              numberOfLines={1}
             >
-              Olá Usuário
+              Olá, {nomeUsuario}
             </Text>
             <Text
               style={{
