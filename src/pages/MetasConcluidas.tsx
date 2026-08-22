@@ -5,12 +5,21 @@ import { colors } from "@/theme/colors";
 import { View, Text, Pressable } from "react-native";
 import { memo, useCallback, useMemo, useState } from "react";
 import { useMetas } from "@/context/MetasContext";
-import { useNavigation } from "@/context/NavigationContext";
 import { Meta, CamposMeta, calcularPercentualMeta, metaEstaConcluida } from "@/database/metasQueries";
 import { EditarMetaModal } from "@/components/PlanejamentoComp/EditarMetaModal";
 import { MetasSkeleton } from "@/components/common/MetasSkeleton";
 
 const MAX_METAS_EXIBIDAS = 3;
+
+type Props = {
+  // Chamado quando o usuário toca em "Ver todas" — troca a aba ativa
+  // do Planejamento para "Metas" (MinhasMetas), que é onde a lista
+  // completa de fato vive. Este componente não navega para nenhuma
+  // tela própria: ele é renderizado dentro da aba Resumo do próprio
+  // Planejamento, então mudar de aba é responsabilidade do pai, que
+  // controla `activeTab`.
+  onVerTodas: () => void;
+};
 
 const MetaItem = memo(function MetaItem({ meta, onLongPress }: { meta: Meta; onLongPress: (meta: Meta) => void }) {
   const metaTitleSize = moderateScale(13);
@@ -56,11 +65,10 @@ const MetaItem = memo(function MetaItem({ meta, onLongPress }: { meta: Meta; onL
   );
 });
 
-function MetasFinanceirasBase() {
+function MetasFinanceirasBase({ onVerTodas }: Props) {
   const cardTitleSize = moderateScale(15);
   const actionTextSize = moderateScale(12);
   const { metas, carregando, adicionarMeta, editarMeta, removerMeta } = useMetas();
-  const { navigate } = useNavigation();
 
   const [modalVisivel, setModalVisivel] = useState(false);
   const [metaEditando, setMetaEditando] = useState<Meta | null>(null);
@@ -118,6 +126,13 @@ function MetasFinanceirasBase() {
           Metas financeiras
         </Text>
         <View className="flex-row items-center gap-3">
+          {metas.length > 0 && (
+            <Pressable onPress={onVerTodas} hitSlop={8} accessibilityRole="button" accessibilityLabel="Ver todas as metas">
+              <Text style={{ fontSize: actionTextSize }} className="text-active-icon font-Inter-Medium">
+                Ver todas
+              </Text>
+            </Pressable>
+          )}
           <Pressable onPress={handleAbrirNova} hitSlop={10} accessibilityRole="button" accessibilityLabel="Adicionar meta">
             <Ionicons name="add-circle-outline" color={colors["active-icon"]} size={20} />
           </Pressable>

@@ -168,6 +168,22 @@ const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    versao: 7,
+    descricao: "Adiciona data_alvo em metas (prazo final da meta — permite plotar na Agenda e futuramente calcular quanto guardar por dia/mês)",
+    async executar(db) {
+      // Nullable: uma meta pode existir sem prazo definido — nesse caso
+      // ela simplesmente não aparece no calendário da Agenda, só na
+      // lista de Metas do Planejamento (comportamento já existente, sem
+      // mudança). Quando preenchida, representa o PRAZO FINAL da meta
+      // (não um depósito específico) em formato ISO "aaaa-mm-dd", mesma
+      // convenção do resto do app — é a base para, futuramente, calcular
+      // quanto guardar por dia/mês até essa data (valor_meta - progresso_atual
+      // dividido pelo tempo restante).
+      await db.execAsync(`ALTER TABLE metas ADD COLUMN data_alvo TEXT;`);
+      await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_metas_data_alvo ON metas (data_alvo);`);
+    },
+  },
 ];
 
 export async function rodarMigrations(db: SQLiteDatabase): Promise<void> {

@@ -1,19 +1,15 @@
 import { colors } from "@/theme/colors";
 import { moderateScale } from "@/utils/scale";
 import { Ionicons } from "@expo/vector-icons";
-import { View, Text, Pressable, TextInput, Modal, Alert } from "react-native";
+import { View, Text, Pressable, TextInput, Alert, ScrollView } from "react-native";
 import { memo, useCallback, useEffect, useState } from "react";
-import { Meta, CamposMeta } from "@/database/metasQueries";
+import { Meta, CamposMeta, calcularRitmoNecessario } from "@/database/metasQueries";
 import { IndicadorPassos } from "@/components/common/IndicadorPassos";
-
-const ICONES_DISPONIVEIS: { nome: keyof typeof Ionicons.glyphMap; cor: string }[] = [
-  { nome: "airplane-outline", cor: colors["active-icon"] },
-  { nome: "school-outline", cor: colors["sucess-color"] },
-  { nome: "laptop-outline", cor: colors["warn-color"] },
-  { nome: "home-outline", cor: "#378ADD" },
-  { nome: "car-outline", cor: "#E24B4A" },
-  { nome: "gift-outline", cor: "#EF9F27" },
-];
+import { SeletorData } from "@/components/common/SeletorData";
+import { FormatToCurrency } from "@/utils/formatNumber";
+import { dataIsoParaBR } from "@/utils/dateUtils";
+import { ICONES_META_DISPONIVEIS, obterIconeMeta } from "@/database/iconesMeta";
+import { ModalCentralizado } from "@/components/common/ModalCentralizado";
 
 type Props = {
   visivel: boolean;
@@ -34,7 +30,8 @@ function EditarMetaModalBase({ visivel, metaEditando, onFechar, onSalvar, onExcl
   const [passo, setPasso] = useState(0);
   const [nome, setNome] = useState("");
   const [valorTexto, setValorTexto] = useState("");
-  const [iconeSelecionado, setIconeSelecionado] = useState(ICONES_DISPONIVEIS[0]);
+  const [dataAlvo, setDataAlvo] = useState<string | null>(null);
+  const [iconeSelecionado, setIconeSelecionado] = useState(ICONES_META_DISPONIVEIS[0]);
   const [salvando, setSalvando] = useState(false);
   const [excluindo, setExcluindo] = useState(false);
 
@@ -46,12 +43,13 @@ function EditarMetaModalBase({ visivel, metaEditando, onFechar, onSalvar, onExcl
     if (metaEditando) {
       setNome(metaEditando.nome);
       setValorTexto(String(Math.round(metaEditando.valorMeta * 100)));
-      const icone = ICONES_DISPONIVEIS.find((i) => i.nome === metaEditando.icone) ?? ICONES_DISPONIVEIS[0];
-      setIconeSelecionado(icone);
+      setDataAlvo(metaEditando.dataAlvo);
+      setIconeSelecionado(obterIconeMeta(metaEditando.icone));
     } else {
       setNome("");
       setValorTexto("");
-      setIconeSelecionado(ICONES_DISPONIVEIS[0]);
+      setDataAlvo(null);
+      setIconeSelecionado(ICONES_META_DISPONIVEIS[0]);
     }
   }, [visivel, metaEditando]);
 
@@ -66,6 +64,22 @@ function EditarMetaModalBase({ visivel, metaEditando, onFechar, onSalvar, onExcl
 
   const passo1Valido = nome.trim().length > 0 && valorNumerico > 0;
   const ocupado = salvando || excluindo;
+
+  // Preview de ritmo necessário no passo 2 — só quando há prazo e o
+  // formulário já tem valor/progresso válidos o suficiente para calcular.
+  const ritmoPreview =
+    dataAlvo && valorNumerico > 0
+      ? calcularRitmoNecessario({
+          id: "",
+          nome,
+          valorMeta: valorNumerico,
+          progressoAtual: metaEditando?.progressoAtual ?? 0,
+          icone: iconeSelecionado.nome,
+          cor: iconeSelecionado.cor,
+          dataAlvo,
+          criadoEm: "",
+        })
+      : null;
 
   const handleProximo = useCallback(() => {
     if (!passo1Valido) return;
@@ -87,6 +101,7 @@ function EditarMetaModalBase({ visivel, metaEditando, onFechar, onSalvar, onExcl
         progressoAtual: metaEditando?.progressoAtual ?? 0,
         icone: iconeSelecionado.nome,
         cor: iconeSelecionado.cor,
+        dataAlvo,
       });
       onFechar();
     } catch {
@@ -94,7 +109,7 @@ function EditarMetaModalBase({ visivel, metaEditando, onFechar, onSalvar, onExcl
     } finally {
       setSalvando(false);
     }
-  }, [passo1Valido, salvando, nome, valorNumerico, iconeSelecionado, metaEditando, onSalvar, onFechar]);
+  }, [passo1Valido, salvando, nome, valorNumerico, iconeSelecionado, dataAlvo, metaEditando, onSalvar, onFechar]);
 
   const handleExcluir = useCallback(() => {
     if (!metaEditando || !onExcluir) return;
@@ -120,150 +135,182 @@ function EditarMetaModalBase({ visivel, metaEditando, onFechar, onSalvar, onExcl
   }, [metaEditando, onExcluir, onFechar]);
 
   return (
-    <Modal visible={visivel} transparent animationType="slide" onRequestClose={onFechar}>
-      <View className="flex-1 justify-end bg-black/50">
-        <View className="bg-card-background rounded-t-2xl p-5 pb-8">
-          <View className="flex-row justify-between items-center mb-4">
-            <Text style={{ fontSize: titleSize }} className="text-main-text font-Inter-SemiBold">
-              {metaEditando ? "Editar meta" : "Nova meta"}
+    <ModalCentralizado visivel={visivel} onFechar={onFechar} bloquearFechamentoExterno={ocupado}>
+      <View className="flex-row justify-between items-center mb-4">
+        <Text style={{ fontSize: titleSize }} className="text-main-text font-Inter-SemiBold">
+          {metaEditando ? "Editar meta" : "Nova meta"}
+        </Text>
+        <Pressable onPress={onFechar} hitSlop={10} disabled={ocupado} accessibilityRole="button" accessibilityLabel="Fechar">
+          <Ionicons name="close" color={colors["second-text"]} size={22} />
+        </Pressable>
+      </View>
+
+      <IndicadorPassos totalPassos={TOTAL_PASSOS} passoAtual={passo} />
+
+      {passo === 0 && (
+        <>
+          <Text style={{ fontSize: labelSize }} className="text-second-text mb-1.5">
+            Nome da meta
+          </Text>
+          <TextInput
+            value={nome}
+            onChangeText={setNome}
+            placeholder="Ex.: Viagem de férias"
+            placeholderTextColor={colors["desactived-text"]}
+            style={{ fontSize: inputTextSize, color: colors["main-text"] }}
+            className="bg-input-background border border-input-border rounded-xl px-3 py-3 mb-4"
+            editable={!ocupado}
+            autoFocus
+            accessibilityLabel="Nome da meta"
+          />
+
+          <Text style={{ fontSize: labelSize }} className="text-second-text mb-1.5">
+            Valor objetivo
+          </Text>
+          <TextInput
+            value={valorExibicao}
+            onChangeText={handleValorChange}
+            keyboardType="numeric"
+            style={{ fontSize: inputTextSize, color: colors["main-text"] }}
+            className="bg-input-background border border-input-border rounded-xl px-3 py-3 mb-4"
+            editable={!ocupado}
+            accessibilityLabel="Valor objetivo da meta"
+          />
+
+          <View className="mb-1">
+            <SeletorData label="Prazo final (opcional)" valorIso={dataAlvo} onChange={setDataAlvo} minimoHoje />
+          </View>
+          <Text style={{ fontSize: labelSize }} className="text-desactived-text mb-5">
+            Defina um prazo para vermos quanto guardar por mês e acompanhar na Agenda.
+          </Text>
+
+          <Pressable
+            onPress={handleProximo}
+            disabled={!passo1Valido}
+            className={`w-full py-3.5 rounded-xl items-center justify-center flex-row gap-1.5 ${passo1Valido ? "bg-active-icon active:opacity-80" : "bg-active-icon/30"}`}
+            accessibilityRole="button"
+            accessibilityLabel="Próximo"
+          >
+            <Text style={{ fontSize: buttonTextSize }} className="text-white font-Inter-SemiBold">
+              Próximo
             </Text>
-            <Pressable onPress={onFechar} hitSlop={10} disabled={ocupado} accessibilityRole="button" accessibilityLabel="Fechar">
-              <Ionicons name="close" color={colors["second-text"]} size={22} />
+            <Ionicons name="arrow-forward" color="#fff" size={16} />
+          </Pressable>
+        </>
+      )}
+
+      {passo === 1 && (
+        <>
+          <Text style={{ fontSize: labelSize }} className="text-second-text mb-2">
+            Escolha um ícone
+          </Text>
+          {/* Grid rolável com altura máxima fixa — a paleta tem 30
+              ícones, então em vez de "flex-wrap" soltar tudo e empurrar
+              o resto do card para baixo, a área de ícones tem scroll
+              próprio dentro do card já limitado a 85vh pelo shell. */}
+          <ScrollView
+            style={{ maxHeight: moderateScale(150) }}
+            className="mb-4"
+            showsVerticalScrollIndicator={false}
+            nestedScrollEnabled
+          >
+            <View className="flex-row flex-wrap gap-2">
+              {ICONES_META_DISPONIVEIS.map((icone) => {
+                const selecionado = icone.nome === iconeSelecionado.nome;
+                return (
+                  <Pressable
+                    key={icone.nome}
+                    onPress={() => setIconeSelecionado(icone)}
+                    disabled={ocupado}
+                    style={{ backgroundColor: selecionado ? `${icone.cor}30` : colors["input-background"] }}
+                    className={`w-12 h-12 rounded-2xl items-center justify-center border ${selecionado ? "border-2" : "border-input-border"}`}
+                    accessibilityRole="radio"
+                    accessibilityState={{ checked: selecionado }}
+                  >
+                    <Ionicons name={icone.nome} color={icone.cor} size={20} />
+                  </Pressable>
+                );
+              })}
+            </View>
+          </ScrollView>
+
+          <View className="bg-input-background border border-lines-divisions rounded-xl p-3 flex-row items-center gap-3 mb-4">
+            <View
+              style={{ backgroundColor: `${iconeSelecionado.cor}22` }}
+              className="w-10 h-10 rounded-full items-center justify-center"
+            >
+              <Ionicons name={iconeSelecionado.nome} color={iconeSelecionado.cor} size={18} />
+            </View>
+            <View className="flex-1">
+              <Text style={{ fontSize: inputTextSize }} className="text-main-text font-Inter-Medium" numberOfLines={1}>
+                {nome || "Nome da meta"}
+              </Text>
+              <Text style={{ fontSize: labelSize }} className="text-desactived-text">
+                {valorExibicao}
+                {dataAlvo ? ` · até ${dataIsoParaBR(dataAlvo)}` : ""}
+              </Text>
+            </View>
+          </View>
+
+          {/* Preview do ritmo necessário — só aparece quando há
+              prazo definido e ainda falta valor a guardar. */}
+          {ritmoPreview && (
+            <View className="bg-active-icon/10 border border-active-icon/30 rounded-xl p-3 mb-5">
+              <Text style={{ fontSize: labelSize }} className="text-active-icon font-Inter-Medium mb-1">
+                Para bater a meta no prazo
+              </Text>
+              <Text style={{ fontSize: inputTextSize }} className="text-main-text font-Inter-SemiBold">
+                Guarde ~{FormatToCurrency(ritmoPreview.porMes)} por mês
+              </Text>
+              <Text style={{ fontSize: labelSize }} className="text-desactived-text mt-0.5">
+                (ou ~{FormatToCurrency(ritmoPreview.porDia)} por dia)
+              </Text>
+            </View>
+          )}
+          {!dataAlvo && <View className="mb-5" />}
+
+          <View className="flex-row gap-2.5 mb-2.5">
+            <Pressable
+              onPress={handleVoltar}
+              disabled={ocupado}
+              className="flex-1 py-3.5 rounded-xl items-center justify-center border border-input-border active:opacity-70"
+              accessibilityRole="button"
+              accessibilityLabel="Voltar"
+            >
+              <Text style={{ fontSize: buttonTextSize }} className="text-second-text font-Inter-Medium">
+                Voltar
+              </Text>
+            </Pressable>
+
+            <Pressable
+              onPress={handleSalvar}
+              disabled={ocupado}
+              className="flex-1 py-3.5 rounded-xl items-center justify-center bg-active-icon active:opacity-80"
+              accessibilityRole="button"
+              accessibilityLabel="Salvar meta"
+            >
+              <Text style={{ fontSize: buttonTextSize }} className="text-white font-Inter-SemiBold">
+                {salvando ? "Salvando..." : "Salvar"}
+              </Text>
             </Pressable>
           </View>
 
-          <IndicadorPassos totalPassos={TOTAL_PASSOS} passoAtual={passo} />
-
-          {passo === 0 && (
-            <>
-              <Text style={{ fontSize: labelSize }} className="text-second-text mb-1.5">
-                Nome da meta
+          {metaEditando && onExcluir && (
+            <Pressable
+              onPress={handleExcluir}
+              disabled={ocupado}
+              className="w-full py-3 rounded-xl items-center justify-center active:opacity-70"
+              accessibilityRole="button"
+              accessibilityLabel="Excluir meta"
+            >
+              <Text style={{ fontSize: buttonTextSize }} className="text-error-color font-Inter-Medium">
+                {excluindo ? "Excluindo..." : "Excluir meta"}
               </Text>
-              <TextInput
-                value={nome}
-                onChangeText={setNome}
-                placeholder="Ex.: Viagem de férias"
-                placeholderTextColor={colors["desactived-text"]}
-                style={{ fontSize: inputTextSize, color: colors["main-text"] }}
-                className="bg-input-background border border-input-border rounded-xl px-3 py-3 mb-4"
-                editable={!ocupado}
-                autoFocus
-                accessibilityLabel="Nome da meta"
-              />
-
-              <Text style={{ fontSize: labelSize }} className="text-second-text mb-1.5">
-                Valor objetivo
-              </Text>
-              <TextInput
-                value={valorExibicao}
-                onChangeText={handleValorChange}
-                keyboardType="numeric"
-                style={{ fontSize: inputTextSize, color: colors["main-text"] }}
-                className="bg-input-background border border-input-border rounded-xl px-3 py-3 mb-6"
-                editable={!ocupado}
-                accessibilityLabel="Valor objetivo da meta"
-              />
-
-              <Pressable
-                onPress={handleProximo}
-                disabled={!passo1Valido}
-                className={`w-full py-3.5 rounded-xl items-center justify-center flex-row gap-1.5 ${passo1Valido ? "bg-active-icon active:opacity-80" : "bg-active-icon/30"}`}
-                accessibilityRole="button"
-                accessibilityLabel="Próximo"
-              >
-                <Text style={{ fontSize: buttonTextSize }} className="text-white font-Inter-SemiBold">
-                  Próximo
-                </Text>
-                <Ionicons name="arrow-forward" color="#fff" size={16} />
-              </Pressable>
-            </>
+            </Pressable>
           )}
-
-          {passo === 1 && (
-            <>
-              <Text style={{ fontSize: labelSize }} className="text-second-text mb-2">
-                Escolha um ícone
-              </Text>
-              <View className="flex-row flex-wrap gap-2 mb-6">
-                {ICONES_DISPONIVEIS.map((icone) => {
-                  const selecionado = icone.nome === iconeSelecionado.nome;
-                  return (
-                    <Pressable
-                      key={icone.nome}
-                      onPress={() => setIconeSelecionado(icone)}
-                      disabled={ocupado}
-                      style={{ backgroundColor: selecionado ? `${icone.cor}30` : colors["input-background"] }}
-                      className={`w-14 h-14 rounded-2xl items-center justify-center border ${selecionado ? "border-2" : "border-input-border"}`}
-                      accessibilityRole="radio"
-                      accessibilityState={{ checked: selecionado }}
-                    >
-                      <Ionicons name={icone.nome} color={icone.cor} size={22} />
-                    </Pressable>
-                  );
-                })}
-              </View>
-
-              <View className="bg-input-background border border-lines-divisions rounded-xl p-3 flex-row items-center gap-3 mb-6">
-                <View
-                  style={{ backgroundColor: `${iconeSelecionado.cor}22` }}
-                  className="w-10 h-10 rounded-full items-center justify-center"
-                >
-                  <Ionicons name={iconeSelecionado.nome} color={iconeSelecionado.cor} size={18} />
-                </View>
-                <View className="flex-1">
-                  <Text style={{ fontSize: inputTextSize }} className="text-main-text font-Inter-Medium" numberOfLines={1}>
-                    {nome || "Nome da meta"}
-                  </Text>
-                  <Text style={{ fontSize: labelSize }} className="text-desactived-text">
-                    {valorExibicao}
-                  </Text>
-                </View>
-              </View>
-
-              <View className="flex-row gap-2.5 mb-2.5">
-                <Pressable
-                  onPress={handleVoltar}
-                  disabled={ocupado}
-                  className="flex-1 py-3.5 rounded-xl items-center justify-center border border-input-border active:opacity-70"
-                  accessibilityRole="button"
-                  accessibilityLabel="Voltar"
-                >
-                  <Text style={{ fontSize: buttonTextSize }} className="text-second-text font-Inter-Medium">
-                    Voltar
-                  </Text>
-                </Pressable>
-
-                <Pressable
-                  onPress={handleSalvar}
-                  disabled={ocupado}
-                  className="flex-1 py-3.5 rounded-xl items-center justify-center bg-active-icon active:opacity-80"
-                  accessibilityRole="button"
-                  accessibilityLabel="Salvar meta"
-                >
-                  <Text style={{ fontSize: buttonTextSize }} className="text-white font-Inter-SemiBold">
-                    {salvando ? "Salvando..." : "Salvar"}
-                  </Text>
-                </Pressable>
-              </View>
-
-              {metaEditando && onExcluir && (
-                <Pressable
-                  onPress={handleExcluir}
-                  disabled={ocupado}
-                  className="w-full py-3 rounded-xl items-center justify-center active:opacity-70"
-                  accessibilityRole="button"
-                  accessibilityLabel="Excluir meta"
-                >
-                  <Text style={{ fontSize: buttonTextSize }} className="text-error-color font-Inter-Medium">
-                    {excluindo ? "Excluindo..." : "Excluir meta"}
-                  </Text>
-                </Pressable>
-              )}
-            </>
-          )}
-        </View>
-      </View>
-    </Modal>
+        </>
+      )}
+    </ModalCentralizado>
   );
 }
 

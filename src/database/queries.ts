@@ -611,21 +611,34 @@ export type ResumoReceitasDespesas = {
 };
 
 /**
- * Receitas e despesas do mês atual e do mês anterior (mês calendário
- * completo, não "últimos 30 dias") — usado por ResumoMetrics para os
- * cards de Receitas/Despesas/Economia com variação percentual.
+ * Receitas e despesas de um mês-alvo e do mês imediatamente anterior a
+ * ele (mês calendário completo, não "últimos 30 dias"). Por padrão
+ * (sem argumentos) usa o mês/ano atuais — é assim que ResumoMetrics e
+ * AnaliseGrafica continuam funcionando sem mudança nenhuma.
+ *
+ * `anoAlvo`/`mesAlvo` (mesAlvo em 1-12, formato "humano") permitem
+ * pedir o resumo de qualquer mês específico — usado por VisaoGeralMes
+ * quando o usuário navega para outro mês no seletor.
  */
-export async function calcularResumoReceitasDespesas(): Promise<ResumoReceitasDespesas> {
+export async function calcularResumoReceitasDespesas(
+  anoAlvo?: number,
+  mesAlvo?: number
+): Promise<ResumoReceitasDespesas> {
   return executarNaFila(async () => {
     const db = await getDatabase();
 
     const hoje = new Date();
-    const inicioMesAtual = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, "0")}-01`;
+    const ano = anoAlvo ?? hoje.getFullYear();
+    const mes = mesAlvo ?? hoje.getMonth() + 1; // 1-12
 
-    const mesAnteriorData = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
+    const inicioMesAtual = `${ano}-${String(mes).padStart(2, "0")}-01`;
+    // Fim do mês alvo = último dia real do mês (dia 0 do mês seguinte).
+    const fimMesAtualObj = new Date(ano, mes, 0);
+    const fimMesAtualIso = `${fimMesAtualObj.getFullYear()}-${String(fimMesAtualObj.getMonth() + 1).padStart(2, "0")}-${String(fimMesAtualObj.getDate()).padStart(2, "0")}`;
+
+    const mesAnteriorData = new Date(ano, mes - 2, 1); // mes é 1-12, então mes-2 é o mês anterior em índice 0-11
     const inicioMesAnterior = `${mesAnteriorData.getFullYear()}-${String(mesAnteriorData.getMonth() + 1).padStart(2, "0")}-01`;
-    // Fim do mês anterior = um dia antes do início do mês atual.
-    const fimMesAnterior = new Date(hoje.getFullYear(), hoje.getMonth(), 0);
+    const fimMesAnterior = new Date(mesAnteriorData.getFullYear(), mesAnteriorData.getMonth() + 1, 0);
     const fimMesAnteriorIso = `${fimMesAnterior.getFullYear()}-${String(fimMesAnterior.getMonth() + 1).padStart(2, "0")}-${String(fimMesAnterior.getDate()).padStart(2, "0")}`;
 
     const [atual, anterior] = await Promise.all([
@@ -634,8 +647,8 @@ export async function calcularResumoReceitasDespesas(): Promise<ResumoReceitasDe
            COALESCE(SUM(CASE WHEN t.tipo = 'entrada' THEN t.valor ELSE 0 END), 0) as entradas,
            COALESCE(SUM(CASE WHEN t.tipo = 'saida' THEN t.valor ELSE 0 END), 0) as saidas
          FROM transacoes t
-         WHERE t.data >= ?;`,
-        [inicioMesAtual]
+         WHERE t.data >= ? AND t.data <= ?;`,
+        [inicioMesAtual, fimMesAtualIso]
       ),
       db.getFirstAsync<{ entradas: number; saidas: number }>(
         `SELECT

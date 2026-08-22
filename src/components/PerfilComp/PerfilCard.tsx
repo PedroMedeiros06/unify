@@ -6,7 +6,7 @@ import { View, Text, Pressable, Image, Modal, TextInput, Alert } from "react-nat
 import { memo, useCallback, useEffect, useState } from "react";
 import { listarResumoPorBanco, calcularResumoReceitasDespesas } from "@/database/queries";
 import { obterMetaDeMaiorProgresso } from "@/database/metasQueries";
-import { usePerfil } from "@/context/Perfilcontext";
+import { usePerfil } from "@/context/PerfilContext";
 
 function PerfilCardBase() {
   const nameSize = moderateScale(18);

@@ -84,3 +84,30 @@ export async function excluirCompromisso(id: string): Promise<void> {
     await db.runAsync(`DELETE FROM compromissos WHERE id = ?;`, [id]);
   });
 }
+
+/**
+ * Soma o valor dos compromissos AINDA NÃO PAGOS com vencimento dentro
+ * do intervalo [inicioIso, fimIso] (ambos inclusive) — usado por
+ * VisaoGeralMes para projetar o saldo do mês (receitas - despesas já
+ * lançadas - compromissos que ainda vão impactar o saldo, mas ainda
+ * não viraram transação). Compromissos já pagos não entram aqui
+ * porque, uma vez pagos, o impacto no saldo já deveria estar refletido
+ * como transação real — este app não gera uma transação automática ao
+ * marcar como pago, então essa soma é só uma estimativa de "quanto
+ * ainda falta sair" no mês, não uma reconciliação exata.
+ */
+export async function somarCompromissosNaoPagosNoPeriodo(
+  inicioIso: string,
+  fimIso: string
+): Promise<number> {
+  return executarNaFila(async () => {
+    const db = await getDatabase();
+    const resultado = await db.getFirstAsync<{ total: number }>(
+      `SELECT COALESCE(SUM(valor), 0) as total
+       FROM compromissos
+       WHERE pago = 0 AND data_vencimento >= ? AND data_vencimento <= ?;`,
+      [inicioIso, fimIso]
+    );
+    return resultado?.total ?? 0;
+  });
+}

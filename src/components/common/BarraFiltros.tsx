@@ -1,21 +1,12 @@
-import { colors } from "@/theme/colors";
 import { moderateScale } from "@/utils/scale";
-import { Ionicons } from "@expo/vector-icons";
-import { View, Text, Pressable, ScrollView } from "react-native";
+import { View, Text, Pressable } from "react-native";
 import { memo } from "react";
 import { Banco } from "@/database/queries";
 import { CategoriaId } from "@/database/categorias";
 import { EstadoFiltros, PeriodoPreset } from "@/hooks/useFiltrosTransacao";
 import { SeletorBancoMultiplo } from "@/components/common/SeletorBancoMultiplo";
 import { SeletorCategoriaMultiplo } from "@/components/common/SeletorCategoriaMultiplo";
-
-const PERIODOS: { valor: PeriodoPreset; rotulo: string }[] = [
-  { valor: "tudo", rotulo: "Tudo" },
-  { valor: "hoje", rotulo: "Hoje" },
-  { valor: "7dias", rotulo: "7 dias" },
-  { valor: "esteMes", rotulo: "Este mês" },
-  { valor: "personalizado", rotulo: "Personalizado" },
-];
+import { DropdownPeriodo } from "@/components/common/DropdownPeriodo";
 
 type Props = {
   bancos: Banco[];
@@ -43,8 +34,12 @@ function BarraFiltrosBase({
   onLimparTodos,
 }: Props) {
   const titleSize = moderateScale(13);
-  const chipTextSize = moderateScale(12);
   const limparTextSize = moderateScale(11);
+
+  const rotuloPersonalizado =
+    filtros.periodoPreset === "personalizado" && filtros.periodoInicioPersonalizado && filtros.periodoFimPersonalizado
+      ? `${filtros.periodoInicioPersonalizado.split("-").reverse().join("/")} - ${filtros.periodoFimPersonalizado.split("-").reverse().join("/")}`
+      : null;
 
   return (
     <View className="bg-card-background border border-lines-divisions rounded-xl p-3">
@@ -61,7 +56,7 @@ function BarraFiltrosBase({
         )}
       </View>
 
-      <View className="flex-row items-center gap-1.5 mb-2.5">
+      <View className="flex-row items-center gap-1.5 flex-wrap">
         <SeletorBancoMultiplo
           bancos={bancos}
           bancosSelecionados={filtros.bancosSelecionados}
@@ -73,39 +68,13 @@ function BarraFiltrosBase({
           onAlternar={onAlternarCategoria}
           onLimpar={onLimparCategoria}
         />
+        <DropdownPeriodo
+          periodoAtivo={filtros.periodoPreset}
+          rotuloPersonalizado={rotuloPersonalizado}
+          onSelecionarPreset={onDefinirPeriodoPreset}
+          onAbrirPersonalizado={onAbrirPeriodoPersonalizado}
+        />
       </View>
-
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
-        {PERIODOS.map((periodo) => {
-          const ativo = filtros.periodoPreset === periodo.valor;
-          return (
-            <Pressable
-              key={periodo.valor}
-              onPress={() =>
-                periodo.valor === "personalizado" ? onAbrirPeriodoPersonalizado() : onDefinirPeriodoPreset(periodo.valor)
-              }
-              className={`px-3 py-1.5 rounded-full border flex-row items-center gap-1 ${
-                ativo ? "bg-active-icon border-active-icon" : "bg-input-background/50 border-lines-divisions"
-              }`}
-              accessibilityRole="button"
-              accessibilityState={{ selected: ativo }}
-              accessibilityLabel={`Período: ${periodo.rotulo}`}
-            >
-              {periodo.valor === "personalizado" && (
-                <Ionicons name="calendar-outline" color={ativo ? "#fff" : colors["second-text"]} size={11} />
-              )}
-              <Text
-                style={{ fontSize: chipTextSize }}
-                className={ativo ? "text-white font-Inter-Medium" : "text-second-text font-Inter-Regular"}
-              >
-                {periodo.valor === "personalizado" && ativo && filtros.periodoInicioPersonalizado && filtros.periodoFimPersonalizado
-                  ? `${filtros.periodoInicioPersonalizado.split("-").reverse().join("/")} - ${filtros.periodoFimPersonalizado.split("-").reverse().join("/")}`
-                  : periodo.rotulo}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
     </View>
   );
 }

@@ -9,8 +9,9 @@ import { EditarTransacaoModal } from "@/components/TransacoesComp/EditarTransaca
 import { ListaTransacoesSkeleton } from "@/components/common/ListaTransacoesSkeleton";
 import { SeletorBancoMultiplo } from "@/components/common/SeletorBancoMultiplo";
 import { SeletorCategoriaMultiplo } from "@/components/common/SeletorCategoriaMultiplo";
+import { DropdownPeriodo } from "@/components/common/DropdownPeriodo";
 import { SeletorPeriodoPersonalizado } from "@/components/common/SeletorPeriodoPersonalizado";
-import { useFiltrosTransacao, PeriodoPreset } from "@/hooks/useFiltrosTransacao";
+import { useFiltrosTransacao } from "@/hooks/useFiltrosTransacao";
 import { useNavigation } from "@/context/NavigationContext";
 import { listarBancos, listarTransacoesFiltradas, Banco, TransacaoComBanco } from "@/database/queries";
 import { dataIsoParaBR } from "@/utils/dateUtils";
@@ -30,14 +31,6 @@ function mapearParaTransacaoUI(t: TransacaoComBanco): Transacao {
     categoriaId: t.categoriaId,
   };
 }
-
-const ROTULOS_PERIODO: Record<PeriodoPreset, string> = {
-  tudo: "Hoje",
-  hoje: "Hoje",
-  "7dias": "7 dias",
-  esteMes: "Este mês",
-  personalizado: "Personalizado",
-};
 
 const TransacaoItem = memo(function TransacaoItem({
   item,
@@ -112,7 +105,6 @@ function UltimasTransacoesBase() {
   const actionTextSize = moderateScale(12);
   const itemTitleSize = moderateScale(14);
   const emptyTitleSize = moderateScale(13);
-  const chipTextSize = moderateScale(12);
 
   const { transacoes: transacoesDoContext, carregando: carregandoContext, editarTransacao, removerTransacao } = useTransacoes();
   const { navigate } = useNavigation();
@@ -123,6 +115,7 @@ function UltimasTransacoesBase() {
     limparFiltroBanco,
     alternarCategoria,
     limparFiltroCategoria,
+    definirPeriodoPreset,
     definirPeriodoPersonalizado,
     possuiFiltrosAtivos,
     filtrosParaQuery,
@@ -181,6 +174,11 @@ function UltimasTransacoesBase() {
     [definirPeriodoPersonalizado]
   );
 
+  const rotuloPersonalizado =
+    filtros.periodoPreset === "personalizado" && filtros.periodoInicioPersonalizado && filtros.periodoFimPersonalizado
+      ? `${filtros.periodoInicioPersonalizado.split("-").reverse().join("/")} - ${filtros.periodoFimPersonalizado.split("-").reverse().join("/")}`
+      : null;
+
   if (carregando) {
     return <ListaTransacoesSkeleton linhas={5} />;
   }
@@ -224,17 +222,12 @@ function UltimasTransacoesBase() {
               onLimpar={limparFiltroBanco}
             />
 
-            <Pressable
-              onPress={() => setModalPeriodoAberto(true)}
-              className="bg-input-background/50 px-2 py-1.5 rounded-lg border border-lines-divisions flex-row items-center gap-1"
-              accessibilityRole="button"
-              accessibilityLabel={`Filtrar por período. ${ROTULOS_PERIODO[filtros.periodoPreset]}`}
-            >
-              <Text style={{ fontSize: chipTextSize }} className="text-main-text font-Inter-Regular">
-                {ROTULOS_PERIODO[filtros.periodoPreset]}
-              </Text>
-              <Ionicons name="chevron-down" color={colors["second-text"]} size={10} />
-            </Pressable>
+            <DropdownPeriodo
+              periodoAtivo={filtros.periodoPreset}
+              rotuloPersonalizado={rotuloPersonalizado}
+              onSelecionarPreset={definirPeriodoPreset}
+              onAbrirPersonalizado={() => setModalPeriodoAberto(true)}
+            />
 
             <SeletorCategoriaMultiplo
               categoriasSelecionadas={filtros.categoriasSelecionadas}

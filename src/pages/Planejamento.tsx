@@ -8,11 +8,13 @@ import { PlanejamentoTabs, PlanejamentoTab } from "@/components/PlanejamentoComp
 import { VisaoGeralMes } from "@/components/PlanejamentoComp/VisaoGeralMes";
 import { DistribuicaoOrcamento } from "@/components/PlanejamentoComp/DistribuicaoOrcamento";
 import { MetasFinanceiras } from "@/components/PlanejamentoComp/MetasFinanceiras";
+import { MinhasMetas } from "@/components/PlanejamentoComp/MinhasMetas";
 import { OrcamentoMensal } from "@/components/PlanejamentoComp/OrcamentoMensal";
 import { ProximosCompromissos } from "@/components/PlanejamentoComp/ProximosCompromissos";
 import { BarraFiltros } from "@/components/common/BarraFiltros";
 import { SeletorPeriodoPersonalizado } from "@/components/common/SeletorPeriodoPersonalizado";
 import { useFiltrosTransacao } from "@/hooks/useFiltrosTransacao";
+import { useNavigation } from "@/context/NavigationContext";
 import { listarBancos, Banco } from "@/database/queries";
 
 export function Planejamento() {
@@ -20,6 +22,8 @@ export function Planejamento() {
 
   const titleSize = moderateScale(22);
   const subtitleSize = moderateScale(12);
+
+  const { navigate } = useNavigation();
 
   // Estado de filtros LOCAL desta tela — independente do estado de
   // filtros da Home (cada tela tem sua própria instância, por decisão
@@ -56,6 +60,14 @@ export function Planejamento() {
     [definirPeriodoPersonalizado]
   );
 
+  // Navega para a Agenda — página separada do Planejamento, com
+  // calendário mensal de compromissos/metas. Não é uma aba do
+  // PlanejamentoTabs de propósito: é uma tela própria, acessada só
+  // pelo botão do header.
+  const handleAbrirAgenda = useCallback(() => {
+    navigate("agenda");
+  }, [navigate]);
+
   return (
     <ScrollView
       className="flex-1"
@@ -80,9 +92,10 @@ export function Planejamento() {
           </View>
 
           <Pressable
+            onPress={handleAbrirAgenda}
             className="w-9 h-9 rounded-lg bg-input-background border border-input-border items-center justify-center flex-shrink-0"
             accessibilityRole="button"
-            accessibilityLabel="Abrir calendário financeiro"
+            accessibilityLabel="Abrir agenda"
           >
             <Ionicons name="calendar-outline" color={colors["active-icon"]} size={16} />
           </Pressable>
@@ -114,7 +127,9 @@ export function Planejamento() {
           </View>
         )}
 
-        {activeTab !== "Resumo" && (
+        {activeTab === "Metas" && <MinhasMetas />}
+
+        {activeTab !== "Resumo" && activeTab !== "Metas" && (
           <View className="items-center justify-center py-16">
             <Text className="text-desactived-text">Em breve: {activeTab}</Text>
           </View>

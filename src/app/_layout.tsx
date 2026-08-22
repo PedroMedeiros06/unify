@@ -7,7 +7,7 @@ import { TransacoesProvider } from "@/context/TransacoesContext";
 import { NavigationProvider } from "@/context/NavigationContext";
 import { MetasProvider } from "@/context/MetasContext";
 import { CompromissosProvider } from "@/context/CompromissosContext";
-import { PerfilProvider } from "@/context/Perfilcontext";
+import { PerfilProvider } from "@/context/PerfilContext";
 
 
 

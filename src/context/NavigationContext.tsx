@@ -8,7 +8,9 @@ export type ScreenType =
   | "transations"
   | "planejamento"
   | "user"
-  | "importarExtrato";
+  | "importarExtrato"
+  | "agenda"
+  | "metasConcluidas";
 
 type NavigationContextValue = {
   activeScreen: ScreenType;

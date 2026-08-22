@@ -10,7 +10,7 @@ import { BarraFiltros } from "@/components/common/BarraFiltros";
 import { SeletorPeriodoPersonalizado } from "@/components/common/SeletorPeriodoPersonalizado";
 import { useFiltrosTransacao } from "@/hooks/useFiltrosTransacao";
 import { listarBancos, Banco } from "@/database/queries";
-import { usePerfil } from "@/context/Perfilcontext";
+import { usePerfil } from "@/context/PerfilContext";
 
 export function Home() {
   const titleSize = moderateScale(22);

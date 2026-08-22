@@ -9,6 +9,8 @@ import { Transferencias } from "../pages/Transferencias";
 import { Planejamento } from "../pages/Planejamento";
 import { Perfil } from "../pages/Perfil";
 import { ImportarExtrato } from "../pages/ImportarExtrato";
+import { Agenda } from "../pages/Agenda";
+import { MetasConcluidas } from "../pages/MetasConcluidas";
 import { useNavigation } from "@/context/NavigationContext";
 import { MenuAcaoRapida, Acao } from "@/components/common/MenuAcaoRapida";
 import { NovaTransacaoModal } from "@/components/TransacoesComp/NovaTransacaoModal";
@@ -19,6 +21,8 @@ const Screens = {
   planejamento: Planejamento,
   user: Perfil,
   importarExtrato: ImportarExtrato,
+  agenda: Agenda,
+  metasConcluidas: MetasConcluidas,
 };
 
 export default function AppIndex() {
@@ -34,8 +38,10 @@ export default function AppIndex() {
   // escondem a barra inferior, para não sugerir que dá pra trocar de
   // aba no meio do fluxo. "transations" agora é a lista completa de
   // transações (antiga TodasTransacoes), mas continua sendo uma aba
-  // normal do footer — mantém o footer visível.
-  const TELAS_SEM_FOOTER: (keyof typeof Screens)[] = ["importarExtrato"];
+  // normal do footer — mantém o footer visível. "agenda" e
+  // "metasConcluidas" seguem o mesmo padrão de "importarExtrato": são
+  // acessadas a partir de outra tela (botão/link), não são abas próprias.
+  const TELAS_SEM_FOOTER: (keyof typeof Screens)[] = ["importarExtrato", "agenda", "metasConcluidas"];
   const mostrarFooter = !TELAS_SEM_FOOTER.includes(activeScreen);
 
   const handlePressAdicionar = useCallback(() => {
