@@ -11,6 +11,7 @@ import { dataIsoParaBR, dataBRParaIso } from "@/utils/dateUtils";
 import { CategoriaId, obterCategoriaPorId } from "@/database/categorias";
 import { normalizarPadraoDescricao } from "@/database/categorizacao";
 import { salvarRegraCategorizacao } from "@/database/regrasAprendidasQueries";
+import { obterVinculoDaTransacao, ajustarVinculoAposEdicaoDeValor } from "@/database/metaTransacoesQueries";
 
 export type Transacao = {
   id: string;
@@ -44,6 +45,20 @@ export type CamposEditaveis = {
   categoriaId: CategoriaId | null;
 };
 
+/**
+ * Resultado de checar, ANTES de persistir uma edição, se ela afeta um
+ * vínculo com meta existente. `mudaSinal` é o único caso que exige
+ * decisão do usuário (ver EditarTransacaoModal) — os outros casos
+ * (valor menor com mesmo sinal, ou sem vínculo algum) são resolvidos
+ * automaticamente por ajustarVinculoAposEdicaoDeValor, sem precisar de
+ * confirmação.
+ */
+export type ImpactoNoVinculo = {
+  temVinculo: boolean;
+  metaNome: string | null;
+  mudaSinal: boolean;
+};
+
 type TransacoesContextValue = {
   transacoes: Transacao[];
   carregando: boolean;
@@ -52,6 +67,11 @@ type TransacoesContextValue = {
   editarTransacao: (id: string, campos: CamposEditaveis) => Promise<void>;
   removerTransacao: (id: string) => Promise<void>;
   recarregar: () => Promise<void>;
+  // Deve ser chamada pela UI (EditarTransacaoModal) ANTES de chamar
+  // editarTransacao, quando a transação tem um vínculo com meta — para
+  // saber se precisa mostrar uma confirmação de "isso vai afetar o
+  // vínculo" quando o tipo (entrada/saída) está mudando.
+  verificarImpactoNoVinculo: (id: string, novoTipo: "entrada" | "saida") => Promise<ImpactoNoVinculo>;
 };
 
 const TransacoesContext = createContext<TransacoesContextValue | null>(null);
@@ -182,6 +202,28 @@ export function TransacoesProvider({ children }: { children: ReactNode }) {
     []
   );
 
+  // Consultada pela UI antes de confirmar uma edição — não altera nada,
+  // só informa se a transação tem vínculo e se a mudança de tipo
+  // pedida representaria uma troca de sinal (positivo↔negativo) do
+  // valor vinculado, caso em que EditarTransacaoModal precisa pedir
+  // confirmação explícita ao usuário antes de prosseguir.
+  const verificarImpactoNoVinculo = useCallback(
+    async (id: string, novoTipo: "entrada" | "saida"): Promise<ImpactoNoVinculo> => {
+      const vinculo = await obterVinculoDaTransacao(id);
+      if (!vinculo) {
+        return { temVinculo: false, metaNome: null, mudaSinal: false };
+      }
+
+      const sinalVinculoAtual = vinculo.valorVinculado >= 0 ? "entrada" : "saida";
+      return {
+        temVinculo: true,
+        metaNome: vinculo.metaNome,
+        mudaSinal: sinalVinculoAtual !== novoTipo,
+      };
+    },
+    []
+  );
+
   const editarTransacao = useCallback(async (id: string, campos: CamposEditaveis) => {
     const dataIso = normalizarParaIso(campos.data);
     const categoriaResolvida = obterCategoriaPorId(campos.categoriaId ?? undefined);
@@ -196,6 +238,16 @@ export function TransacoesProvider({ children }: { children: ReactNode }) {
         categoriaIcone: campos.categoriaIcone ?? categoriaResolvida?.icone ?? null,
         categoriaId: campos.categoriaId ?? null,
       });
+
+      // Regra de edição de transação vinculada (ver metaTransacoesQueries.ts):
+      // - EditarTransacaoModal já deve ter tratado o caso de MUDANÇA DE
+      //   SINAL antes de chegar aqui (via verificarImpactoNoVinculo +
+      //   confirmação do usuário, possivelmente removendo o vínculo
+      //   com desvincularTodosDaTransacao antes de chamar editarTransacao);
+      // - o que falta resolver aqui é o clamp automático para o caso de
+      //   MESMO SINAL com valor menor — que não exige confirmação e é
+      //   sempre seguro aplicar.
+      await ajustarVinculoAposEdicaoDeValor(id, campos.valor);
 
       setTransacoes((prev) => {
         const transacaoAnterior = prev.find((t) => t.id === id);
@@ -232,6 +284,11 @@ export function TransacoesProvider({ children }: { children: ReactNode }) {
 
   const removerTransacao = useCallback(async (id: string) => {
     try {
+      // Não precisa chamar desvincularTodosDaTransacao explicitamente
+      // aqui — ON DELETE CASCADE em meta_transacoes.transacao_id (ver
+      // migrations.ts, migration 8) remove o vínculo automaticamente
+      // no nível do banco quando a transação é excluída, desde que
+      // PRAGMA foreign_keys esteja ativo (ver database.ts).
       await excluirTransacao(id);
       setTransacoes((prev) => prev.filter((t) => t.id !== id));
     } catch (e) {
@@ -250,8 +307,9 @@ export function TransacoesProvider({ children }: { children: ReactNode }) {
       editarTransacao,
       removerTransacao,
       recarregar: carregarDoBanco,
+      verificarImpactoNoVinculo,
     }),
-    [transacoes, carregando, erro, adicionarTransacao, editarTransacao, removerTransacao, carregarDoBanco]
+    [transacoes, carregando, erro, adicionarTransacao, editarTransacao, removerTransacao, carregarDoBanco, verificarImpactoNoVinculo]
   );
 
   return (

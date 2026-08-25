@@ -5,6 +5,7 @@ import { importarCsv, obterParserPorId, PARSERS_DISPONIVEIS } from "@/database/p
 import { marcarPossiveisDuplicatas, TransacaoComStatusDuplicata } from "@/database/deduplicacao";
 import { categorizarLote, normalizarPadraoDescricao } from "@/database/categorizacao";
 import { salvarRegraCategorizacao } from "@/database/regrasAprendidasQueries";
+import { pareceMovimentacaoParaMeta } from "@/database/deteccaoMovimentacoesMeta";
 import { CategoriaId, obterCategoriaPorId } from "@/database/categorias";
 import { useTransacoes } from "@/context/TransacoesContext";
 import { dataIsoParaBR } from "@/utils/dateUtils";
@@ -12,8 +13,15 @@ import { dataIsoParaBR } from "@/utils/dateUtils";
 // Uma transação categorizada automaticamente carrega junto o id da
 // categoria resolvida (ou null, se ficou sem categoria) — o preview
 // usa isso para exibir e para contar quantas ficaram pendentes.
+//
+// `possivelMovimentacaoMeta` é PURAMENTE INFORMATIVO (ver
+// deteccaoMovimentacoesMeta.ts): sinaliza no preview que a transação
+// pode ser relevante para uma meta, mas NUNCA cria vínculo nenhum.
+// confirmarImportacao() abaixo nunca lê este campo — ele existe só
+// para a UI (PreviewImportacao.tsx) desenhar a seção/badge.
 export type TransacaoComCategoria = TransacaoComStatusDuplicata & {
   categoriaId: CategoriaId | null;
+  possivelMovimentacaoMeta: boolean;
 };
 
 export type EstadoImportacao =
@@ -71,15 +79,22 @@ export function useImportacaoCsv() {
       // de linhas.
       const categorias = await categorizarLote(transacoesComStatus.map((t) => t.descricao));
 
+      // Detecção de possíveis movimentações para metas roda em memória,
+      // sobre o texto da descrição — não acessa banco, não sabe quais
+      // metas existem, não decide vínculo nenhum (ver
+      // deteccaoMovimentacoesMeta.ts). Completamente independente da
+      // categorização acima, mesmo rodando no mesmo laço.
       const transacoesComCategoria: TransacaoComCategoria[] = transacoesComStatus.map((t) => ({
         ...t,
         categoriaId: categorias.get(t.descricao)?.categoriaId ?? null,
+        possivelMovimentacaoMeta: pareceMovimentacaoParaMeta(t.descricao),
       }));
 
       // Por padrão: transações marcadas como possível duplicata começam
       // DESMARCADAS (excluídas da importação) — o usuário precisa incluir
       // manualmente se quiser importar mesmo assim. Todas as outras
-      // começam marcadas para importar.
+      // começam marcadas para importar. Possíveis movimentações para
+      // metas NÃO afetam essa seleção — são só uma sinalização visual.
       const transacoesExcluidas = new Set<number>(
         transacoesComCategoria.reduce<number[]>((acc, t, index) => {
           if (t.possivelDuplicata) acc.push(index);
@@ -229,6 +244,11 @@ export function useImportacaoCsv() {
     try {
       let totalSemCategoria = 0;
 
+      // IMPORTANTE: `possivelMovimentacaoMeta` de cada transação NUNCA
+      // é lido aqui. A importação grava só os campos normais da
+      // transação — nenhum vínculo com meta é criado neste passo, sob
+      // nenhuma circunstância. Vincular é sempre uma ação manual
+      // posterior, feita na tela de edição da transação já importada.
       for (const transacao of transacoesParaImportar) {
         const categoria = obterCategoriaPorId(transacao.categoriaId);
         if (!categoria) totalSemCategoria += 1;

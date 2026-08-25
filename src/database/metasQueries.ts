@@ -1,9 +1,16 @@
 import { getDatabase, executarNaFila } from "./database";
+import { calcularProgressoDeTodasAsMetas, calcularProgressoMeta } from "./metaTransacoesQueries";
 
 export type Meta = {
   id: string;
   nome: string;
   valorMeta: number;
+  // Derivado de SUM(valor_vinculado) em meta_transacoes — nunca lido
+  // diretamente da coluna `progresso_atual` do banco (que existe só
+  // como resquício de schema; ver metaTransacoesQueries.ts). Toda
+  // função que retorna Meta abaixo já popula este campo calculado, o
+  // resto do app (MetasFinanceiras, MinhasMetas, calcularPercentualMeta
+  // etc.) continua consumindo normalmente sem saber da mudança.
   progressoAtual: number;
   icone: string;
   cor: string;
@@ -11,35 +18,64 @@ export type Meta = {
   criadoEm: string;
 };
 
+/**
+ * Campos aceitos ao criar/editar uma meta. NÃO inclui progressoAtual —
+ * o progresso nunca é um input direto do usuário desde a introdução da
+ * relação meta_transacoes; ele só muda através de vincular/desvincular
+ * transações. Uma meta sempre nasce com progresso 0 (sem vínculos).
+ */
 export type CamposMeta = {
   nome: string;
   valorMeta: number;
-  progressoAtual: number;
   icone: string;
   cor: string;
   dataAlvo: string | null;
 };
 
+type LinhaBrutaMeta = {
+  id: string;
+  nome: string;
+  valorMeta: number;
+  icone: string;
+  cor: string;
+  dataAlvo: string | null;
+  criadoEm: string;
+};
+
 export async function listarMetas(): Promise<Meta[]> {
-  return executarNaFila(async () => {
+  const linhas = await executarNaFila(async () => {
     const db = await getDatabase();
-    return db.getAllAsync<Meta>(
+    return db.getAllAsync<LinhaBrutaMeta>(
       `SELECT
-         id, nome, valor_meta as valorMeta, progresso_atual as progressoAtual,
+         id, nome, valor_meta as valorMeta,
          icone, cor, data_alvo as dataAlvo, criado_em as criadoEm
        FROM metas
        ORDER BY criado_em DESC;`
     );
   });
+
+  // Uma única query agregada para todas as metas de uma vez (evita
+  // N+1 — ver calcularProgressoDeTodasAsMetas), depois combinada em
+  // memória com a lista já carregada.
+  const progressoPorMeta = await calcularProgressoDeTodasAsMetas();
+
+  return linhas.map((linha) => ({
+    ...linha,
+    progressoAtual: progressoPorMeta.get(linha.id) ?? 0,
+  }));
 }
 
 export async function inserirMeta(id: string, campos: CamposMeta): Promise<void> {
   return executarNaFila(async () => {
     const db = await getDatabase();
+    // progresso_atual sempre nasce em 0 — a coluna continua existindo
+    // no schema (não vale a pena uma migration de remoção agora), mas
+    // nenhuma escrita além deste 0 inicial passa por ela nunca mais;
+    // o valor real do progresso é sempre lido via meta_transacoes.
     await db.runAsync(
       `INSERT INTO metas (id, nome, valor_meta, progresso_atual, icone, cor, data_alvo)
-       VALUES (?, ?, ?, ?, ?, ?, ?);`,
-      [id, campos.nome, campos.valorMeta, campos.progressoAtual, campos.icone, campos.cor, campos.dataAlvo]
+       VALUES (?, ?, ?, 0, ?, ?, ?);`,
+      [id, campos.nome, campos.valorMeta, campos.icone, campos.cor, campos.dataAlvo]
     );
   });
 }
@@ -47,11 +83,14 @@ export async function inserirMeta(id: string, campos: CamposMeta): Promise<void>
 export async function atualizarMeta(id: string, campos: CamposMeta): Promise<void> {
   return executarNaFila(async () => {
     const db = await getDatabase();
+    // Note que progresso_atual NÃO está nesta cláusula SET — editar
+    // uma meta nunca toca no progresso, que só muda via vincular/
+    // desvincular transações.
     await db.runAsync(
       `UPDATE metas
-       SET nome = ?, valor_meta = ?, progresso_atual = ?, icone = ?, cor = ?, data_alvo = ?
+       SET nome = ?, valor_meta = ?, icone = ?, cor = ?, data_alvo = ?
        WHERE id = ?;`,
-      [campos.nome, campos.valorMeta, campos.progressoAtual, campos.icone, campos.cor, campos.dataAlvo, id]
+      [campos.nome, campos.valorMeta, campos.icone, campos.cor, campos.dataAlvo, id]
     );
   });
 }
@@ -59,6 +98,9 @@ export async function atualizarMeta(id: string, campos: CamposMeta): Promise<voi
 export async function excluirMeta(id: string): Promise<void> {
   return executarNaFila(async () => {
     const db = await getDatabase();
+    // ON DELETE CASCADE em meta_transacoes.meta_id remove os vínculos
+    // relacionados automaticamente (depende de PRAGMA foreign_keys =
+    // ON, ativado em database.ts).
     await db.runAsync(`DELETE FROM metas WHERE id = ?;`, [id]);
   });
 }
@@ -90,11 +132,11 @@ export async function listarMetasComPrazoNoPeriodo(
   inicioIso: string,
   fimIso: string
 ): Promise<Meta[]> {
-  return executarNaFila(async () => {
+  const linhas = await executarNaFila(async () => {
     const db = await getDatabase();
-    return db.getAllAsync<Meta>(
+    return db.getAllAsync<LinhaBrutaMeta>(
       `SELECT
-         id, nome, valor_meta as valorMeta, progresso_atual as progressoAtual,
+         id, nome, valor_meta as valorMeta,
          icone, cor, data_alvo as dataAlvo, criado_em as criadoEm
        FROM metas
        WHERE data_alvo IS NOT NULL AND data_alvo >= ? AND data_alvo <= ?
@@ -102,6 +144,18 @@ export async function listarMetasComPrazoNoPeriodo(
       [inicioIso, fimIso]
     );
   });
+
+  // Poucas metas tendem a cair num período específico, então uma
+  // query de progresso por item aqui é aceitável (diferente de
+  // listarMetas(), que carrega TODAS as metas de uma vez).
+  const comProgresso = await Promise.all(
+    linhas.map(async (linha) => ({
+      ...linha,
+      progressoAtual: await calcularProgressoMeta(linha.id),
+    }))
+  );
+
+  return comProgresso;
 }
 
 /**
@@ -148,11 +202,7 @@ export function calcularPercentualMeta(meta: Meta): number {
 /**
  * Uma meta é "concluída" quando o progresso atinge (ou ultrapassa) o
  * valor objetivo. Isso é sempre CALCULADO a partir de progressoAtual/
- * valorMeta, nunca um campo próprio no banco — não existe estado
- * "concluída" independente do progresso numérico, então guardar isso
- * como coluna só criaria uma segunda fonte de verdade para manter
- * sincronizada. Qualquer tela que precise separar "em andamento" de
- * "concluídas" deve filtrar a lista de listarMetas() com esta função.
+ * valorMeta, nunca um campo próprio no banco.
  */
 export function metaEstaConcluida(meta: Meta): boolean {
   return meta.valorMeta > 0 && meta.progressoAtual >= meta.valorMeta;

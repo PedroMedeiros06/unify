@@ -71,9 +71,6 @@ const MIGRATIONS: Migration[] = [
     versao: 4,
     descricao: "Cria tabelas metas e compromissos",
     async executar(db) {
-      // `progresso_atual` começa em 0 e, nesta versão, só é alterado
-      // manualmente por edição da meta (sem vínculo automático com
-      // transações ainda — isso fica para uma versão futura).
       await db.execAsync(`
         CREATE TABLE IF NOT EXISTS metas (
           id TEXT PRIMARY KEY NOT NULL,
@@ -86,9 +83,6 @@ const MIGRATIONS: Migration[] = [
         );
       `);
 
-      // `data_vencimento` em ISO (aaaa-mm-dd), mesma convenção usada em
-      // transacoes.data. `notificado` evita reagendar/reenviar a mesma
-      // notificação local toda vez que a lista é recarregada.
       await db.execAsync(`
         CREATE TABLE IF NOT EXISTS compromissos (
           id TEXT PRIMARY KEY NOT NULL,
@@ -112,28 +106,9 @@ const MIGRATIONS: Migration[] = [
     versao: 5,
     descricao: "Adiciona categoria_id em transacoes e cria tabela regras_categorizacao (categorização automática + aprendida)",
     async executar(db) {
-      // `categoria_id` guarda o slug definido em src/database/categorias.ts
-      // (ex: "transporte", "mercado"). Nullable de propósito: uma
-      // transação pode ficar "sem categoria" quando nenhuma regra bate
-      // com confiança suficiente — nunca inventamos uma categoria por
-      // aproximação. Não há FOREIGN KEY porque a lista de categorias é
-      // fixa em código (não em tabela própria), então a validação do
-      // valor é responsabilidade da camada de aplicação (categorias.ts).
       await db.execAsync(`ALTER TABLE transacoes ADD COLUMN categoria_id TEXT;`);
       await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_transacoes_categoria ON transacoes (categoria_id);`);
 
-      // Regras "aprendidas": guardam o mapeamento entre um padrão de
-      // descrição normalizado (ver normalizarPadraoDescricao em
-      // categorizacao.ts) e a categoria escolhida para ele. É uma
-      // tabela separada — e não um campo na transação — porque o
-      // aprendizado é sobre o PADRÃO da descrição, reutilizável em
-      // qualquer transação futura (inclusive de importações que ainda
-      // nem aconteceram), não sobre um registro específico.
-      //
-      // UNIQUE em padrao_normalizado garante, no nível do banco, que
-      // nunca existam duas regras ativas para o mesmo padrão — uma
-      // categorização manual nova sempre substitui (UPSERT) a regra
-      // anterior daquele padrão, nunca duplica.
       await db.execAsync(`
         CREATE TABLE IF NOT EXISTS regras_categorizacao (
           id TEXT PRIMARY KEY NOT NULL,
@@ -153,10 +128,6 @@ const MIGRATIONS: Migration[] = [
     versao: 6,
     descricao: "Cria tabela perfil_usuario (cadastro local simples, single-row)",
     async executar(db) {
-      // App é single-user local, sem login/autenticação — não há
-      // necessidade de múltiplas linhas. `id` fixo em 1 garante que só
-      // existe um registro de perfil por dispositivo (via UPSERT nas
-      // queries que escrevem aqui, nunca INSERT solto).
       await db.execAsync(`
         CREATE TABLE IF NOT EXISTS perfil_usuario (
           id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -172,16 +143,57 @@ const MIGRATIONS: Migration[] = [
     versao: 7,
     descricao: "Adiciona data_alvo em metas (prazo final da meta — permite plotar na Agenda e futuramente calcular quanto guardar por dia/mês)",
     async executar(db) {
-      // Nullable: uma meta pode existir sem prazo definido — nesse caso
-      // ela simplesmente não aparece no calendário da Agenda, só na
-      // lista de Metas do Planejamento (comportamento já existente, sem
-      // mudança). Quando preenchida, representa o PRAZO FINAL da meta
-      // (não um depósito específico) em formato ISO "aaaa-mm-dd", mesma
-      // convenção do resto do app — é a base para, futuramente, calcular
-      // quanto guardar por dia/mês até essa data (valor_meta - progresso_atual
-      // dividido pelo tempo restante).
       await db.execAsync(`ALTER TABLE metas ADD COLUMN data_alvo TEXT;`);
       await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_metas_data_alvo ON metas (data_alvo);`);
+    },
+  },
+  {
+    versao: 8,
+    descricao: "Cria tabela meta_transacoes (relação manual entre metas e transações; progresso da meta passa a ser derivado desta tabela)",
+    async executar(db) {
+      // Tabela de relação N:N entre metas e transações. Cada linha
+      // representa uma decisão EXPLÍCITA do usuário de que uma
+      // transação (ou parte dela) deve contar para o progresso de uma
+      // meta — nunca é criada automaticamente por categorização,
+      // palavra-chave ou qualquer heurística.
+      //
+      // `valor_vinculado` carrega o SINAL: positivo aumenta o
+      // progresso da meta (ex: transferência para uma "caixinha"),
+      // negativo diminui (ex: retirada da reserva). Não precisa ser
+      // igual ao `valor` da transação — o usuário pode escolher
+      // vincular só uma parte dela (vínculo parcial), mas nunca pode
+      // ultrapassar o valor absoluto da transação em módulo; essa
+      // invariante é garantida pela camada de aplicação
+      // (metaTransacoesQueries.ts), não pelo schema.
+      //
+      // UNIQUE(meta_id, transacao_id): no MVP uma transação só pode
+      // estar vinculada a UMA meta por vez. "Alterar meta" (mover o
+      // vínculo de uma meta para outra) é implementado como
+      // desvincular + vincular, não como uma segunda linha.
+      //
+      // ON DELETE CASCADE em ambas as FKs: excluir a transação OU a
+      // meta remove a relação automaticamente — depende de
+      // `PRAGMA foreign_keys = ON` estar ativo na conexão (ver
+      // database.ts), senão o SQLite ignora silenciosamente o CASCADE.
+      await db.execAsync(`
+        CREATE TABLE IF NOT EXISTS meta_transacoes (
+          id TEXT PRIMARY KEY NOT NULL,
+          meta_id TEXT NOT NULL,
+          transacao_id TEXT NOT NULL,
+          valor_vinculado REAL NOT NULL,
+          criado_em TEXT NOT NULL DEFAULT (datetime('now')),
+          FOREIGN KEY (meta_id) REFERENCES metas(id) ON DELETE CASCADE,
+          FOREIGN KEY (transacao_id) REFERENCES transacoes(id) ON DELETE CASCADE,
+          UNIQUE (meta_id, transacao_id)
+        );
+      `);
+
+      await db.execAsync(`
+        CREATE INDEX IF NOT EXISTS idx_meta_transacoes_meta ON meta_transacoes (meta_id);
+      `);
+      await db.execAsync(`
+        CREATE INDEX IF NOT EXISTS idx_meta_transacoes_transacao ON meta_transacoes (transacao_id);
+      `);
     },
   },
 ];

@@ -5,9 +5,14 @@ type MetasContextValue = {
   metas: Meta[];
   carregando: boolean;
   erro: string | null;
-  adicionarMeta: (campos: Omit<CamposMeta, "progressoAtual">) => Promise<void>;
+  adicionarMeta: (campos: CamposMeta) => Promise<void>;
   editarMeta: (id: string, campos: CamposMeta) => Promise<void>;
   removerMeta: (id: string) => Promise<void>;
+  // Permite que qualquer tela force um reload da lista (ex: depois de
+  // vincular/desvincular uma transação a uma meta em outra tela) —
+  // como o progresso agora é derivado de meta_transacoes, o Context
+  // não sabe sozinho quando essa tabela muda por fora dele.
+  recarregar: () => Promise<void>;
 };
 
 const MetasContext = createContext<MetasContextValue | null>(null);
@@ -47,13 +52,15 @@ export function MetasProvider({ children }: { children: ReactNode }) {
     };
   }, [carregar]);
 
-  const adicionarMeta = useCallback(async (campos: Omit<CamposMeta, "progressoAtual">) => {
+  // progressoAtual não é mais input do formulário — toda meta nova
+  // nasce com progresso 0 (sem vínculos). campos aqui já é CamposMeta
+  // completo, sem o Omit<"progressoAtual"> que existia antes.
+  const adicionarMeta = useCallback(async (campos: CamposMeta) => {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const camposCompletos: CamposMeta = { ...campos, progressoAtual: 0 };
 
     try {
-      await inserirMeta(id, camposCompletos);
-      setMetas((prev) => [{ id, ...camposCompletos, criadoEm: new Date().toISOString() }, ...prev]);
+      await inserirMeta(id, campos);
+      setMetas((prev) => [{ id, ...campos, progressoAtual: 0, criadoEm: new Date().toISOString() }, ...prev]);
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Erro ao criar meta");
       throw e;
@@ -63,6 +70,9 @@ export function MetasProvider({ children }: { children: ReactNode }) {
   const editarMeta = useCallback(async (id: string, campos: CamposMeta) => {
     try {
       await atualizarMeta(id, campos);
+      // progressoAtual do estado local é preservado — atualizarMeta
+      // nunca toca nessa coluna, então não há nada para sobrescrever
+      // aqui além dos campos editáveis normais.
       setMetas((prev) => prev.map((m) => (m.id === id ? { ...m, ...campos } : m)));
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Erro ao editar meta");
@@ -81,8 +91,8 @@ export function MetasProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ metas, carregando, erro, adicionarMeta, editarMeta, removerMeta }),
-    [metas, carregando, erro, adicionarMeta, editarMeta, removerMeta]
+    () => ({ metas, carregando, erro, adicionarMeta, editarMeta, removerMeta, recarregar: carregar }),
+    [metas, carregando, erro, adicionarMeta, editarMeta, removerMeta, carregar]
   );
 
   return <MetasContext.Provider value={value}>{children}</MetasContext.Provider>;

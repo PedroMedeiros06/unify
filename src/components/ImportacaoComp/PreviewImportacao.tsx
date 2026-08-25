@@ -111,6 +111,18 @@ const ItemPreview = memo(function ItemPreview({
           </Text>
         </View>
       )}
+
+      {/* Sinalização de possível movimentação para meta — puramente
+          informativa. Não é uma opção de ação aqui (não vincula nada);
+          o usuário decide vincular de fato depois de importada, na
+          tela de edição da transação. */}
+      {item.possivelMovimentacaoMeta && (
+        <View className="flex-row items-center gap-1.5 mt-1.5 ml-7">
+          <Text style={{ fontSize: avisoSize }} className="text-active-icon">
+            🎯 Pode ser uma movimentação para meta — revise depois de importar
+          </Text>
+        </View>
+      )}
     </View>
   );
 });
@@ -150,6 +162,7 @@ function PreviewImportacaoBase({
   const [indiceEditandoCategoria, setIndiceEditandoCategoria] = useState<number | null>(null);
 
   const totalDuplicatas = transacoes.filter((t) => t.possivelDuplicata).length;
+  const totalMovimentacoesMeta = transacoes.filter((t) => t.possivelMovimentacaoMeta).length;
   const totalSelecionadas = transacoes.length - transacoesExcluidas.size;
   const totalErro = linhasComErro.length;
   const totalSemCategoria = transacoes.filter((t) => !t.categoriaId).length;
@@ -208,6 +221,20 @@ function PreviewImportacaoBase({
           </View>
         )}
       </View>
+
+      {/* Badge de possíveis movimentações para metas — separado dos
+          demais contadores acima de propósito, para reforçar
+          visualmente que é uma categoria de aviso diferente (não é
+          erro nem duplicata, é só "vale revisar depois"). */}
+      {totalMovimentacoesMeta > 0 && (
+        <View className="flex-row items-center gap-2 bg-active-icon/10 border border-active-icon/30 rounded-xl p-3 mb-4">
+          <Text style={{ fontSize: countLabelSize }} className="text-active-icon flex-1">
+            🎯 {totalMovimentacoesMeta} possível{totalMovimentacoesMeta === 1 ? "" : "eis"} movimentaç
+            {totalMovimentacoesMeta === 1 ? "ão" : "ões"} para metas — nenhum vínculo é criado agora, você poderá
+            vincular manualmente depois de importar.
+          </Text>
+        </View>
+      )}
 
       {totalSemCategoria > 0 && (
         <View className="flex-row items-start gap-2 bg-warn-color/10 rounded-lg p-2.5 mb-4">

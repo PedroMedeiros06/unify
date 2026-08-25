@@ -65,8 +65,10 @@ function EditarMetaModalBase({ visivel, metaEditando, onFechar, onSalvar, onExcl
   const passo1Valido = nome.trim().length > 0 && valorNumerico > 0;
   const ocupado = salvando || excluindo;
 
-  // Preview de ritmo necessário no passo 2 — só quando há prazo e o
-  // formulário já tem valor/progresso válidos o suficiente para calcular.
+  // Preview de ritmo necessário no passo 2 — usa o progresso JÁ
+  // EXISTENTE da meta (derivado de transações vinculadas), nunca um
+  // valor digitado no formulário. Ao criar uma meta nova, progresso
+  // ainda não existe (nasce em 0), então o preview reflete isso.
   const ritmoPreview =
     dataAlvo && valorNumerico > 0
       ? calcularRitmoNecessario({
@@ -98,7 +100,6 @@ function EditarMetaModalBase({ visivel, metaEditando, onFechar, onSalvar, onExcl
       await onSalvar(metaEditando?.id ?? null, {
         nome: nome.trim(),
         valorMeta: valorNumerico,
-        progressoAtual: metaEditando?.progressoAtual ?? 0,
         icone: iconeSelecionado.nome,
         cor: iconeSelecionado.cor,
         dataAlvo,
@@ -177,6 +178,20 @@ function EditarMetaModalBase({ visivel, metaEditando, onFechar, onSalvar, onExcl
             accessibilityLabel="Valor objetivo da meta"
           />
 
+          {metaEditando && (
+            <View className="bg-input-background border border-lines-divisions rounded-xl p-3 mb-4">
+              <Text style={{ fontSize: labelSize }} className="text-second-text mb-0.5">
+                Progresso atual
+              </Text>
+              <Text style={{ fontSize: inputTextSize }} className="text-active-icon font-Inter-SemiBold">
+                {FormatToCurrency(metaEditando.progressoAtual)}
+              </Text>
+              <Text style={{ fontSize: labelSize }} className="text-desactived-text mt-0.5">
+                Vem das transações vinculadas — vincule ou desvincule transações para ajustar.
+              </Text>
+            </View>
+          )}
+
           <View className="mb-1">
             <SeletorData label="Prazo final (opcional)" valorIso={dataAlvo} onChange={setDataAlvo} minimoHoje />
           </View>
@@ -204,10 +219,6 @@ function EditarMetaModalBase({ visivel, metaEditando, onFechar, onSalvar, onExcl
           <Text style={{ fontSize: labelSize }} className="text-second-text mb-2">
             Escolha um ícone
           </Text>
-          {/* Grid rolável com altura máxima fixa — a paleta tem 30
-              ícones, então em vez de "flex-wrap" soltar tudo e empurrar
-              o resto do card para baixo, a área de ícones tem scroll
-              próprio dentro do card já limitado a 85vh pelo shell. */}
           <ScrollView
             style={{ maxHeight: moderateScale(150) }}
             className="mb-4"
@@ -252,8 +263,6 @@ function EditarMetaModalBase({ visivel, metaEditando, onFechar, onSalvar, onExcl
             </View>
           </View>
 
-          {/* Preview do ritmo necessário — só aparece quando há
-              prazo definido e ainda falta valor a guardar. */}
           {ritmoPreview && (
             <View className="bg-active-icon/10 border border-active-icon/30 rounded-xl p-3 mb-5">
               <Text style={{ fontSize: labelSize }} className="text-active-icon font-Inter-Medium mb-1">

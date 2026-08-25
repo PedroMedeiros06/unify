@@ -9,6 +9,15 @@ export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
   if (dbInstance) return dbInstance;
 
   const db = await SQLite.openDatabaseAsync(DATABASE_NAME);
+
+  // O SQLite desliga a checagem de foreign keys por padrão, mesmo com
+  // FOREIGN KEY declarada no schema — sem este pragma, ON DELETE CASCADE
+  // (usado por meta_transacoes) não tem efeito nenhum e transações
+  // excluídas deixariam vínculos órfãos na tabela. Precisa ser setado
+  // em TODA conexão aberta (não é uma configuração persistida no
+  // arquivo do banco), então roda aqui, antes de qualquer migration.
+  await db.execAsync(`PRAGMA foreign_keys = ON;`);
+
   await rodarMigrations(db);
 
   dbInstance = db;
@@ -28,9 +37,9 @@ export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
  * `executarNaFila` garante que cada operação só começa depois que a
  * anterior terminou por completo, mesmo que várias sejam disparadas
  * "ao mesmo tempo" do lado do JavaScript. Toda função em queries.ts /
- * metasQueries.ts / compromissosQueries.ts / regrasAprendidasQueries.ts
- * que acessa o banco deve passar sua operação por aqui, em vez de
- * chamar db.runAsync/getAllAsync diretamente.
+ * metasQueries.ts / compromissosQueries.ts / regrasAprendidasQueries.ts /
+ * metaTransacoesQueries.ts que acessa o banco deve passar sua operação
+ * por aqui, em vez de chamar db.runAsync/getAllAsync diretamente.
  */
 let filaExecucao: Promise<unknown> = Promise.resolve();
 
@@ -47,6 +56,7 @@ export async function resetDatabaseForDev(): Promise<void> {
   }
 
   const db = await getDatabase();
+  await db.execAsync(`DROP TABLE IF EXISTS meta_transacoes;`);
   await db.execAsync(`DROP TABLE IF EXISTS transacoes;`);
   await db.execAsync(`DROP TABLE IF EXISTS bancos;`);
   await db.execAsync(`DROP TABLE IF EXISTS metas;`);
