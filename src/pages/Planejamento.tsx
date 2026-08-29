@@ -9,6 +9,7 @@ import { VisaoGeralMes } from "@/components/PlanejamentoComp/VisaoGeralMes";
 import { DistribuicaoOrcamento } from "@/components/PlanejamentoComp/DistribuicaoOrcamento";
 import { MetasFinanceiras } from "@/components/PlanejamentoComp/MetasFinanceiras";
 import { MinhasMetas } from "@/components/PlanejamentoComp/MinhasMetas";
+import { OrcamentoResumo } from "@/components/OrcamentoComp/OrcamentoResumo";
 import { OrcamentoMensal } from "@/components/PlanejamentoComp/OrcamentoMensal";
 import { ProximosCompromissos } from "@/components/PlanejamentoComp/ProximosCompromissos";
 import { BarraFiltros } from "@/components/common/BarraFiltros";
@@ -48,6 +49,11 @@ export function Planejamento() {
     listarBancos().then(setBancos);
   }, []);
 
+  // Todas as abas (inclusive "Orçamento") são renderizadas INLINE aqui,
+  // sem sair do Planejamento — assim o header e a barra de abas
+  // continuam visíveis, igual acontece com "Metas". "Orçamento" tem
+  // pasta de componentes própria (OrcamentoComp/), mas o painel em si
+  // (<OrcamentoResumo />) entra na árvore como qualquer outra aba.
   const handleChangeTab = useCallback((tab: PlanejamentoTab) => {
     setActiveTab(tab);
   }, []);
@@ -129,7 +135,9 @@ export function Planejamento() {
 
         {activeTab === "Metas" && <MinhasMetas />}
 
-        {activeTab !== "Resumo" && activeTab !== "Metas" && (
+        {activeTab === "Orçamento" && <OrcamentoResumo />}
+
+        {activeTab !== "Resumo" && activeTab !== "Metas" && activeTab !== "Orçamento" && (
           <View className="items-center justify-center py-16">
             <Text className="text-desactived-text">Em breve: {activeTab}</Text>
           </View>

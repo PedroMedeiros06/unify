@@ -40,7 +40,10 @@ export default function AppIndex() {
   // transações (antiga TodasTransacoes), mas continua sendo uma aba
   // normal do footer — mantém o footer visível. "agenda" e
   // "metasConcluidas" seguem o mesmo padrão de "importarExtrato": são
-  // acessadas a partir de outra tela (botão/link), não são abas próprias.
+  // acessadas a partir de outra tela (botão/link), não são abas
+  // próprias. "Orçamento" NÃO entra aqui: é uma aba interna do
+  // Planejamento (renderizada inline, igual "Metas"), então mantém
+  // header + abas + footer visíveis.
   const TELAS_SEM_FOOTER: (keyof typeof Screens)[] = ["importarExtrato", "agenda", "metasConcluidas"];
   const mostrarFooter = !TELAS_SEM_FOOTER.includes(activeScreen);
 

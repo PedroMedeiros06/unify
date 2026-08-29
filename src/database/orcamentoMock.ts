@@ -1,0 +1,74 @@
+import { Ionicons } from "@expo/vector-icons";
+import { colors } from "@/theme/colors";
+
+/**
+ * Dados MOCKADOS da tela de Orçamento — a lógica real (queries no
+ * SQLite, cálculo de limites por categoria, etc.) ainda não foi
+ * implementada. Este arquivo existe só para a tela ter algo visual e
+ * coerente pra exibir enquanto isso não acontece.
+ *
+ * Quando a lógica real entrar, a ideia é que os componentes da tela
+ * (OrcamentoComp/*) continuem recebendo os MESMOS formatos de dados
+ * abaixo — só a origem muda de "constante fixa" para "resultado de
+ * query" — para minimizar retrabalho na UI.
+ */
+
+export type CategoriaOrcamento = {
+  id: string;
+  nome: string;
+  icone: keyof typeof Ionicons.glyphMap;
+  cor: string;
+  limite: number;
+  gasto: number;
+};
+
+export type DicaOrcamento = {
+  id: string;
+  icone: keyof typeof Ionicons.glyphMap;
+  corIcone: string;
+  titulo: string;
+  subtitulo: string;
+};
+
+export const MES_EXIBIDO_MOCK = { ano: 2026, mes: 5 }; // Junho/2026 (mes 0-11)
+
+export const RESUMO_ORCAMENTO_MOCK = {
+  receitaPrevista: 6385.4,
+  gastosObrigatorios: 3120.5,
+  gastosVariaveis: 1413.73,
+  disponivel: 1851.17,
+};
+
+export const CATEGORIAS_ORCAMENTO_MOCK: CategoriaOrcamento[] = [
+  { id: "moradia", nome: "Moradia", icone: "home", cor: colors["active-icon"], limite: 2000, gasto: 1915.62 },
+  { id: "transporte", nome: "Transporte", icone: "car", cor: "#378ADD", limite: 1000, gasto: 842.3 },
+  { id: "alimentacao", nome: "Alimentação", icone: "cart", cor: colors["sucess-color"], limite: 800, gasto: 623.45 },
+  { id: "lazer", nome: "Lazer", icone: "happy", cor: colors["warn-color"], limite: 600, gasto: 412.9 },
+  { id: "saude", nome: "Saúde", icone: "heart", cor: colors["error-color"], limite: 400, gasto: 310.12 },
+  { id: "outros", nome: "Outros", icone: "ellipsis-horizontal", cor: colors["desactived-text"], limite: 600, gasto: 430.64 },
+];
+
+export const ANALISE_ORCAMENTO_MOCK = {
+  economiaNoMes: 1851.17,
+  economiaPercentualDaReceita: 29,
+  maiorGastoCategoriaNome: "Moradia",
+  maiorGastoValor: 1915.62,
+  maiorGastoPercentual: 42,
+  reducaoGastosPercentual: 8,
+};
+
+export const DICAS_ORCAMENTO_MOCK: DicaOrcamento[] = [
+  {
+    id: "dica-lazer",
+    icone: "trending-up",
+    corIcone: colors["sucess-color"],
+    titulo: "Você está gastando 18% menos com lazer",
+    subtitulo: "Continue assim! Que tal direcionar essa economia para suas metas?",
+  },
+];
+
+/** Percentual (0-100) já limitado a 100, evitando barras/valores acima de 100% na UI. */
+export function calcularPercentualCategoria(categoria: CategoriaOrcamento): number {
+  if (categoria.limite <= 0) return 0;
+  return Math.min(100, Math.round((categoria.gasto / categoria.limite) * 100));
+}

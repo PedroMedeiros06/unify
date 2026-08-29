@@ -196,6 +196,29 @@ const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    versao: 9,
+    descricao:
+      "Adiciona transacao_id em compromissos — um compromisso só é 'pago' quando existe uma transação real vinculada (nunca uma movimentação fictícia). O realizado do orçamento vem exclusivamente das transações.",
+    async executar(db) {
+      // FK com ON DELETE SET NULL: se a transação vinculada for
+      // excluída, o compromisso volta a ficar 'não pago' (transacao_id
+      // NULL), em vez de sumir junto (que seria o caso com CASCADE).
+      // Depende de PRAGMA foreign_keys = ON na conexão (ver database.ts).
+      //
+      // A coluna `pago` (0/1) da migration 4 fica DEPRECADA a partir
+      // daqui: nada mais escreve nela além do 0 inicial do INSERT, e a
+      // leitura passa a derivar `pago = transacao_id IS NOT NULL`
+      // (ver compromissosQueries.ts). Não vale uma migration de
+      // remoção agora — mesmo tratamento dado a metas.progresso_atual.
+      await db.execAsync(
+        `ALTER TABLE compromissos ADD COLUMN transacao_id TEXT REFERENCES transacoes(id) ON DELETE SET NULL;`
+      );
+      await db.execAsync(
+        `CREATE INDEX IF NOT EXISTS idx_compromissos_transacao ON compromissos (transacao_id);`
+      );
+    },
+  },
 ];
 
 export async function rodarMigrations(db: SQLiteDatabase): Promise<void> {

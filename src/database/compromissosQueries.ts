@@ -7,7 +7,12 @@ export type Compromisso = {
   dataVencimento: string;
   icone: string;
   cor: string;
+  // DERIVADO de `transacaoId != null` — nunca lido da coluna `pago`
+  // do banco (deprecada desde a migration 9). Um compromisso só conta
+  // como pago quando há uma transação real vinculada; marcar como pago
+  // no app é, na prática, criar/escolher essa transação.
   pago: boolean;
+  transacaoId: string | null;
   notificacaoId: string | null;
   criadoEm: string;
 };
@@ -20,10 +25,10 @@ export type CamposCompromisso = {
   cor: string;
 };
 
-type LinhaBrutaCompromisso = Omit<Compromisso, "pago"> & { pago: number };
+type LinhaBrutaCompromisso = Omit<Compromisso, "pago">;
 
 function mapearLinha(linha: LinhaBrutaCompromisso): Compromisso {
-  return { ...linha, pago: linha.pago === 1 };
+  return { ...linha, pago: linha.transacaoId != null };
 }
 
 export async function listarCompromissos(): Promise<Compromisso[]> {
@@ -32,7 +37,7 @@ export async function listarCompromissos(): Promise<Compromisso[]> {
     const linhas = await db.getAllAsync<LinhaBrutaCompromisso>(
       `SELECT
          id, nome, valor, data_vencimento as dataVencimento, icone, cor,
-         pago, notificacao_id as notificacaoId, criado_em as criadoEm
+         transacao_id as transacaoId, notificacao_id as notificacaoId, criado_em as criadoEm
        FROM compromissos
        ORDER BY data_vencimento ASC;`
     );
@@ -71,10 +76,28 @@ export async function atualizarCompromisso(
   });
 }
 
-export async function marcarCompromissoPago(id: string, pago: boolean): Promise<void> {
+/**
+ * Vincula um compromisso a uma transação real já existente — é o que
+ * significa "pago" a partir da migration 9. Quem cria/escolhe a
+ * transação é a UI (ver ProximosCompromissos + NovaTransacaoModal); esta
+ * função é só a escrita do vínculo. Não toca na transação em si.
+ */
+export async function vincularCompromissoATransacao(id: string, transacaoId: string): Promise<void> {
   return executarNaFila(async () => {
     const db = await getDatabase();
-    await db.runAsync(`UPDATE compromissos SET pago = ? WHERE id = ?;`, [pago ? 1 : 0, id]);
+    await db.runAsync(`UPDATE compromissos SET transacao_id = ? WHERE id = ?;`, [transacaoId, id]);
+  });
+}
+
+/**
+ * Remove o vínculo (compromisso volta a "não pago"). A transação real
+ * NÃO é excluída — se o usuário quiser apagá-la, faz isso à parte na
+ * lista de transações.
+ */
+export async function desvincularCompromissoDaTransacao(id: string): Promise<void> {
+  return executarNaFila(async () => {
+    const db = await getDatabase();
+    await db.runAsync(`UPDATE compromissos SET transacao_id = NULL WHERE id = ?;`, [id]);
   });
 }
 
@@ -86,15 +109,15 @@ export async function excluirCompromisso(id: string): Promise<void> {
 }
 
 /**
- * Soma o valor dos compromissos AINDA NÃO PAGOS com vencimento dentro
- * do intervalo [inicioIso, fimIso] (ambos inclusive) — usado por
- * VisaoGeralMes para projetar o saldo do mês (receitas - despesas já
- * lançadas - compromissos que ainda vão impactar o saldo, mas ainda
- * não viraram transação). Compromissos já pagos não entram aqui
- * porque, uma vez pagos, o impacto no saldo já deveria estar refletido
- * como transação real — este app não gera uma transação automática ao
- * marcar como pago, então essa soma é só uma estimativa de "quanto
- * ainda falta sair" no mês, não uma reconciliação exata.
+ * Soma o valor dos compromissos AINDA NÃO PAGOS (sem transação real
+ * vinculada, `transacao_id IS NULL`) com vencimento dentro do intervalo
+ * [inicioIso, fimIso] (ambos inclusive) — usado por VisaoGeralMes e
+ * pelo orçamento para projetar "quanto ainda falta sair" no mês.
+ *
+ * Compromissos com transação vinculada não entram aqui porque o impacto
+ * deles no saldo já está refletido como transação real — que é a única
+ * fonte do realizado (ver migration 9). A soma abaixo é, portanto, só a
+ * parcela pendente do previsto, nunca o realizado.
  */
 export async function somarCompromissosNaoPagosNoPeriodo(
   inicioIso: string,
@@ -105,7 +128,7 @@ export async function somarCompromissosNaoPagosNoPeriodo(
     const resultado = await db.getFirstAsync<{ total: number }>(
       `SELECT COALESCE(SUM(valor), 0) as total
        FROM compromissos
-       WHERE pago = 0 AND data_vencimento >= ? AND data_vencimento <= ?;`,
+       WHERE transacao_id IS NULL AND data_vencimento >= ? AND data_vencimento <= ?;`,
       [inicioIso, fimIso]
     );
     return resultado?.total ?? 0;

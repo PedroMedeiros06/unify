@@ -3,7 +3,8 @@ import {
   listarCompromissos,
   inserirCompromisso,
   atualizarCompromisso,
-  marcarCompromissoPago,
+  vincularCompromissoATransacao,
+  desvincularCompromissoDaTransacao,
   excluirCompromisso,
   Compromisso,
   CamposCompromisso,
@@ -16,7 +17,11 @@ type CompromissosContextValue = {
   erro: string | null;
   adicionarCompromisso: (campos: CamposCompromisso) => Promise<void>;
   editarCompromisso: (id: string, campos: CamposCompromisso) => Promise<void>;
-  marcarPago: (id: string, pago: boolean) => Promise<void>;
+  // "Pagar" = vincular o compromisso a uma transação real (a UI cria ou
+  // escolhe essa transação antes de chamar). Desmarcar só remove o
+  // vínculo — a transação em si permanece.
+  pagarCompromissoComTransacao: (id: string, transacaoId: string) => Promise<void>;
+  desmarcarPagoCompromisso: (id: string) => Promise<void>;
   removerCompromisso: (id: string) => Promise<void>;
 };
 
@@ -65,9 +70,10 @@ export function CompromissosProvider({ children }: { children: ReactNode }) {
 
       await inserirCompromisso(id, campos, notificacaoId);
       setCompromissos((prev) =>
-        [...prev, { id, ...campos, pago: false, notificacaoId, criadoEm: new Date().toISOString() }].sort(
-          (a, b) => a.dataVencimento.localeCompare(b.dataVencimento)
-        )
+        [
+          ...prev,
+          { id, ...campos, pago: false, transacaoId: null, notificacaoId, criadoEm: new Date().toISOString() },
+        ].sort((a, b) => a.dataVencimento.localeCompare(b.dataVencimento))
       );
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Erro ao criar compromisso");
@@ -97,24 +103,40 @@ export function CompromissosProvider({ children }: { children: ReactNode }) {
     [compromissos]
   );
 
-  const marcarPago = useCallback(
-    async (id: string, pago: boolean) => {
+  const pagarCompromissoComTransacao = useCallback(
+    async (id: string, transacaoId: string) => {
       const compromisso = compromissos.find((c) => c.id === id);
 
       try {
-        if (pago && compromisso?.notificacaoId) {
+        // Já existe uma transação real cobrindo esse compromisso — a
+        // notificação de vencimento não faz mais sentido.
+        if (compromisso?.notificacaoId) {
           await cancelarNotificacao(compromisso.notificacaoId);
         }
 
-        await marcarCompromissoPago(id, pago);
-        setCompromissos((prev) => prev.map((c) => (c.id === id ? { ...c, pago } : c)));
+        await vincularCompromissoATransacao(id, transacaoId);
+        setCompromissos((prev) =>
+          prev.map((c) => (c.id === id ? { ...c, transacaoId, pago: true, notificacaoId: null } : c))
+        );
       } catch (e) {
-        setErro(e instanceof Error ? e.message : "Erro ao atualizar compromisso");
+        setErro(e instanceof Error ? e.message : "Erro ao registrar pagamento do compromisso");
         throw e;
       }
     },
     [compromissos]
   );
+
+  const desmarcarPagoCompromisso = useCallback(async (id: string) => {
+    try {
+      await desvincularCompromissoDaTransacao(id);
+      setCompromissos((prev) =>
+        prev.map((c) => (c.id === id ? { ...c, transacaoId: null, pago: false } : c))
+      );
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Erro ao remover pagamento do compromisso");
+      throw e;
+    }
+  }, []);
 
   const removerCompromisso = useCallback(
     async (id: string) => {
@@ -133,8 +155,26 @@ export function CompromissosProvider({ children }: { children: ReactNode }) {
   );
 
   const value = useMemo(
-    () => ({ compromissos, carregando, erro, adicionarCompromisso, editarCompromisso, marcarPago, removerCompromisso }),
-    [compromissos, carregando, erro, adicionarCompromisso, editarCompromisso, marcarPago, removerCompromisso]
+    () => ({
+      compromissos,
+      carregando,
+      erro,
+      adicionarCompromisso,
+      editarCompromisso,
+      pagarCompromissoComTransacao,
+      desmarcarPagoCompromisso,
+      removerCompromisso,
+    }),
+    [
+      compromissos,
+      carregando,
+      erro,
+      adicionarCompromisso,
+      editarCompromisso,
+      pagarCompromissoComTransacao,
+      desmarcarPagoCompromisso,
+      removerCompromisso,
+    ]
   );
 
   return <CompromissosContext.Provider value={value}>{children}</CompromissosContext.Provider>;

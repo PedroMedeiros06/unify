@@ -2,11 +2,12 @@ import { moderateScale } from "@/utils/scale";
 import { FormatToCurrency } from "@/utils/formatNumber";
 import { Ionicons } from "@expo/vector-icons";
 import { colors } from "@/theme/colors";
-import { View, Text, Pressable } from "react-native";
+import { View, Text, Pressable, Alert } from "react-native";
 import { memo, useCallback, useRef, useState } from "react";
 import { useCompromissos } from "@/context/CompromissosContext";
 import { Compromisso, CamposCompromisso } from "@/database/compromissosQueries";
 import { EditarCompromissoModal } from "@/components/PlanejamentoComp/EditarCompromissoModal";
+import { VincularTransacaoCompromissoModal } from "@/components/PlanejamentoComp/VincularTransacaoCompromissoModal";
 import { dataIsoParaBR } from "@/utils/dateUtils";
 import { CompromissosSkeleton } from "@/components/common/CompromissosSkeleton";
 
@@ -24,11 +25,13 @@ function calcularDiasRestantes(dataVencimentoIso: string): number {
 const CompromissoItem = memo(function CompromissoItem({
   compromisso,
   onLongPress,
-  onTogglePago,
+  onToggle,
 }: {
   compromisso: Compromisso;
   onLongPress: (c: Compromisso) => void;
-  onTogglePago: (id: string, pago: boolean) => void;
+  // Toca no checkbox: se não pago, o pai abre o fluxo de registrar a
+  // transação; se pago, o pai pede confirmação e remove o vínculo.
+  onToggle: (c: Compromisso) => void;
 }) {
   const itemTitleSize = moderateScale(13);
   const itemSubtitleSize = moderateScale(10);
@@ -41,12 +44,12 @@ const CompromissoItem = memo(function CompromissoItem({
     if (processando.current) return;
     processando.current = true;
 
-    onTogglePago(compromisso.id, !compromisso.pago);
+    onToggle(compromisso);
 
     setTimeout(() => {
       processando.current = false;
     }, 400);
-  }, [compromisso.id, compromisso.pago, onTogglePago]);
+  }, [compromisso, onToggle]);
 
   const diasRestantes = calcularDiasRestantes(compromisso.dataVencimento);
   const vencido = diasRestantes < 0 && !compromisso.pago;
@@ -120,10 +123,49 @@ const CompromissoItem = memo(function CompromissoItem({
 
 function ProximosCompromissosBase() {
   const cardTitleSize = moderateScale(15);
-  const { compromissos, carregando, adicionarCompromisso, editarCompromisso, marcarPago, removerCompromisso } = useCompromissos();
+  const {
+    compromissos,
+    carregando,
+    adicionarCompromisso,
+    editarCompromisso,
+    pagarCompromissoComTransacao,
+    desmarcarPagoCompromisso,
+    removerCompromisso,
+  } = useCompromissos();
 
   const [modalVisivel, setModalVisivel] = useState(false);
   const [compromissoEditando, setCompromissoEditando] = useState<Compromisso | null>(null);
+
+  // Compromisso para o qual o usuário vai escolher uma transação real
+  // JÁ EXISTENTE (o Unify não cria transações). Vincular = marcar pago.
+  const [compromissoVinculando, setCompromissoVinculando] = useState<Compromisso | null>(null);
+
+  const handleToggle = useCallback(
+    (c: Compromisso) => {
+      if (c.pago) {
+        Alert.alert(
+          "Remover pagamento?",
+          "Isso remove apenas o vínculo com a transação e o compromisso volta a ficar pendente. A transação em si não é alterada nem excluída.",
+          [
+            { text: "Cancelar", style: "cancel" },
+            { text: "Remover", style: "destructive", onPress: () => void desmarcarPagoCompromisso(c.id) },
+          ]
+        );
+        return;
+      }
+      setCompromissoVinculando(c);
+    },
+    [desmarcarPagoCompromisso]
+  );
+
+  const handleVincularTransacao = useCallback(
+    async (transacaoId: string) => {
+      if (compromissoVinculando) {
+        await pagarCompromissoComTransacao(compromissoVinculando.id, transacaoId);
+      }
+    },
+    [compromissoVinculando, pagarCompromissoComTransacao]
+  );
 
   const handleAbrirNovo = useCallback(() => {
     setCompromissoEditando(null);
@@ -179,7 +221,7 @@ function ProximosCompromissosBase() {
             key={compromisso.id}
             compromisso={compromisso}
             onLongPress={handleLongPress}
-            onTogglePago={marcarPago}
+            onToggle={handleToggle}
           />
         ))
       )}
@@ -190,6 +232,13 @@ function ProximosCompromissosBase() {
         onFechar={handleFechar}
         onSalvar={handleSalvar}
         onExcluir={removerCompromisso}
+      />
+
+      <VincularTransacaoCompromissoModal
+        visivel={compromissoVinculando !== null}
+        compromisso={compromissoVinculando}
+        onFechar={() => setCompromissoVinculando(null)}
+        onVincular={handleVincularTransacao}
       />
     </View>
   );
