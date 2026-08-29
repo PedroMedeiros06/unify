@@ -57,6 +57,9 @@ export async function resetDatabaseForDev(): Promise<void> {
 
   const db = await getDatabase();
   await db.execAsync(`DROP TABLE IF EXISTS meta_transacoes;`);
+  await db.execAsync(`DROP TABLE IF EXISTS ocorrencia_prevista;`);
+  await db.execAsync(`DROP TABLE IF EXISTS orcamento_mes;`);
+  await db.execAsync(`DROP TABLE IF EXISTS recorrencias;`);
   await db.execAsync(`DROP TABLE IF EXISTS transacoes;`);
   await db.execAsync(`DROP TABLE IF EXISTS bancos;`);
   await db.execAsync(`DROP TABLE IF EXISTS metas;`);

@@ -219,6 +219,88 @@ const MIGRATIONS: Migration[] = [
       );
     },
   },
+  {
+    versao: 10,
+    descricao:
+      "Fundação do módulo de Orçamento: recorrencias (regras de planejamento), ocorrencia_prevista (instância de uma regra num mês, com snapshot congelável) e orcamento_mes (marca meses vivos/congelados).",
+    async executar(db) {
+      // RECORRENCIAS — regra de planejamento, NUNCA uma transação.
+      // Não guarda icone/cor: a UI deriva da categoria (categoria_id).
+      // MVP: só periodicidade 'mensal' (CHECK restrito de propósito —
+      // semanal/anual entram junto da implementação real).
+      //
+      // tipo_vencimento:
+      //   'dia_fixo'        -> dia_vencimento = 1..31 (dia corrido; clamp ao último dia do mês)
+      //   'dia_util'        -> dia_vencimento = k-ésimo dia útil (seg-sex), 1..23
+      //   'ultimo_dia_util' -> dia_vencimento NULL
+      // Feriados fora de escopo; não move dia_fixo que cai no fim de semana.
+      await db.execAsync(`
+        CREATE TABLE IF NOT EXISTS recorrencias (
+          id              TEXT PRIMARY KEY NOT NULL,
+          nome            TEXT NOT NULL,
+          valor           REAL NOT NULL,
+          tipo            TEXT NOT NULL CHECK (tipo IN ('entrada', 'saida')),
+          categoria_id    TEXT,
+          periodicidade   TEXT NOT NULL DEFAULT 'mensal' CHECK (periodicidade IN ('mensal')),
+          tipo_vencimento TEXT NOT NULL CHECK (tipo_vencimento IN ('dia_fixo', 'dia_util', 'ultimo_dia_util')),
+          dia_vencimento  INTEGER,
+          data_inicio     TEXT NOT NULL,
+          data_fim        TEXT,
+          ativa           INTEGER NOT NULL DEFAULT 1 CHECK (ativa IN (0, 1)),
+          criado_em       TEXT NOT NULL DEFAULT (datetime('now')),
+          atualizado_em   TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+      `);
+      await db.execAsync(
+        `CREATE INDEX IF NOT EXISTS idx_recorrencias_ativa ON recorrencias (ativa, tipo);`
+      );
+
+      // OCORRENCIA_PREVISTA — uma instância de uma recorrência num mês
+      // específico. Só ganha linha quando: (a) o usuário ajusta aquele
+      // mês (ex: pular), ou (b) o mês é congelado. Para meses "vivos"
+      // sem ajuste, a ocorrência é gerada dinamicamente e NÃO tem linha
+      // aqui (ver gerarOcorrenciasPrevistas.ts, etapa 4).
+      //
+      // Os campos nome/valor_previsto/tipo/data_prevista/categoria_id
+      // são SNAPSHOT: uma vez a linha criada (sobretudo ao congelar o
+      // mês), alterar/excluir a recorrência NÃO muda o histórico.
+      // recorrencia_id vira NULL (ON DELETE SET NULL) se a regra for
+      // excluída — a linha do mês encerrado permanece intacta.
+      //
+      // O vínculo com a transação real (previsão x transação) NÃO entra
+      // nesta fase — as colunas transacao_id / match_dispensado serão
+      // adicionadas por uma migration futura junto da análise completa
+      // do orçamento.
+      await db.execAsync(`
+        CREATE TABLE IF NOT EXISTS ocorrencia_prevista (
+          id             TEXT PRIMARY KEY NOT NULL,
+          recorrencia_id TEXT REFERENCES recorrencias(id) ON DELETE SET NULL,
+          mes_ano        TEXT NOT NULL,
+          nome           TEXT NOT NULL,
+          valor_previsto REAL NOT NULL,
+          tipo           TEXT NOT NULL CHECK (tipo IN ('entrada', 'saida')),
+          data_prevista  TEXT NOT NULL,
+          categoria_id   TEXT,
+          pulado         INTEGER NOT NULL DEFAULT 0 CHECK (pulado IN (0, 1)),
+          criado_em      TEXT NOT NULL DEFAULT (datetime('now')),
+          UNIQUE (recorrencia_id, mes_ano)
+        );
+      `);
+      await db.execAsync(
+        `CREATE INDEX IF NOT EXISTS idx_ocorrencia_mes ON ocorrencia_prevista (mes_ano);`
+      );
+
+      // ORCAMENTO_MES — controla o congelamento (etapa 5).
+      //   congelado_em NULL     -> marco "mês vivo" (âncora de início de uso)
+      //   congelado_em NOT NULL -> mês encerrado e congelado; leitura só de ocorrencia_prevista
+      await db.execAsync(`
+        CREATE TABLE IF NOT EXISTS orcamento_mes (
+          mes_ano      TEXT PRIMARY KEY NOT NULL,
+          congelado_em TEXT
+        );
+      `);
+    },
+  },
 ];
 
 export async function rodarMigrations(db: SQLiteDatabase): Promise<void> {

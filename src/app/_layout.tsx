@@ -7,6 +7,7 @@ import { TransacoesProvider } from "@/context/TransacoesContext";
 import { NavigationProvider } from "@/context/NavigationContext";
 import { MetasProvider } from "@/context/MetasContext";
 import { CompromissosProvider } from "@/context/CompromissosContext";
+import { RecorrenciasProvider } from "@/context/RecorrenciasContext";
 import { PerfilProvider } from "@/context/PerfilContext";
 
 
@@ -22,7 +23,9 @@ export default function RootLayout() {
           <TransacoesProvider>
             <MetasProvider>
               <CompromissosProvider>
-                <Slot />
+                <RecorrenciasProvider>
+                  <Slot />
+                </RecorrenciasProvider>
               </CompromissosProvider>
             </MetasProvider>
           </TransacoesProvider>

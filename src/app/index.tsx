@@ -11,6 +11,7 @@ import { Perfil } from "../pages/Perfil";
 import { ImportarExtrato } from "../pages/ImportarExtrato";
 import { Agenda } from "../pages/Agenda";
 import { MetasConcluidas } from "../pages/MetasConcluidas";
+import { Recorrencias } from "../pages/Recorrencias";
 import { useNavigation } from "@/context/NavigationContext";
 import { MenuAcaoRapida, Acao } from "@/components/common/MenuAcaoRapida";
 import { NovaTransacaoModal } from "@/components/TransacoesComp/NovaTransacaoModal";
@@ -23,6 +24,7 @@ const Screens = {
   importarExtrato: ImportarExtrato,
   agenda: Agenda,
   metasConcluidas: MetasConcluidas,
+  recorrencias: Recorrencias,
 };
 
 export default function AppIndex() {
@@ -44,7 +46,7 @@ export default function AppIndex() {
   // próprias. "Orçamento" NÃO entra aqui: é uma aba interna do
   // Planejamento (renderizada inline, igual "Metas"), então mantém
   // header + abas + footer visíveis.
-  const TELAS_SEM_FOOTER: (keyof typeof Screens)[] = ["importarExtrato", "agenda", "metasConcluidas"];
+  const TELAS_SEM_FOOTER: (keyof typeof Screens)[] = ["importarExtrato", "agenda", "metasConcluidas", "recorrencias"];
   const mostrarFooter = !TELAS_SEM_FOOTER.includes(activeScreen);
 
   const handlePressAdicionar = useCallback(() => {

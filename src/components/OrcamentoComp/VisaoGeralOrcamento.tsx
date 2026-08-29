@@ -2,11 +2,12 @@ import { colors } from "@/theme/colors";
 import { moderateScale } from "@/utils/scale";
 import { FormatToCurrency } from "@/utils/formatNumber";
 import { Ionicons } from "@expo/vector-icons";
-import { View, Text, Pressable } from "react-native";
+import { View, Text, Pressable, ActivityIndicator } from "react-native";
 import Svg, { Circle } from "react-native-svg";
-import { memo, useMemo } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import { SeletorMesAno } from "@/components/common/SeletorMesAno";
-import { RESUMO_ORCAMENTO_MOCK } from "@/database/orcamentoMock";
+import { obterResumoPrevistoDoMes } from "@/database/orcamentoQueries";
+import { calcularResumoReceitasDespesas } from "@/database/queries";
 
 const RADIUS = 60;
 const STROKE_WIDTH = 18;
@@ -52,29 +53,78 @@ function VisaoGeralOrcamentoBase({ anoExibido, mesExibido, onSelecionarMesAno, o
   const avisoSubtextSize = moderateScale(11);
   const buttonTextSize = moderateScale(12);
 
-  const { receitaPrevista, gastosObrigatorios, gastosVariaveis, disponivel } = RESUMO_ORCAMENTO_MOCK;
+  const [dados, setDados] = useState<{
+    receitasPrevistas: number;
+    despesasPrevistas: number;
+    saldoPrevisto: number;
+    despesasRealizadas: number;
+  } | null>(null);
+  const [carregando, setCarregando] = useState(true);
 
-  const percentualUtilizado = receitaPrevista > 0
-    ? Math.round(((gastosObrigatorios + gastosVariaveis) / receitaPrevista) * 100)
-    : 0;
+  useEffect(() => {
+    let ativo = true;
+
+    async function carregar() {
+      setCarregando(true);
+      try {
+        const mesHumano = mesExibido + 1; // calcularResumoReceitasDespesas espera 1-12
+        const mesAno = `${anoExibido}-${String(mesHumano).padStart(2, "0")}`;
+
+        // Previsto: EXCLUSIVAMENTE de obterResumoPrevistoDoMes (soma sobre
+        // as ocorrências previstas do mês, nunca sobre recorrencias).
+        // Realizado: transações efetivamente lançadas no mês.
+        const [previsto, realizado] = await Promise.all([
+          obterResumoPrevistoDoMes(mesAno),
+          calcularResumoReceitasDespesas(anoExibido, mesHumano),
+        ]);
+
+        if (!ativo) return;
+
+        setDados({
+          receitasPrevistas: previsto.receitasPrevistas,
+          despesasPrevistas: previsto.despesasPrevistas,
+          saldoPrevisto: previsto.saldoPrevisto,
+          despesasRealizadas: realizado.despesasMesAtual,
+        });
+      } finally {
+        if (ativo) setCarregando(false);
+      }
+    }
+
+    carregar();
+
+    return () => {
+      ativo = false;
+    };
+  }, [anoExibido, mesExibido]);
+
+  const receitaPrevista = dados?.receitasPrevistas ?? 0;
+  const despesaPrevista = dados?.despesasPrevistas ?? 0;
+  const despesaRealizada = dados?.despesasRealizadas ?? 0;
+  const disponivelPrevisto = Math.max(0, dados?.saldoPrevisto ?? 0);
+
+  const percentualDaReceita = (valor: number) =>
+    receitaPrevista > 0 ? Math.round((valor / receitaPrevista) * 100) : 0;
+
+  const percentualUtilizado = percentualDaReceita(despesaPrevista);
 
   const fatias: FatiaResumo[] = [
     {
-      label: "Gastos obrigatórios",
-      valor: gastosObrigatorios,
-      percentual: receitaPrevista > 0 ? (gastosObrigatorios / receitaPrevista) * 100 : 0,
+      label: "Despesa prevista",
+      valor: despesaPrevista,
+      percentual: receitaPrevista > 0 ? (despesaPrevista / receitaPrevista) * 100 : 0,
       cor: colors["sucess-color"],
     },
     {
-      label: "Gastos variáveis",
-      valor: gastosVariaveis,
-      percentual: receitaPrevista > 0 ? (gastosVariaveis / receitaPrevista) * 100 : 0,
+      label: "Despesa realizada",
+      valor: despesaRealizada,
+      percentual: receitaPrevista > 0 ? (despesaRealizada / receitaPrevista) * 100 : 0,
       cor: colors["error-color"],
     },
     {
-      label: "Disponível",
-      valor: disponivel,
-      percentual: receitaPrevista > 0 ? (disponivel / receitaPrevista) * 100 : 0,
+      label: "Disponível previsto",
+      valor: disponivelPrevisto,
+      percentual: receitaPrevista > 0 ? (disponivelPrevisto / receitaPrevista) * 100 : 0,
       cor: colors["desactived-text"],
     },
   ];
@@ -90,6 +140,12 @@ function VisaoGeralOrcamentoBase({ anoExibido, mesExibido, onSelecionarMesAno, o
         <SeletorMesAno ano={anoExibido} mes={mesExibido} onSelecionar={onSelecionarMesAno} alinhamento="direita" />
       </View>
 
+      {carregando ? (
+        <View className="items-center py-10">
+          <ActivityIndicator color={colors["active-icon"]} />
+        </View>
+      ) : (
+      <>
       <View className="flex-row items-center gap-5">
         {/* DONUT */}
         <View style={{ width: DONUT_SIZE, height: DONUT_SIZE }} className="items-center justify-center flex-shrink-0">
@@ -124,10 +180,10 @@ function VisaoGeralOrcamentoBase({ anoExibido, mesExibido, onSelecionarMesAno, o
 
           <View className="absolute items-center justify-center px-1">
             <Text style={{ fontSize: centerValueSize }} className="text-main-text font-Inter-Bold" numberOfLines={1}>
-              {FormatToCurrency(gastosObrigatorios + gastosVariaveis)}
+              {FormatToCurrency(despesaPrevista)}
             </Text>
             <Text style={{ fontSize: centerLabelSize }} className="text-desactived-text mb-1">
-              Utilizado
+              Despesa prevista
             </Text>
             <Text style={{ fontSize: centerPercentSize }} className="text-main-text font-Inter-SemiBold">
               {percentualUtilizado}%
@@ -148,27 +204,27 @@ function VisaoGeralOrcamentoBase({ anoExibido, mesExibido, onSelecionarMesAno, o
           />
           <LegendaLinha
             cor={colors["sucess-color"]}
-            label="Gastos obrigatórios"
-            valor={gastosObrigatorios}
-            percentual={Math.round((gastosObrigatorios / receitaPrevista) * 100)}
+            label="Despesa prevista"
+            valor={despesaPrevista}
+            percentual={percentualDaReceita(despesaPrevista)}
             labelSize={legendLabelSize}
             valueSize={legendValueSize}
             percentSize={legendPercentSize}
           />
           <LegendaLinha
             cor={colors["error-color"]}
-            label="Gastos variáveis"
-            valor={gastosVariaveis}
-            percentual={Math.round((gastosVariaveis / receitaPrevista) * 100)}
+            label="Despesa realizada"
+            valor={despesaRealizada}
+            percentual={percentualDaReceita(despesaRealizada)}
             labelSize={legendLabelSize}
             valueSize={legendValueSize}
             percentSize={legendPercentSize}
           />
           <LegendaLinha
             cor={colors["desactived-text"]}
-            label="Disponível"
-            valor={disponivel}
-            percentual={Math.round((disponivel / receitaPrevista) * 100)}
+            label="Disponível previsto"
+            valor={disponivelPrevisto}
+            percentual={percentualDaReceita(disponivelPrevisto)}
             labelSize={legendLabelSize}
             valueSize={legendValueSize}
             percentSize={legendPercentSize}
@@ -184,10 +240,10 @@ function VisaoGeralOrcamentoBase({ anoExibido, mesExibido, onSelecionarMesAno, o
 
         <View className="flex-1">
           <Text style={{ fontSize: avisoTextSize }} className="text-main-text" numberOfLines={2}>
-            Você ainda tem <Text className="text-active-icon font-Inter-SemiBold">{FormatToCurrency(disponivel)} disponíveis</Text>
+            Disponível previsto: <Text className="text-active-icon font-Inter-SemiBold">{FormatToCurrency(disponivelPrevisto)}</Text>
           </Text>
           <Text style={{ fontSize: avisoSubtextSize }} className="text-second-text mt-0.5">
-            Mantenha o foco e continue assim!
+            Receita prevista menos despesa prevista do mês.
           </Text>
         </View>
 
@@ -202,6 +258,8 @@ function VisaoGeralOrcamentoBase({ anoExibido, mesExibido, onSelecionarMesAno, o
           </Text>
         </Pressable>
       </View>
+      </>
+      )}
     </View>
   );
 }

@@ -10,7 +10,8 @@ export type ScreenType =
   | "user"
   | "importarExtrato"
   | "agenda"
-  | "metasConcluidas";
+  | "metasConcluidas"
+  | "recorrencias";
 
 type NavigationContextValue = {
   activeScreen: ScreenType;

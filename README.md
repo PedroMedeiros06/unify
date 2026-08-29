@@ -1,56 +1,90 @@
-# Welcome to your Expo app 👋
+# Unify
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Aplicativo de **organização e visualização da vida financeira** — pessoal, local e em português.
 
-## Get started
+O Unify **não é um banco** e **não movimenta dinheiro**. Ele não cria transações
+por conta própria: tudo o que aparece como "realizado" vem exclusivamente de
+transações reais que o usuário registrou ou importou. O papel do app é reunir,
+categorizar, planejar e comparar — não executar operações financeiras.
 
-1. Install dependencies
+## O que o app faz
 
-   ```bash
-   npm install
-   ```
+- **Transações** — registro manual e importação de extratos (CSV de Nubank, Inter,
+  Banco do Brasil), com categorização automática que aprende com as correções do
+  usuário.
+- **Planejamento** — visão geral do mês (receitas, despesas e saldo projetado).
+- **Metas** — objetivos financeiros cujo progresso é derivado de transações reais
+  vinculadas manualmente pelo usuário (nunca por heurística).
+- **Compromissos** — contas e prazos futuros. Um compromisso só fica "pago"
+  quando existe uma transação real vinculada a ele; marcar como pago é
+  **selecionar uma transação existente**, não criar uma nova.
+- **Agenda** — calendário mensal com compromissos, boletos e prazos de metas.
+- **Orçamento** — camada de previsão e reconciliação (ver abaixo).
 
-2. Start the app
+## Módulo de Orçamento
 
-   ```bash
-   npx expo start
-   ```
+O Orçamento é uma camada de **previsão × realizado**, não um limite de gastos.
 
-In the output, you'll find options to open the app in a
+- **Recorrência** — regra de planejamento (uma receita ou despesa que costuma
+  acontecer todo mês). Não é uma transação.
+- **Ocorrência prevista** — a instância de uma recorrência num mês específico.
+  Continua sendo planejamento; guarda um *snapshot* para que meses encerrados
+  não sejam afetados por mudanças posteriores na recorrência.
+- **Congelamento** — a partir da âncora de início de uso, todo mês já encerrado
+  tem suas ocorrências materializadas e é marcado como congelado. Depois disso a
+  leitura usa exclusivamente os snapshots.
+- **Realizado** — vem apenas das transações reais do mês.
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+Limites por categoria, correspondência automática previsão × transação e a
+análise detalhada são de fases seguintes.
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+## Stack
 
-## Get a fresh project
+- [Expo](https://expo.dev) (~57) / React Native 0.86 / React 19
+- `expo-router` (usado só como `<Slot />` — a navegação entre telas é própria,
+  em `src/context/NavigationContext.tsx`)
+- NativeWind v5 + Tailwind v4 (tema escuro; tokens em `src/global.css` /
+  `src/theme/colors.ts`)
+- `expo-sqlite` com sistema de *migrations* versionadas
+  (`src/database/migrations.ts`, `PRAGMA user_version`, append-only)
+- `react-native-svg` para gráficos
 
-When you're ready, run:
+### Organização do código
+
+- `src/pages/` — telas
+- `src/components/<Dominio>Comp/` — componentes por domínio
+- `src/context/` — um Provider por domínio (transações, metas, compromissos,
+  recorrências, perfil, navegação), com CRUD + `recarregar`
+- `src/database/` — uma camada de *queries* por domínio; toda operação de banco
+  passa por `executarNaFila()` (fila serializada, evita chamadas concorrentes ao
+  SQLite nativo)
+- `src/utils/` — datas (ISO `aaaa-mm-dd` internamente), formatação de moeda,
+  escala de fontes
+
+Categorias são uma lista fixa de 11 slugs em `src/database/categorias.ts` —
+único lugar a editar para adicionar/renomear/reordenar.
+
+## Rodando
 
 ```bash
-npm run reset-project
+npm install
+npx expo start
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+No output do Expo, escolha Android emulator, iOS simulator ou Expo Go.
 
-### Other setup steps
+Lint:
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+```bash
+npm run lint
+```
 
-## Learn more
+## Versionamento
 
-To learn more about developing your project with Expo, look at the following resources:
+SemVer `vX.Y.Z`. App ainda não lançado, então segue a série `0.y.z`:
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+- `Y` (minor) — marco de funcionalidade / etapa concluída
+- `Z` (patch) — correções dentro de uma etapa
 
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+Cada versão é um commit com prefixo `vX.Y.Z:` no assunto, uma tag anotada e o
+`package.json` acompanhando.
