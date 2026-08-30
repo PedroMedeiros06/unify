@@ -20,6 +20,17 @@ function limitesDoMes(ano: number, mes: number): { inicio: string; fim: string }
   return { inicio: paraIso(ano, mes, 1), fim: paraIso(ano, mes, ultimoDia) };
 }
 
+/**
+ * Ao trocar de mês, mantém o mesmo dia do mês selecionado (ex: dia 7 de
+ * setembro -> dia 7 de outubro). Se o mês de destino não tem esse dia
+ * (ex: 31 -> fevereiro), cai no último dia do mês.
+ */
+function moverDiaSelecionadoParaMes(dataSelecionadaIso: string, anoAlvo: number, mesAlvo: number): string {
+  const diaAtual = Number(dataSelecionadaIso.slice(8, 10));
+  const ultimoDiaDoMesAlvo = new Date(anoAlvo, mesAlvo + 1, 0).getDate();
+  return paraIso(anoAlvo, mesAlvo, Math.min(diaAtual, ultimoDiaDoMesAlvo));
+}
+
 export function Agenda() {
   const { goBack } = useNavigation();
 
@@ -93,6 +104,7 @@ export function Agenda() {
       }
 
       setAnoExibido(novoAno);
+      setDataSelecionadaIso((dataAtual) => moverDiaSelecionadoParaMes(dataAtual, novoAno, novoMes));
       return novoMes;
     });
   }, [anoExibido]);
@@ -102,6 +114,7 @@ export function Agenda() {
   const handleSelecionarMesAno = useCallback((anoAlvo: number, mesAlvo: number) => {
     setAnoExibido(anoAlvo);
     setMesExibido(mesAlvo);
+    setDataSelecionadaIso((dataAtual) => moverDiaSelecionadoParaMes(dataAtual, anoAlvo, mesAlvo));
   }, []);
 
   const handleIrParaHoje = useCallback(() => {

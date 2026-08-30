@@ -14,7 +14,8 @@ categorizar, planejar e comparar — não executar operações financeiras.
   usuário.
 - **Planejamento** — visão geral do mês (receitas, despesas e saldo projetado).
 - **Metas** — objetivos financeiros cujo progresso é derivado de transações reais
-  vinculadas manualmente pelo usuário (nunca por heurística).
+  vinculadas manualmente pelo usuário (nunca por heurística). Tela separada de
+  metas já concluídas (progresso ≥ valor objetivo).
 - **Compromissos** — contas e prazos futuros. Um compromisso só fica "pago"
   quando existe uma transação real vinculada a ele; marcar como pago é
   **selecionar uma transação existente**, não criar uma nova.
@@ -45,9 +46,15 @@ O Orçamento é uma camada de **previsão × realizado**, não um limite de gast
   e por mês** (histórico: alterar o limite de um mês não afeta os outros). É só
   acompanhamento — nunca bloqueia uma transação. O card mostra apenas as
   categorias para as quais o usuário definiu um limite.
+- **Análise** — sempre referente ao **mês anterior** (mês fechado): receita
+  prevista × realizada e despesa prevista × realizada, cada uma com a variação
+  percentual, mais a categoria de maior gasto do mês.
+- **Dicas** — conteúdo fixo de educação financeira (regra 50/30/20, orçamento
+  base zero, pagar-se primeiro, reserva de emergência, etc.), não derivado dos
+  dados do usuário.
 
-Correspondência automática previsão × transação e a análise detalhada são de
-fases seguintes.
+Correspondência automática previsão × transação e as dicas personalizadas (com
+base nos gastos reais do usuário) são de fases seguintes.
 
 ## Stack
 
