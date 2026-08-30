@@ -72,7 +72,10 @@ export function ThemeProvider({
   name: keyof typeof themes;
   children: React.ReactNode;
 }) {
-  const colorScheme = useColorScheme() ?? "light";
+  // useColorScheme() é "light" | "dark" | null | undefined; todo tema em
+  // `themes` define exatamente as chaves "light" e "dark", então
+  // qualquer coisa diferente de "dark" cai em "light".
+  const colorScheme: "light" | "dark" = useColorScheme() === "dark" ? "dark" : "light";
 
   return (
     <VariableContextProvider value={themes[name][colorScheme]}>

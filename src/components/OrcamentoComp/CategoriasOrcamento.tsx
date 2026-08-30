@@ -3,20 +3,22 @@ import { moderateScale } from "@/utils/scale";
 import { FormatToCurrency } from "@/utils/formatNumber";
 import { Ionicons } from "@expo/vector-icons";
 import { View, Text, Pressable, ActivityIndicator } from "react-native";
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
-import { CategoriaId, obterCategoriaPorId } from "@/database/categorias";
+import { memo, useEffect, useMemo, useState } from "react";
+import { obterCategoriaPorId } from "@/database/categorias";
 import { listarResumoPorCategoria } from "@/database/queries";
 import {
   LimiteCategoria,
   calcularPercentualLimite,
 } from "@/database/limitesCategoriaQueries";
 import { useLimitesOrcamento } from "@/context/LimitesOrcamentoContext";
-import { DefinirLimiteCategoriaModal } from "@/components/OrcamentoComp/DefinirLimiteCategoriaModal";
 
 type Props = {
   anoExibido: number;
   mesExibido: number; // 0-11
-  onSelecionarCategoria?: (limite: LimiteCategoria) => void;
+  // O modal de definir/editar limite vive no OrcamentoResumo (pai),
+  // porque a Visão geral também o abre. Este card só dispara.
+  onAbrirNovoLimite: () => void;
+  onEditarLimite: (limite: LimiteCategoria) => void;
 };
 
 function paraIso(ano: number, mes0a11: number, dia: number): string {
@@ -100,13 +102,12 @@ const ItemLimite = memo(function ItemLimite({
   );
 });
 
-function CategoriasOrcamentoBase({ anoExibido, mesExibido, onSelecionarCategoria }: Props) {
+function CategoriasOrcamentoBase({ anoExibido, mesExibido, onAbrirNovoLimite, onEditarLimite }: Props) {
   const cardTitleSize = moderateScale(15);
   const actionTextSize = moderateScale(12);
   const emptySize = moderateScale(12);
 
-  const { mesAno, limites, carregando, definirMesExibido, adicionarLimite, editarLimite, removerLimite } =
-    useLimitesOrcamento();
+  const { limites, carregando, definirMesExibido } = useLimitesOrcamento();
 
   // Mantém o contexto de limites apontando para o mês exibido no card.
   const mesAnoExibido = useMemo(
@@ -148,41 +149,6 @@ function CategoriasOrcamentoBase({ anoExibido, mesExibido, onSelecionarCategoria
     };
   }, [anoExibido, mesExibido]);
 
-  const [modalAberto, setModalAberto] = useState(false);
-  const [limiteEditando, setLimiteEditando] = useState<LimiteCategoria | null>(null);
-
-  const categoriasComLimite = useMemo(() => limites.map((l) => l.categoriaId), [limites]);
-
-  const handleAbrirNovo = useCallback(() => {
-    setLimiteEditando(null);
-    setModalAberto(true);
-  }, []);
-
-  const handlePressItem = useCallback(
-    (limite: LimiteCategoria) => {
-      setLimiteEditando(limite);
-      setModalAberto(true);
-      onSelecionarCategoria?.(limite);
-    },
-    [onSelecionarCategoria]
-  );
-
-  const handleFechar = useCallback(() => {
-    setModalAberto(false);
-    setLimiteEditando(null);
-  }, []);
-
-  const handleSalvar = useCallback(
-    async (categoriaId: CategoriaId, valorLimite: number) => {
-      if (limiteEditando) {
-        await editarLimite(categoriaId, valorLimite);
-      } else {
-        await adicionarLimite(categoriaId, valorLimite);
-      }
-    },
-    [limiteEditando, adicionarLimite, editarLimite]
-  );
-
   const ocupado = carregando || carregandoGasto;
 
   return (
@@ -192,7 +158,7 @@ function CategoriasOrcamentoBase({ anoExibido, mesExibido, onSelecionarCategoria
           Categorias do orçamento
         </Text>
         <Pressable
-          onPress={handleAbrirNovo}
+          onPress={onAbrirNovoLimite}
           hitSlop={8}
           accessibilityRole="button"
           accessibilityLabel="Adicionar limite de categoria"
@@ -223,20 +189,10 @@ function CategoriasOrcamentoBase({ anoExibido, mesExibido, onSelecionarCategoria
             limite={limite}
             gasto={gastoPorCategoria.get(limite.categoriaId) ?? 0}
             isLast={index === limites.length - 1}
-            onPress={handlePressItem}
+            onPress={onEditarLimite}
           />
         ))
       )}
-
-      <DefinirLimiteCategoriaModal
-        visivel={modalAberto}
-        mesAno={mesAno}
-        limiteEditando={limiteEditando}
-        categoriasComLimite={categoriasComLimite}
-        onFechar={handleFechar}
-        onSalvar={handleSalvar}
-        onExcluir={removerLimite}
-      />
     </View>
   );
 }

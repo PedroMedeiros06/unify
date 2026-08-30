@@ -62,6 +62,8 @@ function NovaTransferenciaBase() {
         bancoId: CONTA_ORIGEM.id,
         status: "concluida",
         categoriaIcone: "swap-horizontal-outline",
+        // Transferência entre contas não entra numa categoria de gasto.
+        categoriaId: null,
       });
 
       setDestinatario("");

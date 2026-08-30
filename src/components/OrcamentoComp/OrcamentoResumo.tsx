@@ -6,10 +6,14 @@ import { colors } from "@/theme/colors";
 import { moderateScale } from "@/utils/scale";
 import { dataHojeIso } from "@/utils/dateUtils";
 import { useNavigation } from "@/context/NavigationContext";
+import { CategoriaId } from "@/database/categorias";
+import { LimiteCategoria } from "@/database/limitesCategoriaQueries";
+import { useLimitesOrcamento } from "@/context/LimitesOrcamentoContext";
 import { VisaoGeralOrcamento } from "@/components/OrcamentoComp/VisaoGeralOrcamento";
 import { CategoriasOrcamento } from "@/components/OrcamentoComp/CategoriasOrcamento";
 import { AnaliseOrcamento } from "@/components/OrcamentoComp/AnaliseOrcamento";
 import { DicasOrcamento } from "@/components/OrcamentoComp/DicasOrcamento";
+import { DefinirLimiteCategoriaModal } from "@/components/OrcamentoComp/DefinirLimiteCategoriaModal";
 
 /**
  * Painel da aba "Orçamento" do Planejamento.
@@ -21,11 +25,11 @@ import { DicasOrcamento } from "@/components/OrcamentoComp/DicasOrcamento";
  * voltar — tudo isso já vem do Planejamento (header "Planejamento" +
  * PlanejamentoTabs + footer continuam visíveis).
  *
- * O card "Visão geral" (VisaoGeralOrcamento) já lê dados reais: previsto
- * via obterResumoPrevistoDoMes, realizado via calcularResumoReceitasDespesas.
- * Categorias, análise e dicas ainda são mockadas (ver
- * src/database/orcamentoMock.ts) — limites por categoria, economia/maior
- * gasto e correspondência com transações são de fases seguintes.
+ * Todos os cards já leem dados reais: previsão via obterResumoPrevistoDoMes,
+ * realizado via calcularResumoReceitasDespesas / listarResumoPorCategoria,
+ * limites via LimitesOrcamentoContext. As dicas são conteúdo fixo de
+ * educação financeira. A correspondência automática previsão × transação
+ * é de uma fase seguinte.
  */
 function OrcamentoResumoBase() {
   // Mês/ano exibido no card de Visão geral — começa no mês corrente e é
@@ -38,6 +42,15 @@ function OrcamentoResumoBase() {
 
   const { navigate } = useNavigation();
 
+  // Modal de limite de categoria vive AQUI (não dentro de
+  // CategoriasOrcamento) porque dois cards o abrem: o próprio card de
+  // categorias e o botão "Definir limite" da Visão geral (donut).
+  const { mesAno, limites, adicionarLimite, editarLimite, removerLimite } = useLimitesOrcamento();
+  const [modalLimiteAberto, setModalLimiteAberto] = useState(false);
+  const [limiteEditando, setLimiteEditando] = useState<LimiteCategoria | null>(null);
+
+  const categoriasComLimite = useMemo(() => limites.map((l) => l.categoriaId), [limites]);
+
   const handleSelecionarMesAno = useCallback((ano: number, mes: number) => {
     setAnoExibido(ano);
     setMesExibido(mes);
@@ -46,6 +59,32 @@ function OrcamentoResumoBase() {
   const handleAbrirRecorrencias = useCallback(() => {
     navigate("recorrencias");
   }, [navigate]);
+
+  const handleAbrirNovoLimite = useCallback(() => {
+    setLimiteEditando(null);
+    setModalLimiteAberto(true);
+  }, []);
+
+  const handleEditarLimite = useCallback((limite: LimiteCategoria) => {
+    setLimiteEditando(limite);
+    setModalLimiteAberto(true);
+  }, []);
+
+  const handleFecharModalLimite = useCallback(() => {
+    setModalLimiteAberto(false);
+    setLimiteEditando(null);
+  }, []);
+
+  const handleSalvarLimite = useCallback(
+    async (categoriaId: CategoriaId, valorLimite: number) => {
+      if (limiteEditando) {
+        await editarLimite(categoriaId, valorLimite);
+      } else {
+        await adicionarLimite(categoriaId, valorLimite);
+      }
+    },
+    [limiteEditando, adicionarLimite, editarLimite]
+  );
 
   return (
     <View className="flex-col gap-4">
@@ -73,13 +112,29 @@ function OrcamentoResumoBase() {
         anoExibido={anoExibido}
         mesExibido={mesExibido}
         onSelecionarMesAno={handleSelecionarMesAno}
+        onDefinirLimite={handleAbrirNovoLimite}
       />
 
-      <CategoriasOrcamento anoExibido={anoExibido} mesExibido={mesExibido} />
+      <CategoriasOrcamento
+        anoExibido={anoExibido}
+        mesExibido={mesExibido}
+        onAbrirNovoLimite={handleAbrirNovoLimite}
+        onEditarLimite={handleEditarLimite}
+      />
 
-      <AnaliseOrcamento />
+      <AnaliseOrcamento anoExibido={anoExibido} mesExibido={mesExibido} />
 
       <DicasOrcamento />
+
+      <DefinirLimiteCategoriaModal
+        visivel={modalLimiteAberto}
+        mesAno={mesAno}
+        limiteEditando={limiteEditando}
+        categoriasComLimite={categoriasComLimite}
+        onFechar={handleFecharModalLimite}
+        onSalvar={handleSalvarLimite}
+        onExcluir={removerLimite}
+      />
     </View>
   );
 }

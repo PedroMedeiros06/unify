@@ -2,167 +2,119 @@ import { moderateScale } from "@/utils/scale";
 import { FormatToCurrency } from "@/utils/formatNumber";
 import { Ionicons } from "@expo/vector-icons";
 import { colors } from "@/theme/colors";
-import { View, Text, Pressable } from "react-native";
-import { memo, useCallback, useMemo, useState } from "react";
+import { ScrollView, View, Text, Pressable } from "react-native";
+import { memo, useMemo } from "react";
+import { useNavigation } from "@/context/NavigationContext";
 import { useMetas } from "@/context/MetasContext";
-import { Meta, CamposMeta, calcularPercentualMeta, metaEstaConcluida } from "@/database/metasQueries";
-import { EditarMetaModal } from "@/components/PlanejamentoComp/EditarMetaModal";
+import { Meta, metaEstaConcluida } from "@/database/metasQueries";
 import { MetasSkeleton } from "@/components/common/MetasSkeleton";
 
-const MAX_METAS_EXIBIDAS = 3;
-
-type Props = {
-  // Chamado quando o usuário toca em "Ver todas" — troca a aba ativa
-  // do Planejamento para "Metas" (MinhasMetas), que é onde a lista
-  // completa de fato vive. Este componente não navega para nenhuma
-  // tela própria: ele é renderizado dentro da aba Resumo do próprio
-  // Planejamento, então mudar de aba é responsabilidade do pai, que
-  // controla `activeTab`.
-  onVerTodas: () => void;
-};
-
-const MetaItem = memo(function MetaItem({ meta, onLongPress }: { meta: Meta; onLongPress: (meta: Meta) => void }) {
-  const metaTitleSize = moderateScale(13);
-  const metaSubtitleSize = moderateScale(10);
-  const valueSize = moderateScale(12);
-
-  const percentual = calcularPercentualMeta(meta);
+/**
+ * Tela "Metas concluídas" — lista somente as metas cujo progresso já
+ * atingiu o valor objetivo (metaEstaConcluida). É uma tela separada,
+ * sem footer, acessada a partir do card "Minhas metas". "Concluída" é
+ * sempre calculado de progressoAtual/valorMeta, nunca um campo no
+ * banco.
+ */
+const MetaConcluidaItem = memo(function MetaConcluidaItem({ meta }: { meta: Meta }) {
+  const tituloSize = moderateScale(13);
+  const subtituloSize = moderateScale(10);
+  const valorSize = moderateScale(12);
 
   return (
-    <Pressable
-      onLongPress={() => onLongPress(meta)}
-      delayLongPress={350}
-      className="bg-input-background border border-lines-divisions rounded-xl p-3 active:opacity-70"
-      accessibilityRole="button"
-      accessibilityLabel={`${meta.nome}, toque e segure para editar`}
-    >
-      <View className="flex-row items-center gap-2.5 mb-2.5">
+    <View className="bg-input-background border border-lines-divisions rounded-xl p-3">
+      <View className="flex-row items-center gap-2.5">
         <View
           style={{ width: 34, height: 34, backgroundColor: `${meta.cor}22` }}
-          className="rounded-full items-center justify-center"
+          className="rounded-full items-center justify-center flex-shrink-0"
         >
           <Ionicons name={meta.icone as keyof typeof Ionicons.glyphMap} color={meta.cor} size={16} />
         </View>
         <View className="flex-1">
-          <Text style={{ fontSize: metaTitleSize }} className="text-main-text font-Inter-Medium" numberOfLines={1}>
+          <Text style={{ fontSize: tituloSize }} className="text-main-text font-Inter-Medium" numberOfLines={1}>
             {meta.nome}
           </Text>
-          <Text style={{ fontSize: metaSubtitleSize }} className="text-desactived-text" numberOfLines={1}>
+          <Text style={{ fontSize: subtituloSize }} className="text-desactived-text" numberOfLines={1}>
             Meta de {FormatToCurrency(meta.valorMeta)}
           </Text>
         </View>
+        <View className="flex-row items-center gap-1 flex-shrink-0">
+          <Ionicons name="checkmark-circle" color={colors["sucess-color"]} size={16} />
+          <Text style={{ fontSize: valorSize }} className="text-sucess-color font-Inter-Medium">
+            Concluída
+          </Text>
+        </View>
       </View>
-
-      <View className="h-1.5 bg-lines-divisions rounded-full overflow-hidden mb-1.5">
-        <View style={{ width: `${percentual}%`, backgroundColor: meta.cor }} className="h-full rounded-full" />
-      </View>
-
-      <Text style={{ fontSize: valueSize }} className="text-main-text font-Inter-Medium" numberOfLines={1}>
-        {FormatToCurrency(meta.progressoAtual)}
-        <Text className="text-desactived-text font-Inter-Regular"> · {percentual}% concluído</Text>
-      </Text>
-    </Pressable>
+    </View>
   );
 });
 
-function MetasFinanceirasBase({ onVerTodas }: Props) {
-  const cardTitleSize = moderateScale(15);
-  const actionTextSize = moderateScale(12);
-  const { metas, carregando, adicionarMeta, editarMeta, removerMeta } = useMetas();
+export function MetasConcluidas() {
+  const { goBack } = useNavigation();
+  const { metas, carregando } = useMetas();
 
-  const [modalVisivel, setModalVisivel] = useState(false);
-  const [metaEditando, setMetaEditando] = useState<Meta | null>(null);
+  const titleSize = moderateScale(22);
+  const subtitleSize = moderateScale(12);
 
-  // Mostra no máximo 3 metas: as que estão mais perto de concluir
-  // (maior % de progresso) primeiro. Se NENHUMA meta em andamento tem
-  // progresso (todas em 0%), não faz sentido ordenar por % — nesse
-  // caso caímos para as criadas mais recentemente, que é o único
-  // critério que ainda diz algo útil sobre "o que priorizar agora".
-  const metasExibidas = useMemo(() => {
-    const emAndamento = metas.filter((m) => !metaEstaConcluida(m));
-    const algumaComProgresso = emAndamento.some((m) => m.progressoAtual > 0);
-
-    const ordenadas = algumaComProgresso
-      ? [...emAndamento].sort((a, b) => calcularPercentualMeta(b) - calcularPercentualMeta(a))
-      : [...emAndamento].sort((a, b) => b.criadoEm.localeCompare(a.criadoEm));
-
-    return ordenadas.slice(0, MAX_METAS_EXIBIDAS);
-  }, [metas]);
-
-  const handleAbrirNova = useCallback(() => {
-    setMetaEditando(null);
-    setModalVisivel(true);
-  }, []);
-
-  const handleLongPress = useCallback((meta: Meta) => {
-    setMetaEditando(meta);
-    setModalVisivel(true);
-  }, []);
-
-  const handleFechar = useCallback(() => {
-    setModalVisivel(false);
-    setMetaEditando(null);
-  }, []);
-
-  const handleSalvar = useCallback(
-    async (id: string | null, campos: CamposMeta) => {
-      if (id) {
-        await editarMeta(id, campos);
-      } else {
-        await adicionarMeta(campos);
-      }
-    },
-    [adicionarMeta, editarMeta]
+  const metasConcluidas = useMemo(
+    () =>
+      metas
+        .filter(metaEstaConcluida)
+        // Mais recentes primeiro — não há data de conclusão no schema,
+        // então a data de criação é o único critério estável.
+        .sort((a, b) => b.criadoEm.localeCompare(a.criadoEm)),
+    [metas]
   );
-
-  if (carregando) {
-    return <MetasSkeleton />;
-  }
 
   return (
-    <View className="bg-card-background border border-lines-divisions rounded-xl p-4">
-      <View className="flex-row justify-between items-center mb-3">
-        <Text style={{ fontSize: cardTitleSize }} className="text-main-text font-Inter-Medium">
-          Metas financeiras
-        </Text>
-        <View className="flex-row items-center gap-3">
-          {metas.length > 0 && (
-            <Pressable onPress={onVerTodas} hitSlop={8} accessibilityRole="button" accessibilityLabel="Ver todas as metas">
-              <Text style={{ fontSize: actionTextSize }} className="text-active-icon font-Inter-Medium">
-                Ver todas
-              </Text>
-            </Pressable>
-          )}
-          <Pressable onPress={handleAbrirNova} hitSlop={10} accessibilityRole="button" accessibilityLabel="Adicionar meta">
-            <Ionicons name="add-circle-outline" color={colors["active-icon"]} size={20} />
+    <ScrollView
+      className="flex-1"
+      showsVerticalScrollIndicator={false}
+      contentContainerStyle={{ paddingBottom: 100 }}
+    >
+      <View className="flex-col gap-4">
+        {/* HEADER */}
+        <View className="w-full flex-row items-center gap-3">
+          <Pressable
+            onPress={goBack}
+            className="w-9 h-9 rounded-full bg-input-background border border-input-border items-center justify-center active:opacity-70"
+            accessibilityRole="button"
+            accessibilityLabel="Voltar"
+            hitSlop={8}
+          >
+            <Ionicons name="arrow-back" color={colors["main-text"]} size={18} />
           </Pressable>
+
+          <View className="flex-1">
+            <Text
+              style={{ fontSize: titleSize, letterSpacing: titleSize * -0.03 }}
+              className="text-main-text font-Inter-SemiBold"
+            >
+              Metas concluídas
+            </Text>
+            <Text style={{ fontSize: subtitleSize }} className="text-second-text mt-1">
+              Objetivos que já atingiram o valor planejado.
+            </Text>
+          </View>
         </View>
+
+        {carregando ? (
+          <MetasSkeleton />
+        ) : metasConcluidas.length === 0 ? (
+          <View className="bg-card-background border border-lines-divisions rounded-xl items-center py-10 px-4">
+            <Ionicons name="trophy-outline" color={colors["desactived-text"]} size={28} />
+            <Text style={{ fontSize: moderateScale(12) }} className="text-desactived-text text-center mt-2">
+              Nenhuma meta concluída ainda. Continue registrando transações vinculadas às suas metas.
+            </Text>
+          </View>
+        ) : (
+          <View className="gap-2.5">
+            {metasConcluidas.map((meta) => (
+              <MetaConcluidaItem key={meta.id} meta={meta} />
+            ))}
+          </View>
+        )}
       </View>
-
-      {metasExibidas.length === 0 ? (
-        <View className="items-center py-6">
-          <Ionicons name="flag-outline" color={colors["desactived-text"]} size={26} />
-          <Text style={{ fontSize: moderateScale(12) }} className="text-desactived-text text-center mt-2">
-            Nenhuma meta criada ainda. Toque no + para começar.
-          </Text>
-        </View>
-      ) : (
-        <View className="gap-2.5">
-          {metasExibidas.map((meta) => (
-            <MetaItem key={meta.id} meta={meta} onLongPress={handleLongPress} />
-          ))}
-        </View>
-      )}
-
-      <EditarMetaModal
-        visivel={modalVisivel}
-        metaEditando={metaEditando}
-        onFechar={handleFechar}
-        onSalvar={handleSalvar}
-        onExcluir={removerMeta}
-      />
-    </View>
+    </ScrollView>
   );
 }
-
-export const MetasFinanceiras = memo(MetasFinanceirasBase);
