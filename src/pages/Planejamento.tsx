@@ -128,7 +128,7 @@ export function Planejamento() {
             <VisaoGeralMes />
             <DistribuicaoOrcamento filtrosParaQuery={filtrosParaQuery} />
             <MetasFinanceiras />
-            <OrcamentoMensal />
+            <OrcamentoMensal onEditarOrcamento={() => setActiveTab("Orçamento")} />
             <ProximosCompromissos />
           </View>
         )}

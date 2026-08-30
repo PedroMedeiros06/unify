@@ -36,9 +36,9 @@ export function Agenda() {
   const [eventosDoMes, setEventosDoMes] = useState<EventoAgenda[]>([]);
   const [carregandoMes, setCarregandoMes] = useState(true);
 
-  // Próximos eventos olham um horizonte fixo de 90 dias a partir de
-  // hoje, independente do mês que está sendo navegado no calendário —
-  // é uma visão "o que vem por aí", não amarrada à navegação visual.
+  // Próximos eventos olham um horizonte de 90 dias a partir do DIA
+  // SELECIONADO no calendário — "o que vem a partir daqui". Trocar o dia
+  // selecionado recarrega essa lista e recalcula os prazos.
   const [eventosFuturos, setEventosFuturos] = useState<EventoAgenda[]>([]);
 
   const carregarEventosDoMes = useCallback(async (anoAlvo: number, mesAlvo: number) => {
@@ -60,11 +60,12 @@ export function Agenda() {
     let ativo = true;
 
     async function carregarFuturos() {
-      const daqui90Dias = new Date();
+      const [ano, mes, dia] = dataSelecionadaIso.split("-").map(Number);
+      const daqui90Dias = new Date(ano, mes - 1, dia);
       daqui90Dias.setDate(daqui90Dias.getDate() + 90);
       const fimIso = paraIso(daqui90Dias.getFullYear(), daqui90Dias.getMonth(), daqui90Dias.getDate());
 
-      const eventos = await listarEventosAgenda(hojeIso, fimIso);
+      const eventos = await listarEventosAgenda(dataSelecionadaIso, fimIso);
       if (ativo) setEventosFuturos(eventos);
     }
 
@@ -73,7 +74,7 @@ export function Agenda() {
     return () => {
       ativo = false;
     };
-  }, [hojeIso]);
+  }, [dataSelecionadaIso]);
 
   const eventosPorDia = useMemo(() => agruparEventosPorDia(eventosDoMes), [eventosDoMes]);
   const eventosDoDiaSelecionado = eventosPorDia.get(dataSelecionadaIso) ?? [];
@@ -159,7 +160,7 @@ export function Agenda() {
           carregando={carregandoMes}
         />
 
-        <ProximosEventos eventos={eventosFuturos} />
+        <ProximosEventos eventos={eventosFuturos} dataReferenciaIso={dataSelecionadaIso} />
       </View>
     </ScrollView>
   );

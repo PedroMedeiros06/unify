@@ -12,6 +12,9 @@ type Props = {
   // Quando false, remove a opção "Sem categoria" da lista — útil para
   // fluxos onde a transação é obrigada a ter uma categoria válida.
   permitirSemCategoria?: boolean;
+  // Slugs a esconder da lista — ex: categorias que já têm limite
+  // definido no mês, ao adicionar um novo limite.
+  categoriasOcultas?: CategoriaId[];
 };
 
 type ItemLista = { id: CategoriaId | null; nome: string; icone: keyof typeof Ionicons.glyphMap; cor: string };
@@ -28,6 +31,7 @@ function SeletorCategoriaBase({
   onSelecionar,
   label = "Categoria",
   permitirSemCategoria = true,
+  categoriasOcultas,
 }: Props) {
   const labelSize = moderateScale(11);
   const valueSize = moderateScale(14);
@@ -38,9 +42,14 @@ function SeletorCategoriaBase({
 
   const categoriaAtual = obterCategoriaPorId(categoriaSelecionada);
 
+  const categoriasVisiveis =
+    categoriasOcultas && categoriasOcultas.length > 0
+      ? CATEGORIAS.filter((c) => !categoriasOcultas.includes(c.id))
+      : CATEGORIAS;
+
   const itens: ItemLista[] = permitirSemCategoria
-    ? [ITEM_SEM_CATEGORIA, ...CATEGORIAS]
-    : [...CATEGORIAS];
+    ? [ITEM_SEM_CATEGORIA, ...categoriasVisiveis]
+    : [...categoriasVisiveis];
 
   const handleAbrir = useCallback(() => setAberto(true), []);
   const handleFechar = useCallback(() => setAberto(false), []);

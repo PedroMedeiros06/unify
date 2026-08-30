@@ -8,7 +8,9 @@ import { NavigationProvider } from "@/context/NavigationContext";
 import { MetasProvider } from "@/context/MetasContext";
 import { CompromissosProvider } from "@/context/CompromissosContext";
 import { RecorrenciasProvider } from "@/context/RecorrenciasContext";
+import { LimitesOrcamentoProvider } from "@/context/LimitesOrcamentoContext";
 import { PerfilProvider } from "@/context/PerfilContext";
+import { ResetAppProvider } from "@/context/ResetAppContext";
 
 
 
@@ -19,17 +21,21 @@ export default function RootLayout() {
   return (
     <ThemeProvider name="default">
       <NavigationProvider>
-        <PerfilProvider>
-          <TransacoesProvider>
-            <MetasProvider>
-              <CompromissosProvider>
-                <RecorrenciasProvider>
-                  <Slot />
-                </RecorrenciasProvider>
-              </CompromissosProvider>
-            </MetasProvider>
-          </TransacoesProvider>
-        </PerfilProvider>
+        <ResetAppProvider>
+          <PerfilProvider>
+            <TransacoesProvider>
+              <MetasProvider>
+                <CompromissosProvider>
+                  <RecorrenciasProvider>
+                    <LimitesOrcamentoProvider>
+                      <Slot />
+                    </LimitesOrcamentoProvider>
+                  </RecorrenciasProvider>
+                </CompromissosProvider>
+              </MetasProvider>
+            </TransacoesProvider>
+          </PerfilProvider>
+        </ResetAppProvider>
       </NavigationProvider>
     </ThemeProvider>
   );

@@ -146,9 +146,9 @@ function VisaoGeralOrcamentoBase({ anoExibido, mesExibido, onSelecionarMesAno, o
         </View>
       ) : (
       <>
-      <View className="flex-row items-center gap-5">
-        {/* DONUT */}
-        <View style={{ width: DONUT_SIZE, height: DONUT_SIZE }} className="items-center justify-center flex-shrink-0">
+      {/* DONUT — no topo, centralizado */}
+      <View className="items-center">
+        <View style={{ width: DONUT_SIZE, height: DONUT_SIZE }} className="items-center justify-center">
           <Svg
             viewBox={`0 0 ${VIEWBOX_SIZE} ${VIEWBOX_SIZE}`}
             width={DONUT_SIZE}
@@ -190,46 +190,47 @@ function VisaoGeralOrcamentoBase({ anoExibido, mesExibido, onSelecionarMesAno, o
             </Text>
           </View>
         </View>
+      </View>
 
-        {/* LEGENDA */}
-        <View className="flex-1 gap-3.5">
-          <LegendaLinha
-            cor={colors["active-icon"]}
-            label="Receita prevista"
-            valor={receitaPrevista}
-            percentual={100}
-            labelSize={legendLabelSize}
-            valueSize={legendValueSize}
-            percentSize={legendPercentSize}
-          />
-          <LegendaLinha
-            cor={colors["sucess-color"]}
-            label="Despesa prevista"
-            valor={despesaPrevista}
-            percentual={percentualDaReceita(despesaPrevista)}
-            labelSize={legendLabelSize}
-            valueSize={legendValueSize}
-            percentSize={legendPercentSize}
-          />
-          <LegendaLinha
-            cor={colors["error-color"]}
-            label="Despesa realizada"
-            valor={despesaRealizada}
-            percentual={percentualDaReceita(despesaRealizada)}
-            labelSize={legendLabelSize}
-            valueSize={legendValueSize}
-            percentSize={legendPercentSize}
-          />
-          <LegendaLinha
-            cor={colors["desactived-text"]}
-            label="Disponível previsto"
-            valor={disponivelPrevisto}
-            percentual={percentualDaReceita(disponivelPrevisto)}
-            labelSize={legendLabelSize}
-            valueSize={legendValueSize}
-            percentSize={legendPercentSize}
-          />
-        </View>
+      {/* LEGENDA — lista abaixo do gráfico, cada item em uma linha */}
+      <View className="mt-4">
+        <LegendaLinha
+          cor={colors["active-icon"]}
+          label="Receita prevista"
+          valor={receitaPrevista}
+          percentual={100}
+          labelSize={legendLabelSize}
+          valueSize={legendValueSize}
+          percentSize={legendPercentSize}
+        />
+        <LegendaLinha
+          cor={colors["sucess-color"]}
+          label="Despesa prevista"
+          valor={despesaPrevista}
+          percentual={percentualDaReceita(despesaPrevista)}
+          labelSize={legendLabelSize}
+          valueSize={legendValueSize}
+          percentSize={legendPercentSize}
+        />
+        <LegendaLinha
+          cor={colors["error-color"]}
+          label="Despesa realizada"
+          valor={despesaRealizada}
+          percentual={percentualDaReceita(despesaRealizada)}
+          labelSize={legendLabelSize}
+          valueSize={legendValueSize}
+          percentSize={legendPercentSize}
+        />
+        <LegendaLinha
+          cor={colors["desactived-text"]}
+          label="Disponível previsto"
+          valor={disponivelPrevisto}
+          percentual={percentualDaReceita(disponivelPrevisto)}
+          labelSize={legendLabelSize}
+          valueSize={legendValueSize}
+          percentSize={legendPercentSize}
+          semBorda
+        />
       </View>
 
       {/* AVISO + AÇÃO */}
@@ -272,6 +273,7 @@ const LegendaLinha = memo(function LegendaLinha({
   labelSize,
   valueSize,
   percentSize,
+  semBorda = false,
 }: {
   cor: string;
   label: string;
@@ -280,23 +282,33 @@ const LegendaLinha = memo(function LegendaLinha({
   labelSize: number;
   valueSize: number;
   percentSize: number;
+  semBorda?: boolean;
 }) {
   return (
-    <View className="flex-row items-start justify-between">
-      <View className="flex-row items-start gap-2 flex-1 pr-2">
-        <View style={{ backgroundColor: cor }} className="w-2.5 h-2.5 rounded-full mt-1 flex-shrink-0" />
-        <View>
-          <Text style={{ fontSize: labelSize }} className="text-second-text" numberOfLines={1}>
-            {label}
-          </Text>
-          <Text style={{ fontSize: valueSize }} className="text-main-text font-Inter-SemiBold" numberOfLines={1}>
-            {FormatToCurrency(valor)}
-          </Text>
-        </View>
+    <View
+      className={`flex-row items-center justify-between py-2.5 ${semBorda ? "" : "border-b border-lines-divisions"}`}
+    >
+      {/* Esquerda: marcador + rótulo */}
+      <View className="flex-row items-center gap-2 flex-1 pr-3">
+        <View style={{ backgroundColor: cor }} className="w-2.5 h-2.5 rounded-full flex-shrink-0" />
+        <Text style={{ fontSize: labelSize }} className="text-second-text" numberOfLines={1}>
+          {label}
+        </Text>
       </View>
-      <Text style={{ fontSize: percentSize }} className="text-desactived-text">
-        {percentual}%
-      </Text>
+
+      {/* Direita: valor + percentual */}
+      <View className="flex-row items-baseline gap-2 flex-shrink-0">
+        <Text style={{ fontSize: valueSize }} className="text-main-text font-Inter-SemiBold" numberOfLines={1}>
+          {FormatToCurrency(valor)}
+        </Text>
+        <Text
+          style={{ fontSize: percentSize }}
+          className="text-desactived-text text-right"
+          numberOfLines={1}
+        >
+          {percentual}%
+        </Text>
+      </View>
     </View>
   );
 });

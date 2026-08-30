@@ -49,14 +49,13 @@ export function executarNaFila<T>(operacao: () => Promise<T>): Promise<T> {
   return resultado;
 }
 
-export async function resetDatabaseForDev(): Promise<void> {
-  if (!__DEV__) {
-    console.warn("resetDatabaseForDev chamado fora de ambiente de desenvolvimento — ignorado.");
-    return;
-  }
-
-  const db = await getDatabase();
+// Apaga todas as tabelas do app e zera a versão do schema. A ordem
+// respeita as dependências de foreign key (filhas antes das pais).
+// Usado tanto pelo reset de dev quanto pelo "apagar dados do app"
+// disponível ao usuário na tela de Perfil.
+async function droparTodasAsTabelas(db: SQLite.SQLiteDatabase): Promise<void> {
   await db.execAsync(`DROP TABLE IF EXISTS meta_transacoes;`);
+  await db.execAsync(`DROP TABLE IF EXISTS limite_categoria;`);
   await db.execAsync(`DROP TABLE IF EXISTS ocorrencia_prevista;`);
   await db.execAsync(`DROP TABLE IF EXISTS orcamento_mes;`);
   await db.execAsync(`DROP TABLE IF EXISTS recorrencias;`);
@@ -64,14 +63,41 @@ export async function resetDatabaseForDev(): Promise<void> {
   await db.execAsync(`DROP TABLE IF EXISTS bancos;`);
   await db.execAsync(`DROP TABLE IF EXISTS metas;`);
   await db.execAsync(`DROP TABLE IF EXISTS compromissos;`);
-  // Tabela de regras aprendidas/sistema de categorização — precisa ser
-  // apagada junto no reset de dev, senão sobram regras órfãs (regras
-  // "aprendidas" para transações que não existem mais depois do reset).
+  // Regras aprendidas/sistema de categorização — sem isso sobrariam
+  // regras "aprendidas" para transações que não existem mais.
   await db.execAsync(`DROP TABLE IF EXISTS regras_categorizacao;`);
-  // Perfil local também é resetado em dev, para simular "primeiro uso"
-  // consistentemente com o resto do banco.
+  // Perfil local também é apagado, para voltar ao estado de "primeiro uso".
   await db.execAsync(`DROP TABLE IF EXISTS perfil_usuario;`);
   await db.execAsync(`PRAGMA user_version = 0;`);
+}
+
+export async function resetDatabaseForDev(): Promise<void> {
+  if (!__DEV__) {
+    console.warn("resetDatabaseForDev chamado fora de ambiente de desenvolvimento — ignorado.");
+    return;
+  }
+
+  const db = await getDatabase();
+  await droparTodasAsTabelas(db);
+
+  dbInstance = null;
+  await getDatabase();
+}
+
+/**
+ * Apaga TODOS os dados do usuário e recria o banco vazio (schema atual
+ * via migrations). Diferente de `resetDatabaseForDev`, roda também em
+ * produção — é a ação "apagar dados do app" da tela de Perfil, que
+ * existe porque o Unify não tem login/conta: não há "sair", só zerar
+ * o app local.
+ *
+ * Não remonta a árvore de React nem recarrega os contextos — isso é
+ * responsabilidade de quem chama (ver ResetAppContext), que força a
+ * remontagem para os providers relerem o banco já vazio.
+ */
+export async function apagarTodosOsDados(): Promise<void> {
+  const db = await getDatabase();
+  await droparTodasAsTabelas(db);
 
   dbInstance = null;
   await getDatabase();
