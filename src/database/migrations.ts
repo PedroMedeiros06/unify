@@ -301,6 +301,33 @@ const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    versao: 11,
+    descricao:
+      "Cria limite_categoria: teto de gasto por categoria E por mês (histórico). Só acompanhamento — nunca bloqueia transação. Alterar o limite de um mês não afeta os outros.",
+    async executar(db) {
+      // Um limite é o teto que o usuário definiu para uma categoria NUM
+      // MÊS específico. `mes_ano` no formato "aaaa-mm", como o resto do
+      // módulo de Orçamento. UNIQUE(categoria_id, mes_ano) garante no
+      // máximo um limite por categoria por mês; a UI faz upsert por essa
+      // chave. O realizado NÃO fica aqui — vem de transacoes via
+      // listarResumoPorCategoria.
+      await db.execAsync(`
+        CREATE TABLE IF NOT EXISTS limite_categoria (
+          id            TEXT PRIMARY KEY NOT NULL,
+          categoria_id  TEXT NOT NULL,
+          mes_ano       TEXT NOT NULL,
+          valor_limite  REAL NOT NULL CHECK (valor_limite > 0),
+          criado_em     TEXT NOT NULL DEFAULT (datetime('now')),
+          atualizado_em TEXT NOT NULL DEFAULT (datetime('now')),
+          UNIQUE (categoria_id, mes_ano)
+        );
+      `);
+      await db.execAsync(
+        `CREATE INDEX IF NOT EXISTS idx_limite_categoria_mes ON limite_categoria (mes_ano);`
+      );
+    },
+  },
 ];
 
 export async function rodarMigrations(db: SQLiteDatabase): Promise<void> {

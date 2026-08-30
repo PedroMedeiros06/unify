@@ -75,7 +75,7 @@ function OrcamentoResumoBase() {
         onSelecionarMesAno={handleSelecionarMesAno}
       />
 
-      <CategoriasOrcamento />
+      <CategoriasOrcamento anoExibido={anoExibido} mesExibido={mesExibido} />
 
       <AnaliseOrcamento />
 

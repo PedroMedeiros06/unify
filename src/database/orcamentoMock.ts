@@ -13,15 +13,6 @@ import { colors } from "@/theme/colors";
  * query" — para minimizar retrabalho na UI.
  */
 
-export type CategoriaOrcamento = {
-  id: string;
-  nome: string;
-  icone: keyof typeof Ionicons.glyphMap;
-  cor: string;
-  limite: number;
-  gasto: number;
-};
-
 export type DicaOrcamento = {
   id: string;
   icone: keyof typeof Ionicons.glyphMap;
@@ -38,15 +29,6 @@ export const RESUMO_ORCAMENTO_MOCK = {
   gastosVariaveis: 1413.73,
   disponivel: 1851.17,
 };
-
-export const CATEGORIAS_ORCAMENTO_MOCK: CategoriaOrcamento[] = [
-  { id: "moradia", nome: "Moradia", icone: "home", cor: colors["active-icon"], limite: 2000, gasto: 1915.62 },
-  { id: "transporte", nome: "Transporte", icone: "car", cor: "#378ADD", limite: 1000, gasto: 842.3 },
-  { id: "alimentacao", nome: "Alimentação", icone: "cart", cor: colors["sucess-color"], limite: 800, gasto: 623.45 },
-  { id: "lazer", nome: "Lazer", icone: "happy", cor: colors["warn-color"], limite: 600, gasto: 412.9 },
-  { id: "saude", nome: "Saúde", icone: "heart", cor: colors["error-color"], limite: 400, gasto: 310.12 },
-  { id: "outros", nome: "Outros", icone: "ellipsis-horizontal", cor: colors["desactived-text"], limite: 600, gasto: 430.64 },
-];
 
 export const ANALISE_ORCAMENTO_MOCK = {
   economiaNoMes: 1851.17,
@@ -66,9 +48,3 @@ export const DICAS_ORCAMENTO_MOCK: DicaOrcamento[] = [
     subtitulo: "Continue assim! Que tal direcionar essa economia para suas metas?",
   },
 ];
-
-/** Percentual (0-100) já limitado a 100, evitando barras/valores acima de 100% na UI. */
-export function calcularPercentualCategoria(categoria: CategoriaOrcamento): number {
-  if (categoria.limite <= 0) return 0;
-  return Math.min(100, Math.round((categoria.gasto / categoria.limite) * 100));
-}

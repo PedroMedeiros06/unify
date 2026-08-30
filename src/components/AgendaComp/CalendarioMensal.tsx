@@ -14,6 +14,7 @@ const COR_POR_TIPO: Record<TipoEventoAgenda, string> = {
   meta: colors["sucess-color"],
   investimento: colors["warn-color"],
   lembrete: colors["error-color"],
+  recorrencia: colors["desactived-text"],
 };
 
 type DiaCelula = {
@@ -201,6 +202,7 @@ function CalendarioMensalBase({
       <View className="flex-row flex-wrap gap-x-4 gap-y-1.5 mt-4 pt-3 border-t border-lines-divisions">
         <LegendaItem cor={COR_POR_TIPO.compromisso} rotulo="Compromissos e boletos" />
         <LegendaItem cor={COR_POR_TIPO.meta} rotulo="Metas" />
+        <LegendaItem cor={COR_POR_TIPO.recorrencia} rotulo="Recorrências previstas" />
         <LegendaItem cor={COR_POR_TIPO.investimento} rotulo="Investimentos" />
         <LegendaItem cor={COR_POR_TIPO.lembrete} rotulo="Lembretes" />
       </View>

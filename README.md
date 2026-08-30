@@ -18,8 +18,15 @@ categorizar, planejar e comparar — não executar operações financeiras.
 - **Compromissos** — contas e prazos futuros. Um compromisso só fica "pago"
   quando existe uma transação real vinculada a ele; marcar como pago é
   **selecionar uma transação existente**, não criar uma nova.
-- **Agenda** — calendário mensal com compromissos, boletos e prazos de metas.
-- **Orçamento** — camada de previsão e reconciliação (ver abaixo).
+- **Agenda** — calendário mensal com compromissos, boletos, prazos de metas e as
+  ocorrências previstas das recorrências. A lista "Próximos eventos" parte do dia
+  selecionado no calendário e agrupa ocorrências repetidas da mesma recorrência
+  (ex.: um "Salário" em vez de três).
+- **Orçamento** — camada de previsão e reconciliação, com limites de gasto por
+  categoria e por mês (ver abaixo).
+- **Perfil** — o app não tem login nem conta; a ação equivalente a "sair" é
+  **apagar os dados do app**, que zera o banco local e volta ao estado de
+  primeiro uso.
 
 ## Módulo de Orçamento
 
@@ -34,9 +41,13 @@ O Orçamento é uma camada de **previsão × realizado**, não um limite de gast
   tem suas ocorrências materializadas e é marcado como congelado. Depois disso a
   leitura usa exclusivamente os snapshots.
 - **Realizado** — vem apenas das transações reais do mês.
+- **Limites por categoria** — teto de gasto que o usuário define **por categoria
+  e por mês** (histórico: alterar o limite de um mês não afeta os outros). É só
+  acompanhamento — nunca bloqueia uma transação. O card mostra apenas as
+  categorias para as quais o usuário definiu um limite.
 
-Limites por categoria, correspondência automática previsão × transação e a
-análise detalhada são de fases seguintes.
+Correspondência automática previsão × transação e a análise detalhada são de
+fases seguintes.
 
 ## Stack
 
@@ -86,5 +97,7 @@ SemVer `vX.Y.Z`. App ainda não lançado, então segue a série `0.y.z`:
 - `Y` (minor) — marco de funcionalidade / etapa concluída
 - `Z` (patch) — correções dentro de uma etapa
 
-Cada versão é um commit com prefixo `vX.Y.Z:` no assunto, uma tag anotada e o
-`package.json` acompanhando.
+Cada versão é um commit com prefixo `vX.Y.Z:` no assunto, uma tag anotada e
+`package.json`, `package-lock.json` e `app.json` (`expo.version`) acompanhando —
+os três sempre iguais entre si e à tag. A tela "Sobre a Unify" lê essa versão de
+`app.json` em tempo de execução, sem string fixa.
