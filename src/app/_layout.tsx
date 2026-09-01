@@ -7,6 +7,9 @@ import { TransacoesProvider } from "@/context/TransacoesContext";
 import { NavigationProvider } from "@/context/NavigationContext";
 import { MetasProvider } from "@/context/MetasContext";
 import { CompromissosProvider } from "@/context/CompromissosContext";
+import { LembretesProvider } from "@/context/LembretesContext";
+import { SimulacoesProvider } from "@/context/SimulacoesContext";
+import { CotacoesProvider } from "@/context/CotacoesContext";
 import { RecorrenciasProvider } from "@/context/RecorrenciasContext";
 import { LimitesOrcamentoProvider } from "@/context/LimitesOrcamentoContext";
 import { PerfilProvider } from "@/context/PerfilContext";
@@ -26,11 +29,17 @@ export default function RootLayout() {
             <TransacoesProvider>
               <MetasProvider>
                 <CompromissosProvider>
-                  <RecorrenciasProvider>
-                    <LimitesOrcamentoProvider>
-                      <Slot />
-                    </LimitesOrcamentoProvider>
-                  </RecorrenciasProvider>
+                  <LembretesProvider>
+                    <SimulacoesProvider>
+                      <CotacoesProvider>
+                        <RecorrenciasProvider>
+                          <LimitesOrcamentoProvider>
+                            <Slot />
+                          </LimitesOrcamentoProvider>
+                        </RecorrenciasProvider>
+                      </CotacoesProvider>
+                    </SimulacoesProvider>
+                  </LembretesProvider>
                 </CompromissosProvider>
               </MetasProvider>
             </TransacoesProvider>

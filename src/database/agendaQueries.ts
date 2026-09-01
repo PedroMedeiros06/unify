@@ -1,4 +1,5 @@
 import { listarCompromissos, Compromisso } from "@/database/compromissosQueries";
+import { listarLembretes, Lembrete } from "@/database/lembretesQueries";
 import { listarMetasComPrazoNoPeriodo, Meta } from "@/database/metasQueries";
 import { gerarOcorrenciasDoMes, OcorrenciaDoMes } from "@/database/gerarOcorrenciasPrevistas";
 import { obterCategoriaPorId } from "@/database/categorias";
@@ -10,11 +11,10 @@ import { colors } from "@/theme/colors";
  * (data_alvo) em um formato comum, para o calendário e as listas de
  * eventos não precisarem saber a origem de cada item.
  *
- * "investimento" e "lembrete" ficam no tipo por já preverem o desenho
- * (ver imagem de referência da Agenda), mas nenhuma fonte de dados
- * ainda produz esses tipos — não há tabela própria para eles nesta
- * versão. Adicionar suporte depois é só criar a tabela/query e incluir
- * aqui, sem quebrar o restante da Agenda.
+ * "investimento" fica no tipo por já prever o desenho (ver imagem de
+ * referência da Agenda), mas nenhuma fonte de dados ainda produz esse
+ * tipo — não há tabela própria para ele nesta versão. "lembrete" já
+ * tem tabela (migration 12) e é produzido por lembreteParaEvento.
  */
 export type TipoEventoAgenda = "compromisso" | "meta" | "investimento" | "lembrete" | "recorrencia";
 
@@ -48,6 +48,23 @@ function compromissoParaEvento(c: Compromisso): EventoAgenda {
     icone: c.icone,
     cor: c.cor,
     concluido: c.pago,
+  };
+}
+
+function lembreteParaEvento(l: Lembrete): EventoAgenda {
+  return {
+    id: `lembrete-${l.id}`,
+    tipo: "lembrete",
+    titulo: l.titulo,
+    subtitulo: `Lembrete · ${l.hora}`,
+    data: l.data,
+    valor: null,
+    positivo: true,
+    icone: "alarm-outline",
+    cor: colors["active-icon"],
+    // Lembrete é uma marcação pura — não tem estado de conclusão.
+    // Sempre false para nunca aparecer riscado nem sumir de "próximos".
+    concluido: false,
   };
 }
 
@@ -124,14 +141,19 @@ export async function listarEventosAgenda(
   inicioIso: string,
   fimIso: string
 ): Promise<EventoAgenda[]> {
-  const [todosCompromissos, metasComPrazo, ocorrenciasPorMes] = await Promise.all([
+  const [todosCompromissos, todosLembretes, metasComPrazo, ocorrenciasPorMes] = await Promise.all([
     listarCompromissos(),
+    listarLembretes(),
     listarMetasComPrazoNoPeriodo(inicioIso, fimIso),
     Promise.all(mesesNoIntervalo(inicioIso, fimIso).map(gerarOcorrenciasDoMes)),
   ]);
 
   const compromissosNoPeriodo = todosCompromissos.filter(
     (c) => c.dataVencimento >= inicioIso && c.dataVencimento <= fimIso
+  );
+
+  const lembretesNoPeriodo = todosLembretes.filter(
+    (l) => l.data >= inicioIso && l.data <= fimIso
   );
 
   // Ocorrências puladas não vão para a Agenda; filtra também pela data
@@ -142,6 +164,7 @@ export async function listarEventosAgenda(
 
   const eventos = [
     ...compromissosNoPeriodo.map(compromissoParaEvento),
+    ...lembretesNoPeriodo.map(lembreteParaEvento),
     ...metasComPrazo.map(metaParaEvento),
     ...ocorrenciasNoPeriodo.map(ocorrenciaParaEvento),
   ];

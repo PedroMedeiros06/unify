@@ -328,6 +328,113 @@ const MIGRATIONS: Migration[] = [
       );
     },
   },
+  {
+    versao: 12,
+    descricao:
+      "Cria tabela lembretes: anotações com data e hora que disparam uma notificação local no horário marcado. Não têm valor monetário e não impactam saldo/orçamento — são só avisos, sem estado de conclusão.",
+    async executar(db) {
+      // Diferente de compromissos (que representam contas a pagar, têm
+      // valor e podem virar transação real), lembretes são só um aviso
+      // pontual do usuário para si mesmo: "renovar o seguro", "ligar pro
+      // contador". Por isso guardam hora exata (a notificação dispara
+      // nesse minuto, não às 9h como o compromisso) e não têm coluna de
+      // valor nem vínculo com transação.
+      //
+      // Também NÃO têm estado de concluído/não concluído: um lembrete é
+      // uma marcação pura. Se não serve mais, o usuário exclui.
+      // `notificacao_id` guarda o ID da notificação local agendada, para
+      // poder cancelá-la ao editar/excluir (mesmo padrão de compromissos).
+      await db.execAsync(`
+        CREATE TABLE IF NOT EXISTS lembretes (
+          id             TEXT PRIMARY KEY NOT NULL,
+          titulo         TEXT NOT NULL,
+          descricao      TEXT,
+          data           TEXT NOT NULL,
+          hora           TEXT NOT NULL,
+          notificacao_id TEXT,
+          criado_em      TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+      `);
+      await db.execAsync(
+        `CREATE INDEX IF NOT EXISTS idx_lembretes_data ON lembretes (data ASC);`
+      );
+    },
+  },
+  {
+    versao: 13,
+    descricao:
+      "Cria tabela simulacoes: simulações de financiamento/empréstimo/investimento/câmbio que o usuário escolheu SALVAR (a tela calcula ao vivo sem tocar no banco; só grava aqui quando o usuário aperta 'Salvar simulação'). Guardadas para rever e compartilhar depois.",
+    async executar(db) {
+      // `tipo` restringe aos três simuladores existentes. `parametros` e
+      // `resultado` são JSON serializado (TEXT) — o formato de cada um
+      // depende do tipo e é definido por src/utils/simulacoes.ts. Não
+      // vale normalizar em colunas: são snapshots de leitura, nunca
+      // consultados por campo interno, só lidos inteiros para recarregar
+      // a tela ou montar o texto de compartilhamento.
+      await db.execAsync(`
+        CREATE TABLE IF NOT EXISTS simulacoes (
+          id         TEXT PRIMARY KEY NOT NULL,
+          tipo       TEXT NOT NULL CHECK (tipo IN ('financiamento', 'emprestimo', 'investimento', 'cambio')),
+          titulo     TEXT NOT NULL,
+          parametros TEXT NOT NULL,
+          resultado  TEXT NOT NULL,
+          criado_em  TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+      `);
+      await db.execAsync(
+        `CREATE INDEX IF NOT EXISTS idx_simulacoes_criado_em ON simulacoes (criado_em DESC);`
+      );
+    },
+  },
+  {
+    versao: 14,
+    descricao:
+      "Cria tabela cotacoes_moeda (câmbio): cotação de cada moeda estrangeira em BRL. Vem semeada com um snapshot fixo para o simulador de câmbio funcionar offline no primeiro uso; a cada abertura do app COM internet, CotacoesContext busca a Frankfurter API e sobrescreve estas linhas.",
+    async executar(db) {
+      // Uma linha por moeda. `codigo` é o ISO 4217 (USD, EUR...).
+      // `cotacao_brl` = quantos reais valem 1 unidade da moeda.
+      // `data_referencia` é a data do dado na fonte (BCE via Frankfurter),
+      // "aaaa-mm-dd"; `atualizado_em` é quando o app gravou.
+      await db.execAsync(`
+        CREATE TABLE IF NOT EXISTS cotacoes_moeda (
+          codigo          TEXT PRIMARY KEY NOT NULL,
+          nome            TEXT NOT NULL,
+          cotacao_brl     REAL NOT NULL,
+          data_referencia TEXT NOT NULL,
+          atualizado_em   TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+      `);
+
+      // Snapshot inicial (aprox. de referência — será substituído na
+      // primeira abertura online). Só as moedas suportadas pela
+      // Frankfurter que interessam ao usuário brasileiro.
+      const semente: [string, string, number][] = [
+        ["USD", "Dólar americano", 5.42],
+        ["EUR", "Euro", 5.88],
+        ["GBP", "Libra esterlina", 6.85],
+        ["JPY", "Iene japonês", 0.037],
+        ["CHF", "Franco suíço", 6.12],
+        ["CAD", "Dólar canadense", 3.92],
+        ["AUD", "Dólar australiano", 3.55],
+        ["CNY", "Yuan chinês", 0.75],
+        ["ARS", "Peso argentino", 0.0055],
+        ["MXN", "Peso mexicano", 0.29],
+        ["NZD", "Dólar neozelandês", 3.28],
+        ["SEK", "Coroa sueca", 0.51],
+        ["NOK", "Coroa norueguesa", 0.5],
+        ["DKK", "Coroa dinamarquesa", 0.79],
+        ["ZAR", "Rand sul-africano", 0.3],
+      ];
+
+      for (const [codigo, nome, cotacao] of semente) {
+        await db.runAsync(
+          `INSERT OR IGNORE INTO cotacoes_moeda (codigo, nome, cotacao_brl, data_referencia)
+           VALUES (?, ?, ?, '2025-01-01');`,
+          [codigo, nome, cotacao]
+        );
+      }
+    },
+  },
 ];
 
 export async function rodarMigrations(db: SQLiteDatabase): Promise<void> {

@@ -121,6 +121,57 @@ export async function agendarNotificacaoVencimento(
 }
 
 /**
+ * Agenda uma notificação local para um lembrete, na DATA e HORA exatas
+ * escolhidas pelo usuário (diferente de `agendarNotificacaoVencimento`,
+ * que fixa 9h). Retorna o ID da notificação agendada, ou null se não foi
+ * possível agendar (Expo Go, permissão negada, ou data/hora já passada) —
+ * nesses casos o lembrete ainda deve ser salvo normalmente por quem chama.
+ *
+ * `horaHHMM` no formato "HH:MM" (24h).
+ */
+export async function agendarNotificacaoLembrete(
+  titulo: string,
+  descricao: string | null,
+  dataIso: string,
+  horaHHMM: string
+): Promise<string | null> {
+  if (rodandoNoExpoGo) {
+    avisarLimitacaoExpoGo();
+    return null;
+  }
+
+  try {
+    const Notifications = await carregarModuloNotifications();
+
+    const permitido = await garantirPermissao(Notifications);
+    if (!permitido) return null;
+
+    const [ano, mes, dia] = dataIso.split("-").map(Number);
+    const [hora, minuto] = horaHHMM.split(":").map(Number);
+    const dataNotificacao = new Date(ano, mes - 1, dia, hora, minuto, 0);
+
+    if (dataNotificacao.getTime() <= Date.now()) return null;
+
+    const notificacaoId = await Notifications.scheduleNotificationAsync({
+      content: {
+        title: titulo,
+        body: descricao?.trim() ? descricao.trim() : "Lembrete",
+        sound: Platform.OS === "ios" ? "default" : undefined,
+      },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.DATE,
+        date: dataNotificacao,
+      },
+    });
+
+    return notificacaoId;
+  } catch (erro) {
+    console.error("[notificacoes] Falha ao agendar notificação de lembrete:", erro);
+    return null;
+  }
+}
+
+/**
  * Cancela uma notificação previamente agendada. Seguro chamar mesmo
  * se o ID for null, se já não existir mais, ou se estivermos no Expo Go.
  */
