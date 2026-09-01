@@ -14,6 +14,7 @@ import { RecorrenciasProvider } from "@/context/RecorrenciasContext";
 import { LimitesOrcamentoProvider } from "@/context/LimitesOrcamentoContext";
 import { PerfilProvider } from "@/context/PerfilContext";
 import { ResetAppProvider } from "@/context/ResetAppContext";
+import { NovaTransacaoProvider } from "@/context/NovaTransacaoContext";
 
 
 
@@ -34,7 +35,9 @@ export default function RootLayout() {
                       <CotacoesProvider>
                         <RecorrenciasProvider>
                           <LimitesOrcamentoProvider>
-                            <Slot />
+                            <NovaTransacaoProvider>
+                              <Slot />
+                            </NovaTransacaoProvider>
                           </LimitesOrcamentoProvider>
                         </RecorrenciasProvider>
                       </CotacoesProvider>

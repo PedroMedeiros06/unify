@@ -21,12 +21,14 @@ import { useNavigation } from "@/context/NavigationContext";
 import { listarBancos, Banco } from "@/database/queries";
 
 export function Planejamento() {
-  const [activeTab, setActiveTab] = useState<PlanejamentoTab>("Resumo");
+  const { navigate, params } = useNavigation();
+
+  // Aba inicial: normalmente "Resumo", mas quem navega até aqui pode
+  // pedir outra (ex: "Ver relatórios" na Home abre em "Orçamento").
+  const [activeTab, setActiveTab] = useState<PlanejamentoTab>(params.planejamentoTab ?? "Resumo");
 
   const titleSize = moderateScale(22);
   const subtitleSize = moderateScale(12);
-
-  const { navigate } = useNavigation();
 
   // Estado de filtros LOCAL desta tela — independente do estado de
   // filtros da Home (cada tela tem sua própria instância, por decisão

@@ -13,9 +13,21 @@ export type ScreenType =
   | "metasConcluidas"
   | "recorrencias";
 
+// Parâmetros opcionais que uma tela pode receber ao ser aberta. Cada
+// tela decide se lê algum deles no seu próprio mount. Mantido enxuto de
+// propósito — só o que já é usado.
+export type NavigationParams = {
+  // Aba inicial do Planejamento (ex: botão "Ver relatórios" da Home
+  // abre direto na aba de análise de Orçamento).
+  planejamentoTab?: "Resumo" | "Metas" | "Orçamento" | "Simulações";
+};
+
 type NavigationContextValue = {
   activeScreen: ScreenType;
-  navigate: (screen: ScreenType) => void;
+  // params: lidos pela tela de destino no seu próprio efeito de mount.
+  // São limpos automaticamente na navegação seguinte.
+  params: NavigationParams;
+  navigate: (screen: ScreenType, params?: NavigationParams) => void;
   goBack: () => void;
 };
 
@@ -25,16 +37,19 @@ const TELA_INICIAL: ScreenType = "home";
 
 export function NavigationProvider({ children }: { children: ReactNode }) {
   const [activeScreen, setActiveScreen] = useState<ScreenType>(TELA_INICIAL);
+  const [params, setParams] = useState<NavigationParams>({});
   // Histórico simples só para permitir "voltar" — suficiente para o
   // padrão de navegação atual do app (sem pilhas profundas ou rotas aninhadas).
   const [historico, setHistorico] = useState<ScreenType[]>([]);
 
-  const navigate = useCallback((screen: ScreenType) => {
+  const navigate = useCallback((screen: ScreenType, novosParams: NavigationParams = {}) => {
     setHistorico((prev) => [...prev, activeScreen]);
     setActiveScreen(screen);
+    setParams(novosParams);
   }, [activeScreen]);
 
   const goBack = useCallback(() => {
+    setParams({});
     setHistorico((prev) => {
       if (prev.length === 0) {
         setActiveScreen(TELA_INICIAL);
@@ -48,8 +63,8 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ activeScreen, navigate, goBack }),
-    [activeScreen, navigate, goBack]
+    () => ({ activeScreen, params, navigate, goBack }),
+    [activeScreen, params, navigate, goBack]
   );
 
   return (

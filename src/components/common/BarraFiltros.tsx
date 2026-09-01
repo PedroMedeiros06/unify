@@ -1,5 +1,5 @@
 import { moderateScale } from "@/utils/scale";
-import { View, Text, Pressable } from "react-native";
+import { View, Text, Pressable, ScrollView } from "react-native";
 import { memo } from "react";
 import { Banco } from "@/database/queries";
 import { CategoriaId } from "@/database/categorias";
@@ -56,7 +56,15 @@ function BarraFiltrosBase({
         )}
       </View>
 
-      <View className="flex-row items-center gap-1.5 flex-wrap">
+      {/* Rolagem horizontal em vez de flex-wrap: os rótulos dos chips
+          têm larguras variáveis ("Este mês", "Personalizado", bancos) e
+          quebravam feio para a linha de baixo. Mesmo padrão da barra de
+          filtros das Últimas transações. */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{ gap: 6, alignItems: "center" }}
+      >
         <SeletorBancoMultiplo
           bancos={bancos}
           bancosSelecionados={filtros.bancosSelecionados}
@@ -74,7 +82,7 @@ function BarraFiltrosBase({
           onSelecionarPreset={onDefinirPeriodoPreset}
           onAbrirPersonalizado={onAbrirPeriodoPersonalizado}
         />
-      </View>
+      </ScrollView>
     </View>
   );
 }

@@ -121,7 +121,7 @@ export function TodasTransacoes() {
   const countTextSize = moderateScale(11);
 
   const { goBack } = useNavigation();
-  const { editarTransacao, removerTransacao } = useTransacoes();
+  const { transacoes: transacoesContext, editarTransacao, removerTransacao } = useTransacoes();
 
   // Estado de filtros LOCAL desta tela — independente do card de
   // "Últimas transações" na Home, por decisão de escopo.
@@ -159,9 +159,11 @@ export function TodasTransacoes() {
     }
   }, [filtrosParaQuery]);
 
+  // Recarrega quando os filtros mudam OU quando a lista global muda
+  // (transação criada pelo modal global, edição, exclusão).
   useEffect(() => {
     carregarTransacoes();
-  }, [carregarTransacoes]);
+  }, [carregarTransacoes, transacoesContext]);
 
   const handleConfirmarPeriodo = useCallback(
     (inicioIso: string, fimIso: string) => {

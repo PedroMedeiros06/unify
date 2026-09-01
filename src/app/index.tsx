@@ -14,7 +14,7 @@ import { MetasConcluidas } from "../pages/MetasConcluidas";
 import { Recorrencias } from "../pages/Recorrencias";
 import { useNavigation } from "@/context/NavigationContext";
 import { MenuAcaoRapida, Acao } from "@/components/common/MenuAcaoRapida";
-import { NovaTransacaoModal } from "@/components/TransacoesComp/NovaTransacaoModal";
+import { useNovaTransacao } from "@/context/NovaTransacaoContext";
 
 const Screens = {
   home: Home,
@@ -32,7 +32,7 @@ export default function AppIndex() {
   const { activeScreen, navigate } = useNavigation();
 
   const [menuAcaoAberto, setMenuAcaoAberto] = useState(false);
-  const [modalNovaTransacaoAberto, setModalNovaTransacaoAberto] = useState(false);
+  const { abrir: abrirNovaTransacao } = useNovaTransacao();
 
   const ActiveScreen = Screens[activeScreen];
 
@@ -63,7 +63,7 @@ export default function AppIndex() {
 
       switch (acao) {
         case "novaTransacao":
-          setModalNovaTransacaoAberto(true);
+          abrirNovaTransacao();
           break;
         case "importarExtrato":
           navigate("importarExtrato");
@@ -74,7 +74,7 @@ export default function AppIndex() {
           break;
       }
     },
-    [navigate]
+    [navigate, abrirNovaTransacao]
   );
 
   return (
@@ -101,11 +101,7 @@ export default function AppIndex() {
         onFechar={() => setMenuAcaoAberto(false)}
         onSelecionar={handleSelecionarAcao}
       />
-
-      <NovaTransacaoModal
-        visivel={modalNovaTransacaoAberto}
-        onFechar={() => setModalNovaTransacaoAberto(false)}
-      />
+      {/* NovaTransacaoModal agora é renderizado pelo NovaTransacaoProvider */}
     </View>
   );
 }

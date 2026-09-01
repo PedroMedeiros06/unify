@@ -8,7 +8,7 @@ import { FormatToCurrency } from "@/utils/formatNumber";
 import { BarraFiltros } from "@/components/common/BarraFiltros";
 import { SeletorPeriodoPersonalizado } from "@/components/common/SeletorPeriodoPersonalizado";
 import { EditarTransacaoModal } from "@/components/TransacoesComp/EditarTransacaoModal";
-import { NovaTransacaoModal } from "@/components/TransacoesComp/NovaTransacaoModal";
+import { useNovaTransacao } from "@/context/NovaTransacaoContext";
 import { ListaTransacoesSkeleton } from "@/components/common/ListaTransacoesSkeleton";
 import { useFiltrosTransacao } from "@/hooks/useFiltrosTransacao";
 import { useTransacoes, Transacao } from "@/context/TransacoesContext";
@@ -101,7 +101,8 @@ export function Transferencias() {
   const countTextSize = moderateScale(11);
   const buttonTextSize = moderateScale(13);
 
-  const { editarTransacao, removerTransacao } = useTransacoes();
+  const { transacoes: transacoesContext, editarTransacao, removerTransacao } = useTransacoes();
+  const { abrir: abrirNovaTransacao } = useNovaTransacao();
 
   const {
     filtros,
@@ -118,7 +119,6 @@ export function Transferencias() {
 
   const [bancos, setBancos] = useState<Banco[]>([]);
   const [modalPeriodoAberto, setModalPeriodoAberto] = useState(false);
-  const [modalNovaTransacaoAberto, setModalNovaTransacaoAberto] = useState(false);
   const [transacoes, setTransacoes] = useState<Transacao[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [transacaoSelecionada, setTransacaoSelecionada] = useState<Transacao | null>(null);
@@ -137,9 +137,13 @@ export function Transferencias() {
     }
   }, [filtrosParaQuery]);
 
+  // Recarrega quando os filtros mudam OU quando a lista global de
+  // transações muda (nova transação criada pelo modal global, edição,
+  // exclusão) — antes o refresh era disparado no onFechar do modal
+  // local, que não existe mais.
   useEffect(() => {
     carregarTransacoes();
-  }, [carregarTransacoes]);
+  }, [carregarTransacoes, transacoesContext]);
 
   const handleConfirmarPeriodo = useCallback(
     (inicioIso: string, fimIso: string) => {
@@ -156,11 +160,6 @@ export function Transferencias() {
   const handleFecharModal = useCallback(() => {
     setTransacaoSelecionada(null);
   }, []);
-
-  const handleFecharNovaTransacao = useCallback(() => {
-    setModalNovaTransacaoAberto(false);
-    carregarTransacoes();
-  }, [carregarTransacoes]);
 
   const handleSalvarEdicao = useCallback(
     async (id: string, campos: Parameters<typeof editarTransacao>[1]) => {
@@ -201,7 +200,7 @@ export function Transferencias() {
           </View>
 
           <Pressable
-            onPress={() => setModalNovaTransacaoAberto(true)}
+            onPress={abrirNovaTransacao}
             className="flex-row items-center gap-1.5 bg-active-icon px-3 py-2 rounded-xl active:opacity-80"
             accessibilityRole="button"
             accessibilityLabel="Nova transação manual"
@@ -271,10 +270,7 @@ export function Transferencias() {
         onFechar={() => setModalPeriodoAberto(false)}
       />
 
-      <NovaTransacaoModal
-        visivel={modalNovaTransacaoAberto}
-        onFechar={handleFecharNovaTransacao}
-      />
+      {/* NovaTransacaoModal agora vive no NovaTransacaoProvider */}
 
       <EditarTransacaoModal
         transacao={transacaoSelecionada}

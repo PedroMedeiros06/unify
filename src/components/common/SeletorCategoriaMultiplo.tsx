@@ -1,9 +1,10 @@
 import { colors } from "@/theme/colors";
 import { moderateScale } from "@/utils/scale";
 import { Ionicons } from "@expo/vector-icons";
-import { View, Text, Pressable, Modal, FlatList } from "react-native";
-import { memo, useCallback, useState } from "react";
+import { View, Text, Pressable, ScrollView } from "react-native";
+import { memo } from "react";
 import { CATEGORIAS, CategoriaId } from "@/database/categorias";
+import { DropdownMenu } from "@/components/common/DropdownMenu";
 
 type Props = {
   categoriasSelecionadas: (CategoriaId | null)[]; // [] = todas
@@ -20,17 +21,16 @@ const ITEM_SEM_CATEGORIA: ItemLista = {
   cor: colors["desactived-text"],
 };
 
-function SeletorCategoriaMultiploBase({ categoriasSelecionadas, onAlternar, onLimpar }: Props) {
-  const chipTextSize = moderateScale(12);
-  const itemTextSize = moderateScale(14);
-  const titleSize = moderateScale(16);
+// Altura máxima da lista dentro do card do dropdown — acima disso rola.
+const MAX_ALTURA_LISTA = 260;
 
-  const [aberto, setAberto] = useState(false);
+function SeletorCategoriaMultiploBase({ categoriasSelecionadas, onAlternar, onLimpar }: Props) {
+  const triggerTextSize = moderateScale(12);
+  const itemTextSize = moderateScale(13);
+  const rodapeTextSize = moderateScale(12);
 
   const itens: ItemLista[] = [ITEM_SEM_CATEGORIA, ...CATEGORIAS];
-
-  const handleAbrir = useCallback(() => setAberto(true), []);
-  const handleFechar = useCallback(() => setAberto(false), []);
+  const temSelecao = categoriasSelecionadas.length > 0;
 
   const rotulo =
     categoriasSelecionadas.length === 0
@@ -40,95 +40,110 @@ function SeletorCategoriaMultiploBase({ categoriasSelecionadas, onAlternar, onLi
         : `${categoriasSelecionadas.length} categorias`;
 
   return (
-    <>
-      <Pressable
-        onPress={handleAbrir}
-        className={`bg-input-background/50 px-2 py-1.5 rounded-lg border flex-row items-center gap-1 ${
-          categoriasSelecionadas.length > 0 ? "border-active-icon" : "border-lines-divisions"
-        }`}
-        accessibilityRole="button"
-        accessibilityLabel={`Filtrar por categoria. ${rotulo}`}
-      >
-        <Text
-          style={{ fontSize: chipTextSize }}
-          className={categoriasSelecionadas.length > 0 ? "text-active-icon font-Inter-Medium" : "text-main-text font-Inter-Regular"}
-        >
-          {rotulo}
-        </Text>
-        <Ionicons name="chevron-down" color={categoriasSelecionadas.length > 0 ? colors["active-icon"] : colors["second-text"]} size={10} />
-      </Pressable>
-
-      <Modal visible={aberto} transparent animationType="fade" onRequestClose={handleFechar}>
+    <DropdownMenu
+      largura={240}
+      trigger={({ abrir, aberto }) => (
         <Pressable
-          className="flex-1 justify-end bg-black/50"
-          onPress={handleFechar}
+          onPress={abrir}
+          className={`px-3 py-1.5 rounded-lg border flex-row items-center gap-1 ${
+            aberto || temSelecao ? "border-active-icon" : "border-lines-divisions bg-input-background/50"
+          }`}
           accessibilityRole="button"
-          accessibilityLabel="Fechar filtro de categoria"
+          accessibilityLabel={`Filtrar por categoria. ${rotulo}`}
         >
-          <Pressable className="bg-card-background rounded-t-2xl pt-5 pb-8 max-h-[70%]" onPress={() => {}}>
-            <View className="flex-row justify-between items-center px-5 mb-2">
-              <Text style={{ fontSize: titleSize }} className="text-main-text font-Inter-SemiBold">
-                Filtrar por categoria
-              </Text>
-              {categoriasSelecionadas.length > 0 && (
-                <Pressable onPress={onLimpar} hitSlop={10} accessibilityRole="button" accessibilityLabel="Limpar filtro de categoria">
-                  <Text style={{ fontSize: chipTextSize }} className="text-active-icon font-Inter-Medium">
-                    Limpar
+          <Ionicons
+            name="pricetags-outline"
+            color={temSelecao ? colors["active-icon"] : colors["second-text"]}
+            size={13}
+          />
+          <Text
+            style={{ fontSize: triggerTextSize }}
+            className={temSelecao ? "text-active-icon font-Inter-Medium" : "text-main-text font-Inter-Regular"}
+            numberOfLines={1}
+          >
+            {rotulo}
+          </Text>
+          <Ionicons
+            name="chevron-down"
+            color={temSelecao ? colors["active-icon"] : colors["second-text"]}
+            size={11}
+          />
+        </Pressable>
+      )}
+    >
+      {({ fechar }) => (
+        <View className="py-1">
+          <ScrollView style={{ maxHeight: MAX_ALTURA_LISTA }} showsVerticalScrollIndicator={false}>
+            {itens.map((item, index) => {
+              const selecionado = categoriasSelecionadas.includes(item.id);
+              return (
+                <Pressable
+                  key={item.id ?? "sem-categoria"}
+                  // Multi-select: tocar num item alterna, NÃO fecha o
+                  // dropdown. Fechar só via "Aplicar" ou tocando fora.
+                  onPress={() => onAlternar(item.id)}
+                  className={`flex-row items-center gap-3 px-4 py-3 active:opacity-70 ${
+                    index < itens.length - 1 ? "border-b border-lines-divisions/60" : ""
+                  }`}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: selecionado }}
+                  accessibilityLabel={item.nome}
+                >
+                  <View
+                    className={`w-5 h-5 rounded-md border items-center justify-center flex-shrink-0 ${
+                      selecionado ? "bg-active-icon border-active-icon" : "border-input-border"
+                    }`}
+                  >
+                    {selecionado && <Ionicons name="checkmark" color="#fff" size={13} />}
+                  </View>
+                  <View
+                    style={{ backgroundColor: `${item.cor}22` }}
+                    className="w-7 h-7 rounded-full items-center justify-center flex-shrink-0"
+                  >
+                    <Ionicons name={item.icone} color={item.cor} size={15} />
+                  </View>
+                  <Text
+                    style={{ fontSize: itemTextSize }}
+                    className={selecionado ? "text-active-icon font-Inter-Medium flex-1" : "text-main-text flex-1"}
+                    numberOfLines={1}
+                  >
+                    {item.nome}
                   </Text>
                 </Pressable>
-              )}
-            </View>
+              );
+            })}
+          </ScrollView>
 
-            <FlatList
-              data={itens}
-              keyExtractor={(item) => item.id ?? "sem-categoria"}
-              renderItem={({ item }) => {
-                const selecionado = categoriasSelecionadas.includes(item.id);
-                return (
-                  <Pressable
-                    onPress={() => onAlternar(item.id)}
-                    className="flex-row items-center gap-3 px-5 py-3.5"
-                    accessibilityRole="checkbox"
-                    accessibilityState={{ checked: selecionado }}
-                    accessibilityLabel={item.nome}
-                  >
-                    <View
-                      className={`w-5 h-5 rounded-md border items-center justify-center flex-shrink-0 ${
-                        selecionado ? "bg-active-icon border-active-icon" : "border-input-border"
-                      }`}
-                    >
-                      {selecionado && <Ionicons name="checkmark" color="#fff" size={13} />}
-                    </View>
-                    <View
-                      style={{ backgroundColor: `${item.cor}22` }}
-                      className="w-8 h-8 rounded-full items-center justify-center"
-                    >
-                      <Ionicons name={item.icone} color={item.cor} size={16} />
-                    </View>
-                    <Text style={{ fontSize: itemTextSize }} className="text-main-text flex-1">
-                      {item.nome}
-                    </Text>
-                  </Pressable>
-                );
-              }}
-            />
-
-            <View className="px-5 pt-3">
+          {/* Rodapé de ação — Limpar (só com seleção) + Aplicar */}
+          <View className="flex-row items-center justify-between gap-2 px-4 pt-2 pb-1 border-t border-lines-divisions/60">
+            {temSelecao ? (
               <Pressable
-                onPress={handleFechar}
-                className="w-full py-3 rounded-xl items-center justify-center bg-active-icon active:opacity-80"
+                onPress={onLimpar}
+                hitSlop={8}
                 accessibilityRole="button"
-                accessibilityLabel="Aplicar filtro de categoria"
+                accessibilityLabel="Limpar filtro de categoria"
               >
-                <Text style={{ fontSize: itemTextSize }} className="text-white font-Inter-SemiBold">
-                  Aplicar
+                <Text style={{ fontSize: rodapeTextSize }} className="text-second-text font-Inter-Medium">
+                  Limpar
                 </Text>
               </Pressable>
-            </View>
-          </Pressable>
-        </Pressable>
-      </Modal>
-    </>
+            ) : (
+              <View />
+            )}
+            <Pressable
+              onPress={fechar}
+              className="px-4 py-1.5 rounded-lg bg-active-icon active:opacity-80"
+              accessibilityRole="button"
+              accessibilityLabel="Aplicar filtro de categoria"
+            >
+              <Text style={{ fontSize: rodapeTextSize }} className="text-white font-Inter-SemiBold">
+                Aplicar
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
+    </DropdownMenu>
   );
 }
 

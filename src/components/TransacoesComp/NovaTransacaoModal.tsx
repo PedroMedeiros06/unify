@@ -6,9 +6,9 @@ import { memo, useCallback, useEffect, useState } from "react";
 import { useTransacoes } from "@/context/TransacoesContext";
 import { SeletorData } from "@/components/common/SeletorData";
 import { SeletorCategoria } from "@/components/common/SeletorCategoria";
-import { IndicadorPassos } from "@/components/common/IndicadorPassos";
+import { DropdownMenu } from "@/components/common/DropdownMenu";
 import { CategoriaId, obterCategoriaPorId } from "@/database/categorias";
-import { listarBancos, Banco } from "@/database/queries";
+import { BANCOS_SUPORTADOS, BancoSuportado } from "@/database/parsers/bancosSuportados";
 import { dataHojeIso } from "@/utils/dateUtils";
 import { ModalCentralizado } from "@/components/common/ModalCentralizado";
 
@@ -17,16 +17,15 @@ type Props = {
   onFechar: () => void;
 };
 
-const TOTAL_PASSOS = 2;
-
 /**
- * Criação manual de transação — diferente de EditarTransacaoModal (que
- * assume uma transação já existente, sempre com banco definido).
- * Criação exige escolher o banco também, então é um fluxo próprio em
- * vez de forçar o modal de edição a lidar com os dois casos. Mantido
- * em 2 passos (diferente de EditarTransacaoModal, que virou 1 passo)
- * porque aqui também é preciso escolher o banco de origem — mais um
- * campo obrigatório do que na edição.
+ * Criação manual de transação. Formulário único (sem passos), com os
+ * campos essenciais: banco, nome, valor, data — mais o tipo
+ * (entrada/saída) e a categoria. O detalhe/subtítulo antigo foi
+ * removido; quando vazio, cai no nome da categoria.
+ *
+ * O banco é escolhido num dropdown que lista os bancos com suporte a
+ * importação de CSV (BANCOS_SUPORTADOS) — os mesmos que aparecem no
+ * fluxo de importar extrato.
  */
 function NovaTransacaoModalBase({ visivel, onFechar }: Props) {
   const titleSize = moderateScale(17);
@@ -36,11 +35,8 @@ function NovaTransacaoModalBase({ visivel, onFechar }: Props) {
 
   const { adicionarTransacao } = useTransacoes();
 
-  const [passo, setPasso] = useState(0);
-  const [bancos, setBancos] = useState<Banco[]>([]);
-  const [bancoSelecionado, setBancoSelecionado] = useState<Banco | null>(null);
+  const [banco, setBanco] = useState<BancoSuportado | null>(null);
   const [nome, setNome] = useState("");
-  const [subtitulo, setSubtitulo] = useState("");
   const [valorTexto, setValorTexto] = useState("");
   const [tipo, setTipo] = useState<"entrada" | "saida">("saida");
   const [dataIso, setDataIso] = useState<string | null>(dataHojeIso());
@@ -49,19 +45,13 @@ function NovaTransacaoModalBase({ visivel, onFechar }: Props) {
 
   useEffect(() => {
     if (!visivel) return;
-    listarBancos().then(setBancos);
-  }, [visivel]);
-
-  useEffect(() => {
-    if (!visivel) return;
-    setPasso(0);
-    setBancoSelecionado(null);
+    setBanco(null);
     setNome("");
-    setSubtitulo("");
     setValorTexto("");
     setTipo("saida");
     setDataIso(dataHojeIso());
     setCategoriaId(null);
+    setSalvando(false);
   }, [visivel]);
 
   const handleValorChange = useCallback((texto: string) => {
@@ -73,29 +63,22 @@ function NovaTransacaoModalBase({ visivel, onFechar }: Props) {
     ? valorNumerico.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
     : "R$ 0,00";
 
-  const passo1Valido = !!bancoSelecionado && nome.trim().length > 0 && valorNumerico > 0 && !!dataIso;
-
-  const handleProximo = useCallback(() => {
-    if (!passo1Valido) return;
-    setPasso(1);
-  }, [passo1Valido]);
-
-  const handleVoltar = useCallback(() => setPasso(0), []);
+  const formularioValido = !!banco && nome.trim().length > 0 && valorNumerico > 0 && !!dataIso;
 
   const handleSalvar = useCallback(async () => {
-    if (!passo1Valido || !bancoSelecionado || !dataIso || salvando) return;
+    if (!formularioValido || !banco || !dataIso || salvando) return;
 
     setSalvando(true);
     try {
       const categoria = obterCategoriaPorId(categoriaId);
       await adicionarTransacao({
         nome: nome.trim(),
-        subtitulo: subtitulo.trim() || categoria?.nome || "Outros",
+        subtitulo: categoria?.nome || "Outros",
         valor: valorNumerico,
         tipo,
         data: dataIso,
-        banco: { sigla: bancoSelecionado.sigla, cor: bancoSelecionado.cor },
-        bancoId: bancoSelecionado.id,
+        banco: { sigla: banco.sigla, cor: banco.cor },
+        bancoId: banco.id,
         status: "concluida",
         categoriaIcone: categoria?.icone,
         categoriaId,
@@ -106,11 +89,18 @@ function NovaTransacaoModalBase({ visivel, onFechar }: Props) {
     } finally {
       setSalvando(false);
     }
-  }, [passo1Valido, bancoSelecionado, dataIso, salvando, nome, subtitulo, valorNumerico, tipo, categoriaId, adicionarTransacao, onFechar]);
+  }, [formularioValido, banco, dataIso, salvando, nome, valorNumerico, tipo, categoriaId, adicionarTransacao, onFechar]);
 
   return (
-    <ModalCentralizado visivel={visivel} onFechar={onFechar} bloquearFechamentoExterno={salvando}>
-      <View className="flex-row justify-between items-center mb-4">
+    <ModalCentralizado
+      visivel={visivel}
+      onFechar={onFechar}
+      bloquearFechamentoExterno={salvando}
+      overlayClassName="bg-black/90"
+      cardElevado
+      cardClassName="border-active-icon/40"
+    >
+      <View className="flex-row justify-between items-center mb-5">
         <Text style={{ fontSize: titleSize }} className="text-main-text font-Inter-SemiBold">
           Nova transação
         </Text>
@@ -119,161 +109,179 @@ function NovaTransacaoModalBase({ visivel, onFechar }: Props) {
         </Pressable>
       </View>
 
-      <IndicadorPassos totalPassos={TOTAL_PASSOS} passoAtual={passo} />
-
-      {passo === 0 && (
-        <>
-          <Text style={{ fontSize: labelSize }} className="text-second-text mb-1.5">
-            Banco
-          </Text>
-          <View className="flex-row flex-wrap gap-2 mb-4">
-            {bancos.map((banco) => {
-              const selecionado = banco.id === bancoSelecionado?.id;
-              return (
-                <Pressable
-                  key={banco.id}
-                  onPress={() => setBancoSelecionado(banco)}
-                  style={{ backgroundColor: selecionado ? `${banco.cor}30` : undefined }}
-                  className={`flex-row items-center gap-2 px-3 py-2 rounded-xl border ${
-                    selecionado ? "border-2" : "border-input-border bg-input-background"
-                  }`}
-                  accessibilityRole="radio"
-                  accessibilityState={{ checked: selecionado }}
-                >
-                  <View style={{ backgroundColor: banco.cor }} className="w-6 h-6 rounded-md items-center justify-center">
+      {/* BANCO — dropdown com os bancos suportados pelo importador de CSV */}
+      <Text style={{ fontSize: labelSize }} className="text-second-text mb-1.5">
+        Banco
+      </Text>
+      <View className="mb-4">
+        <DropdownMenu
+          larguraDoTrigger
+          alinhamento="esquerda"
+          trigger={({ abrir, aberto }) => (
+            <Pressable
+              onPress={abrir}
+              disabled={salvando}
+              className={`bg-input-background border rounded-xl px-3 py-3 flex-row items-center gap-2 ${
+                aberto ? "border-active-icon" : "border-input-border"
+              }`}
+              accessibilityRole="button"
+              accessibilityLabel={`Banco. ${banco ? banco.nome : "Nenhum selecionado"}`}
+            >
+              {banco ? (
+                <>
+                  <View
+                    style={{ backgroundColor: banco.cor }}
+                    className="w-6 h-6 rounded-md items-center justify-center flex-shrink-0"
+                  >
                     <Text style={{ fontSize: 10 }} className="text-white font-Inter-Bold">
                       {banco.sigla}
                     </Text>
                   </View>
-                  <Text style={{ fontSize: inputTextSize }} className="text-main-text font-Inter-Medium">
+                  <Text style={{ fontSize: inputTextSize }} className="text-main-text font-Inter-Medium flex-1" numberOfLines={1}>
                     {banco.nome}
                   </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-
-          <Text style={{ fontSize: labelSize }} className="text-second-text mb-1.5">
-            Nome
-          </Text>
-          <TextInput
-            value={nome}
-            onChangeText={setNome}
-            placeholder="Ex.: Mercado, Salário..."
-            placeholderTextColor={colors["desactived-text"]}
-            style={{ fontSize: inputTextSize, color: colors["main-text"] }}
-            className="bg-input-background border border-input-border rounded-xl px-3 py-3 mb-4"
-            editable={!salvando}
-            accessibilityLabel="Nome da transação"
-          />
-
-          <Text style={{ fontSize: labelSize }} className="text-second-text mb-1.5">
-            Valor
-          </Text>
-          <TextInput
-            value={valorExibicao}
-            onChangeText={handleValorChange}
-            keyboardType="numeric"
-            style={{ fontSize: inputTextSize, color: colors["main-text"] }}
-            className="bg-input-background border border-input-border rounded-xl px-3 py-3 mb-4"
-            editable={!salvando}
-            accessibilityLabel="Valor da transação"
-          />
-
-          <View className="mb-5">
-            <SeletorData label="Data" valorIso={dataIso} onChange={setDataIso} />
-          </View>
-
-          <Pressable
-            onPress={handleProximo}
-            disabled={!passo1Valido}
-            className={`w-full py-3.5 rounded-xl items-center justify-center flex-row gap-1.5 ${passo1Valido ? "bg-active-icon active:opacity-80" : "bg-active-icon/30"}`}
-            accessibilityRole="button"
-            accessibilityLabel="Próximo"
-          >
-            <Text style={{ fontSize: buttonTextSize }} className="text-white font-Inter-SemiBold">
-              Próximo
-            </Text>
-            <Ionicons name="arrow-forward" color="#fff" size={16} />
-          </Pressable>
-        </>
-      )}
-
-      {passo === 1 && (
-        <>
-          <Text style={{ fontSize: labelSize }} className="text-second-text mb-1.5">
-            Detalhe (opcional)
-          </Text>
-          <TextInput
-            value={subtitulo}
-            onChangeText={setSubtitulo}
-            placeholder="Ex.: Descrição adicional"
-            placeholderTextColor={colors["desactived-text"]}
-            style={{ fontSize: inputTextSize, color: colors["main-text"] }}
-            className="bg-input-background border border-input-border rounded-xl px-3 py-3 mb-4"
-            editable={!salvando}
-            accessibilityLabel="Detalhe adicional da transação"
-          />
-
-          <View className="mb-4">
-            <SeletorCategoria categoriaSelecionada={categoriaId} onSelecionar={setCategoriaId} />
-          </View>
-
-          <Text style={{ fontSize: labelSize }} className="text-second-text mb-1.5">
-            Tipo
-          </Text>
-          <View className="flex-row gap-2 mb-5">
-            <Pressable
-              onPress={() => setTipo("entrada")}
-              disabled={salvando}
-              className={`flex-1 py-2.5 rounded-xl items-center border ${tipo === "entrada" ? "bg-sucess-color/15 border-sucess-color" : "border-input-border"}`}
-              accessibilityRole="radio"
-              accessibilityState={{ checked: tipo === "entrada" }}
-            >
-              <Text style={{ fontSize: inputTextSize }} className={tipo === "entrada" ? "text-sucess-color font-Inter-Medium" : "text-second-text"}>
-                Entrada
-              </Text>
+                </>
+              ) : (
+                <Text style={{ fontSize: inputTextSize }} className="text-desactived-text flex-1">
+                  Selecione o banco
+                </Text>
+              )}
+              <Ionicons
+                name="chevron-down"
+                color={aberto ? colors["active-icon"] : colors["second-text"]}
+                size={16}
+                style={{ flexShrink: 0 }}
+              />
             </Pressable>
-            <Pressable
-              onPress={() => setTipo("saida")}
-              disabled={salvando}
-              className={`flex-1 py-2.5 rounded-xl items-center border ${tipo === "saida" ? "bg-error-color/15 border-error-color" : "border-input-border"}`}
-              accessibilityRole="radio"
-              accessibilityState={{ checked: tipo === "saida" }}
-            >
-              <Text style={{ fontSize: inputTextSize }} className={tipo === "saida" ? "text-error-color font-Inter-Medium" : "text-second-text"}>
-                Saída
-              </Text>
-            </Pressable>
-          </View>
+          )}
+        >
+          {({ fechar }) => (
+            <View className="py-1">
+              {BANCOS_SUPORTADOS.map((b, index) => {
+                const selecionado = b.id === banco?.id;
+                return (
+                  <Pressable
+                    key={b.id}
+                    onPress={() => {
+                      setBanco(b);
+                      fechar();
+                    }}
+                    className={`flex-row items-center gap-3 px-4 py-3 active:opacity-70 ${
+                      index < BANCOS_SUPORTADOS.length - 1 ? "border-b border-lines-divisions/60" : ""
+                    }`}
+                    accessibilityRole="radio"
+                    accessibilityState={{ checked: selecionado }}
+                    accessibilityLabel={b.nome}
+                  >
+                    <View
+                      style={{ backgroundColor: b.cor }}
+                      className="w-7 h-7 rounded-lg items-center justify-center flex-shrink-0"
+                    >
+                      <Text style={{ fontSize: 10 }} className="text-white font-Inter-Bold">
+                        {b.sigla}
+                      </Text>
+                    </View>
+                    <Text
+                      style={{ fontSize: inputTextSize }}
+                      className={selecionado ? "text-active-icon font-Inter-Medium flex-1" : "text-main-text flex-1"}
+                      numberOfLines={1}
+                    >
+                      {b.nome}
+                    </Text>
+                    {selecionado && <Ionicons name="checkmark" color={colors["active-icon"]} size={16} />}
+                  </Pressable>
+                );
+              })}
+            </View>
+          )}
+        </DropdownMenu>
+      </View>
 
-          <View className="flex-row gap-2.5">
-            <Pressable
-              onPress={handleVoltar}
-              disabled={salvando}
-              className="flex-1 py-3.5 rounded-xl items-center justify-center border border-input-border active:opacity-70"
-              accessibilityRole="button"
-              accessibilityLabel="Voltar"
-            >
-              <Text style={{ fontSize: buttonTextSize }} className="text-second-text font-Inter-Medium">
-                Voltar
-              </Text>
-            </Pressable>
+      {/* NOME */}
+      <Text style={{ fontSize: labelSize }} className="text-second-text mb-1.5">
+        Nome
+      </Text>
+      <TextInput
+        value={nome}
+        onChangeText={setNome}
+        placeholder="Ex.: Mercado, Salário..."
+        placeholderTextColor={colors["desactived-text"]}
+        style={{ fontSize: inputTextSize, color: colors["main-text"] }}
+        className="bg-input-background border border-input-border rounded-xl px-3 py-3 mb-4"
+        editable={!salvando}
+        accessibilityLabel="Nome da transação"
+      />
 
-            <Pressable
-              onPress={handleSalvar}
-              disabled={salvando}
-              className="flex-1 py-3.5 rounded-xl items-center justify-center bg-active-icon active:opacity-80"
-              accessibilityRole="button"
-              accessibilityLabel="Salvar transação"
-            >
-              <Text style={{ fontSize: buttonTextSize }} className="text-white font-Inter-SemiBold">
-                {salvando ? "Salvando..." : "Salvar"}
-              </Text>
-            </Pressable>
-          </View>
-        </>
-      )}
+      {/* VALOR */}
+      <Text style={{ fontSize: labelSize }} className="text-second-text mb-1.5">
+        Valor
+      </Text>
+      <TextInput
+        value={valorExibicao}
+        onChangeText={handleValorChange}
+        keyboardType="numeric"
+        style={{ fontSize: inputTextSize, color: colors["main-text"] }}
+        className="bg-input-background border border-input-border rounded-xl px-3 py-3 mb-4"
+        editable={!salvando}
+        accessibilityLabel="Valor da transação"
+      />
+
+      {/* DATA */}
+      <View className="mb-4">
+        <SeletorData label="Data" valorIso={dataIso} onChange={setDataIso} />
+      </View>
+
+      {/* TIPO */}
+      <Text style={{ fontSize: labelSize }} className="text-second-text mb-1.5">
+        Tipo
+      </Text>
+      <View className="flex-row gap-2 mb-4">
+        <Pressable
+          onPress={() => setTipo("entrada")}
+          disabled={salvando}
+          className={`flex-1 py-2.5 rounded-xl items-center border ${
+            tipo === "entrada" ? "bg-sucess-color/15 border-sucess-color" : "border-input-border"
+          }`}
+          accessibilityRole="radio"
+          accessibilityState={{ checked: tipo === "entrada" }}
+        >
+          <Text style={{ fontSize: inputTextSize }} className={tipo === "entrada" ? "text-sucess-color font-Inter-Medium" : "text-second-text"}>
+            Entrada
+          </Text>
+        </Pressable>
+        <Pressable
+          onPress={() => setTipo("saida")}
+          disabled={salvando}
+          className={`flex-1 py-2.5 rounded-xl items-center border ${
+            tipo === "saida" ? "bg-error-color/15 border-error-color" : "border-input-border"
+          }`}
+          accessibilityRole="radio"
+          accessibilityState={{ checked: tipo === "saida" }}
+        >
+          <Text style={{ fontSize: inputTextSize }} className={tipo === "saida" ? "text-error-color font-Inter-Medium" : "text-second-text"}>
+            Saída
+          </Text>
+        </Pressable>
+      </View>
+
+      {/* CATEGORIA */}
+      <View className="mb-5">
+        <SeletorCategoria categoriaSelecionada={categoriaId} onSelecionar={setCategoriaId} />
+      </View>
+
+      <Pressable
+        onPress={handleSalvar}
+        disabled={!formularioValido || salvando}
+        className={`w-full py-3.5 rounded-xl items-center justify-center ${
+          formularioValido && !salvando ? "bg-active-icon active:opacity-80" : "bg-active-icon/30"
+        }`}
+        accessibilityRole="button"
+        accessibilityLabel="Salvar transação"
+      >
+        <Text style={{ fontSize: buttonTextSize }} className="text-white font-Inter-SemiBold">
+          {salvando ? "Salvando..." : "Salvar transação"}
+        </Text>
+      </Pressable>
     </ModalCentralizado>
   );
 }

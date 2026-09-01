@@ -13,23 +13,31 @@ export type EstadoFiltros = {
   periodoFimPersonalizado: string | null;
 };
 
-const ESTADO_INICIAL: EstadoFiltros = {
-  bancosSelecionados: [],
-  categoriasSelecionadas: [],
-  periodoPreset: "tudo",
-  periodoInicioPersonalizado: null,
-  periodoFimPersonalizado: null,
-};
+// "esteMes" é o preset NEUTRO padrão: telas de análise e listas abrem
+// já recortadas no mês corrente em vez de "tudo" (que trazia histórico
+// inteiro e poluía os gráficos). Componentes que precisam de outro
+// ponto de partida passam `presetInicial` para o hook.
+const PRESET_PADRAO: PeriodoPreset = "esteMes";
+
+function montarEstadoInicial(presetInicial: PeriodoPreset): EstadoFiltros {
+  return {
+    bancosSelecionados: [],
+    categoriasSelecionadas: [],
+    periodoPreset: presetInicial,
+    periodoInicioPersonalizado: null,
+    periodoFimPersonalizado: null,
+  };
+}
 
 /**
  * Resolve um PeriodoPreset para um intervalo [inicio, fim] em ISO
  * (aaaa-mm-dd), ambos inclusive. Retorna null nos dois campos quando
  * o preset é "tudo" (sem filtro de data nenhum).
  */
-function resolverIntervaloPeriodo(
+export function resolverIntervaloPeriodo(
   preset: PeriodoPreset,
-  inicioPersonalizado: string | null,
-  fimPersonalizado: string | null
+  inicioPersonalizado: string | null = null,
+  fimPersonalizado: string | null = null
 ): { inicio: string | null; fim: string | null } {
   const hoje = dataHojeIso();
 
@@ -66,8 +74,15 @@ function resolverIntervaloPeriodo(
  * Se no futuro surgir uma necessidade real de sincronizar filtros entre
  * telas, aí sim vale reavaliar promover isso a um Context — não antes.
  */
-export function useFiltrosTransacao() {
-  const [filtros, setFiltros] = useState<EstadoFiltros>(ESTADO_INICIAL);
+type OpcoesHook = {
+  // Preset com que o filtro nasce. Default: "esteMes". Ex.: a lista de
+  // últimas transações da Home passa "hoje" e resolve em cascata.
+  presetInicial?: PeriodoPreset;
+};
+
+export function useFiltrosTransacao(opcoes: OpcoesHook = {}) {
+  const presetInicial = opcoes.presetInicial ?? PRESET_PADRAO;
+  const [filtros, setFiltros] = useState<EstadoFiltros>(() => montarEstadoInicial(presetInicial));
 
   const alternarBanco = useCallback((bancoId: string) => {
     setFiltros((prev) => {
@@ -123,7 +138,7 @@ export function useFiltrosTransacao() {
   }, []);
 
   const limparTodosFiltros = useCallback(() => {
-    setFiltros(ESTADO_INICIAL);
+    setFiltros(montarEstadoInicial(PRESET_PADRAO));
   }, []);
 
   const { inicio: periodoInicio, fim: periodoFim } = resolverIntervaloPeriodo(
@@ -142,10 +157,12 @@ export function useFiltrosTransacao() {
     [filtros.bancosSelecionados, filtros.categoriasSelecionadas, periodoInicio, periodoFim]
   );
 
+  // "esteMes" é o estado neutro agora — não conta como filtro ativo
+  // (senão a BarraFiltros marcaria "filtros ativos" o tempo todo).
   const possuiFiltrosAtivos =
     filtros.bancosSelecionados.length > 0 ||
     filtros.categoriasSelecionadas.length > 0 ||
-    filtros.periodoPreset !== "tudo";
+    filtros.periodoPreset !== PRESET_PADRAO;
 
   return {
     filtros,

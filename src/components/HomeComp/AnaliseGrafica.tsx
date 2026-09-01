@@ -15,6 +15,7 @@ import {
 } from "@/database/queries";
 import { obterMetaDeMaiorProgresso } from "@/database/metasQueries";
 import { obterCategoriaPorId } from "@/database/categorias";
+import { useNavigation } from "@/context/NavigationContext";
 
 type Props = {
   filtrosParaQuery: FiltrosTransacao;
@@ -48,6 +49,8 @@ function useFatiasComOffset(fatias: FatiaExibicao[]) {
 function AnaliseGraficaBase({ filtrosParaQuery }: Props) {
   const { width } = useWindowDimensions();
   const isSmallDevice = width < 375;
+
+  const { navigate } = useNavigation();
 
   const cardTitleSize = moderateScale(18);
   const sectionTitleSize = moderateScale(13);
@@ -161,9 +164,10 @@ function AnaliseGraficaBase({ filtrosParaQuery }: Props) {
           Análise gráfica
         </Text>
         <Pressable
+          onPress={() => navigate("planejamento", { planejamentoTab: "Orçamento" })}
           className="flex-row items-center gap-1 bg-input-background border border-input-border px-2.5 py-1.5 rounded-lg active:opacity-60"
           accessibilityRole="button"
-          accessibilityLabel="Ver relatórios completos"
+          accessibilityLabel="Ver relatórios completos no Orçamento"
         >
           <Ionicons name="stats-chart-outline" color={colors["active-icon"]} size={13} />
           <Text style={{ fontSize: actionTextSize }} className="text-active-icon font-Inter-Medium">
