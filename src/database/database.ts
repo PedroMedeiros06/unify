@@ -63,6 +63,9 @@ async function droparTodasAsTabelas(db: SQLite.SQLiteDatabase): Promise<void> {
   await db.execAsync(`DROP TABLE IF EXISTS bancos;`);
   await db.execAsync(`DROP TABLE IF EXISTS metas;`);
   await db.execAsync(`DROP TABLE IF EXISTS compromissos;`);
+  await db.execAsync(`DROP TABLE IF EXISTS lembretes;`);
+  await db.execAsync(`DROP TABLE IF EXISTS simulacoes;`);
+  await db.execAsync(`DROP TABLE IF EXISTS cotacoes_moeda;`);
   // Regras aprendidas/sistema de categorização — sem isso sobrariam
   // regras "aprendidas" para transações que não existem mais.
   await db.execAsync(`DROP TABLE IF EXISTS regras_categorizacao;`);

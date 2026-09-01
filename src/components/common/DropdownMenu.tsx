@@ -13,6 +13,11 @@ type Props = {
   // altura fixa e conhecida, aqui o conteúdo varia bastante (lista de
   // período vs grid de meses), então não faz sentido fixar altura.
   largura?: number;
+  // Quando true, ignora `largura` e faz o card ter exatamente a mesma
+  // largura do trigger que o abriu (medida em runtime). Útil para
+  // dropdowns que substituem um <select> ocupando a linha inteira do
+  // formulário — o card fica alinhado de borda a borda com o campo.
+  larguraDoTrigger?: boolean;
   // Alinhamento horizontal PREFERIDO do card em relação ao trigger.
   // "centro" (padrão) centraliza o card no meio do trigger — é o que
   // se espera visualmente de um dropdown ancorado a um botão/card de
@@ -40,7 +45,13 @@ type Props = {
  * borda, e sem esse ajuste o card nasceria parcialmente fora da
  * viewport.
  */
-export function DropdownMenu({ trigger, children, largura = 220, alinhamento = "centro" }: Props) {
+export function DropdownMenu({
+  trigger,
+  children,
+  largura = 220,
+  larguraDoTrigger = false,
+  alinhamento = "centro",
+}: Props) {
   const { width: larguraTela } = useWindowDimensions();
 
   const [aberto, setAberto] = useState(false);
@@ -96,25 +107,27 @@ export function DropdownMenu({ trigger, children, largura = 220, alinhamento = "
    * o dropdown parecer ancorado ao elemento que o abriu, em vez de
    * "esticado" para um dos lados.
    */
-  function calcularLeft(triggerRect: LayoutRectangle): number {
+  function calcularLeft(triggerRect: LayoutRectangle, larguraCard: number): number {
     const centroTrigger = triggerRect.x + triggerRect.width / 2;
 
     let leftPreferido: number;
     if (alinhamento === "centro") {
-      leftPreferido = centroTrigger - largura / 2;
+      leftPreferido = centroTrigger - larguraCard / 2;
     } else if (alinhamento === "direita") {
-      leftPreferido = triggerRect.x + triggerRect.width - largura;
+      leftPreferido = triggerRect.x + triggerRect.width - larguraCard;
     } else {
       leftPreferido = triggerRect.x;
     }
 
-    const leftMaximo = larguraTela - largura - MARGEM_TELA;
+    const leftMaximo = larguraTela - larguraCard - MARGEM_TELA;
     const leftMinimo = MARGEM_TELA;
 
     return Math.min(Math.max(leftPreferido, leftMinimo), leftMaximo);
   }
 
-  const left = posicaoTrigger ? calcularLeft(posicaoTrigger) : 0;
+  const larguraCard =
+    larguraDoTrigger && posicaoTrigger ? posicaoTrigger.width : largura;
+  const left = posicaoTrigger ? calcularLeft(posicaoTrigger, larguraCard) : 0;
   const top = posicaoTrigger ? posicaoTrigger.y + posicaoTrigger.height + 6 : 0;
 
   return (
@@ -138,7 +151,7 @@ export function DropdownMenu({ trigger, children, largura = 220, alinhamento = "
               position: "absolute",
               top,
               left,
-              width: largura,
+              width: larguraCard,
               opacity: progresso,
               transform: [{ translateY }],
             }}

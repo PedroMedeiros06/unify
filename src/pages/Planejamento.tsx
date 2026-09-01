@@ -10,8 +10,10 @@ import { DistribuicaoOrcamento } from "@/components/PlanejamentoComp/Distribuica
 import { MetasFinanceiras } from "@/components/PlanejamentoComp/MetasFinanceiras";
 import { MinhasMetas } from "@/components/PlanejamentoComp/MinhasMetas";
 import { OrcamentoResumo } from "@/components/OrcamentoComp/OrcamentoResumo";
+import { SimulacoesResumo } from "@/components/SimulacoesComp/SimulacoesResumo";
 import { OrcamentoMensal } from "@/components/PlanejamentoComp/OrcamentoMensal";
 import { ProximosCompromissos } from "@/components/PlanejamentoComp/ProximosCompromissos";
+import { ProximosLembretes } from "@/components/PlanejamentoComp/ProximosLembretes";
 import { BarraFiltros } from "@/components/common/BarraFiltros";
 import { SeletorPeriodoPersonalizado } from "@/components/common/SeletorPeriodoPersonalizado";
 import { useFiltrosTransacao } from "@/hooks/useFiltrosTransacao";
@@ -130,6 +132,7 @@ export function Planejamento() {
             <MetasFinanceiras />
             <OrcamentoMensal onEditarOrcamento={() => setActiveTab("Orçamento")} />
             <ProximosCompromissos />
+            <ProximosLembretes />
           </View>
         )}
 
@@ -137,11 +140,7 @@ export function Planejamento() {
 
         {activeTab === "Orçamento" && <OrcamentoResumo />}
 
-        {activeTab !== "Resumo" && activeTab !== "Metas" && activeTab !== "Orçamento" && (
-          <View className="items-center justify-center py-16">
-            <Text className="text-desactived-text">Em breve: {activeTab}</Text>
-          </View>
-        )}
+        {activeTab === "Simulações" && <SimulacoesResumo />}
       </View>
 
       <SeletorPeriodoPersonalizado
