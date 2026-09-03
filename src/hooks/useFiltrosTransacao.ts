@@ -1,9 +1,15 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CategoriaId } from "@/database/categorias";
-import { FiltrosTransacao } from "@/database/queries";
+import { FiltrosTransacao, listarTransacoesFiltradas } from "@/database/queries";
 import { dataHojeIso } from "@/utils/dateUtils";
 
 export type PeriodoPreset = "hoje" | "7dias" | "esteMes" | "personalizado" | "tudo";
+
+// Ordem da cascata de período: começa no recorte mais estreito e vai
+// abrindo até achar um intervalo com pelo menos uma transação; se
+// nenhum tiver, para em "tudo". Usada pelas telas que passam
+// `cascata: true` ao hook.
+const CASCATA_PRESETS: PeriodoPreset[] = ["hoje", "7dias", "esteMes", "tudo"];
 
 export type EstadoFiltros = {
   bancosSelecionados: string[]; // [] = todos os bancos
@@ -75,14 +81,28 @@ export function resolverIntervaloPeriodo(
  * telas, aí sim vale reavaliar promover isso a um Context — não antes.
  */
 type OpcoesHook = {
-  // Preset com que o filtro nasce. Default: "esteMes". Ex.: a lista de
-  // últimas transações da Home passa "hoje" e resolve em cascata.
+  // Preset com que o filtro nasce. Default: "esteMes". Ignorado quando
+  // `cascata` é true (nesse caso nasce em "hoje" e a cascata decide).
   presetInicial?: PeriodoPreset;
+  // Quando true: no primeiro mount, testa hoje → 7dias → esteMes → tudo
+  // e fixa o primeiro período que tem transação (respeitando os
+  // bancos/categorias já selecionados). Depois disso o usuário controla
+  // o período na mão até sair da tela. Só o eixo de PERÍODO é
+  // cascateado — banco e categoria não.
+  cascata?: boolean;
 };
 
 export function useFiltrosTransacao(opcoes: OpcoesHook = {}) {
-  const presetInicial = opcoes.presetInicial ?? PRESET_PADRAO;
+  const presetInicial = opcoes.cascata ? "hoje" : opcoes.presetInicial ?? PRESET_PADRAO;
   const [filtros, setFiltros] = useState<EstadoFiltros>(() => montarEstadoInicial(presetInicial));
+
+  // Preset considerado NEUTRO para esta instância — ou seja, o ponto de
+  // partida que NÃO conta como "filtro ativo" e para o qual "Limpar
+  // tudo" volta. Sem cascata é sempre PRESET_PADRAO. Com cascata, é o
+  // preset que a cascata fixou no mount (ex: se a tela só tinha
+  // transação em "tudo", "tudo" passa a ser o neutro dela — trocar de
+  // volta pra "esteMes" aí SIM é o usuário filtrando).
+  const [presetNeutro, setPresetNeutro] = useState<PeriodoPreset>(presetInicial);
 
   const alternarBanco = useCallback((bancoId: string) => {
     setFiltros((prev) => {
@@ -128,6 +148,55 @@ export function useFiltrosTransacao(opcoes: OpcoesHook = {}) {
     }));
   }, []);
 
+  // Cascata de período (só quando opcoes.cascata): roda uma única vez
+  // no mount. Percorre CASCATA_PRESETS e fixa o primeiro que retorna ao
+  // menos uma transação (considerando banco/categoria já filtrados, que
+  // normalmente estão vazios no mount). Se nenhum tiver, fixa "tudo".
+  const cascataResolvidaRef = useRef(false);
+  useEffect(() => {
+    if (!opcoes.cascata || cascataResolvidaRef.current) return;
+    cascataResolvidaRef.current = true;
+
+    let ativo = true;
+
+    async function resolverCascata() {
+      for (const preset of CASCATA_PRESETS) {
+        const { inicio, fim } = resolverIntervaloPeriodo(preset);
+        const linhas = await listarTransacoesFiltradas(
+          {
+            bancosIds: filtros.bancosSelecionados.length > 0 ? filtros.bancosSelecionados : null,
+            categoriasIds:
+              filtros.categoriasSelecionadas.length > 0 ? filtros.categoriasSelecionadas : null,
+            dataInicio: inicio,
+            dataFim: fim,
+          },
+          1
+        );
+        if (!ativo) return;
+        if (linhas.length > 0) {
+          // Esse preset passa a ser o neutro da tela — não conta como
+          // "filtro ativo". "hoje" já é o inicial; só troca se parou
+          // em outro ponto.
+          setPresetNeutro(preset);
+          if (preset !== "hoje") definirPeriodoPreset(preset);
+          return;
+        }
+      }
+      if (ativo) {
+        setPresetNeutro("tudo");
+        definirPeriodoPreset("tudo");
+      }
+    }
+
+    resolverCascata();
+
+    return () => {
+      ativo = false;
+    };
+    // Sem deps de propósito: cascata é decisão de mount único.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const definirPeriodoPersonalizado = useCallback((inicioIso: string, fimIso: string) => {
     setFiltros((prev) => ({
       ...prev,
@@ -138,8 +207,11 @@ export function useFiltrosTransacao(opcoes: OpcoesHook = {}) {
   }, []);
 
   const limparTodosFiltros = useCallback(() => {
-    setFiltros(montarEstadoInicial(PRESET_PADRAO));
-  }, []);
+    // Volta ao neutro DESTA instância (o que a cascata fixou, ou
+    // PRESET_PADRAO sem cascata) — não força "esteMes" numa tela cujo
+    // neutro é "tudo".
+    setFiltros(montarEstadoInicial(presetNeutro));
+  }, [presetNeutro]);
 
   const { inicio: periodoInicio, fim: periodoFim } = resolverIntervaloPeriodo(
     filtros.periodoPreset,
@@ -157,12 +229,24 @@ export function useFiltrosTransacao(opcoes: OpcoesHook = {}) {
     [filtros.bancosSelecionados, filtros.categoriasSelecionadas, periodoInicio, periodoFim]
   );
 
-  // "esteMes" é o estado neutro agora — não conta como filtro ativo
-  // (senão a BarraFiltros marcaria "filtros ativos" o tempo todo).
+  // "O usuário mexeu em algum filtro?" — banco/categoria escolhidos, ou
+  // período diferente do neutro desta instância. É isto que liga o
+  // botão "Limpar tudo". O neutro pós-cascata NÃO conta.
   const possuiFiltrosAtivos =
     filtros.bancosSelecionados.length > 0 ||
     filtros.categoriasSelecionadas.length > 0 ||
-    filtros.periodoPreset !== PRESET_PADRAO;
+    filtros.periodoPreset !== presetNeutro;
+
+  // "A consulta precisa de recorte?" — tem banco/categoria, OU o
+  // período não é "tudo" (traz tudo). Diferente de possuiFiltrosAtivos:
+  // aqui um período restrito escolhido PELA CASCATA (ex: "7dias") ainda
+  // conta, porque a lista tem que respeitar essa janela mesmo sem o
+  // usuário ter tocado em nada. Telas que trocam "lista completa do
+  // contexto" por "query filtrada" devem usar este flag.
+  const consultaTemRecorte =
+    filtros.bancosSelecionados.length > 0 ||
+    filtros.categoriasSelecionadas.length > 0 ||
+    filtros.periodoPreset !== "tudo";
 
   return {
     filtros,
@@ -174,6 +258,7 @@ export function useFiltrosTransacao(opcoes: OpcoesHook = {}) {
     definirPeriodoPersonalizado,
     limparTodosFiltros,
     possuiFiltrosAtivos,
+    consultaTemRecorte,
     filtrosParaQuery,
   };
 }

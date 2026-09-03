@@ -25,6 +25,8 @@ export function ImportarExtrato() {
     selecionarBancoManualmente,
     alternarTransacao,
     definirCategoriaNoPreview,
+    definirVinculoMeta,
+    removerVinculoMeta,
     confirmarImportacao,
     reiniciar,
   } = useImportacaoCsv();
@@ -122,11 +124,14 @@ export function ImportarExtrato() {
           <PreviewImportacao
             transacoes={estado.transacoes}
             transacoesExcluidas={estado.transacoesExcluidas}
+            vinculosPendentes={estado.vinculosPendentes}
             linhasComErro={estado.linhasComErro}
             nomeBanco={nomeBancoPorId(estado.bancoId, parsersDisponiveis)}
             nomeArquivo={estado.nomeArquivo}
             onToggleTransacao={alternarTransacao}
             onDefinirCategoria={definirCategoriaNoPreview}
+            onDefinirVinculoMeta={definirVinculoMeta}
+            onRemoverVinculoMeta={removerVinculoMeta}
             onConfirmar={confirmarImportacao}
             onCancelar={reiniciar}
             salvando={false}
@@ -148,6 +153,7 @@ export function ImportarExtrato() {
           <ImportacaoConcluida
             totalImportado={estado.totalImportado}
             totalSemCategoria={estado.totalSemCategoria}
+            totalVinculadasMeta={estado.totalVinculadasMeta}
             onVoltarInicio={goBack}
             onImportarOutro={reiniciar}
           />

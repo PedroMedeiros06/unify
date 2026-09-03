@@ -96,9 +96,7 @@ function NovaTransacaoModalBase({ visivel, onFechar }: Props) {
       visivel={visivel}
       onFechar={onFechar}
       bloquearFechamentoExterno={salvando}
-      overlayClassName="bg-black/90"
-      cardElevado
-      cardClassName="border-active-icon/40"
+      overlayOpacidade={0.6}
     >
       <View className="flex-row justify-between items-center mb-5">
         <Text style={{ fontSize: titleSize }} className="text-main-text font-Inter-SemiBold">

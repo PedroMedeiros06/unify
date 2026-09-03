@@ -35,7 +35,7 @@ export function Home() {
     limparTodosFiltros,
     possuiFiltrosAtivos,
     filtrosParaQuery,
-  } = useFiltrosTransacao();
+  } = useFiltrosTransacao({ cascata: true });
 
   const [bancos, setBancos] = useState<Banco[]>([]);
   const [modalPeriodoAberto, setModalPeriodoAberto] = useState(false);

@@ -186,7 +186,7 @@ function PerfilCardBase() {
       </View>
 
       {/* MODAL DE EDIÇÃO — cadastro local simples, sem tabela de usuário completa */}
-      <Modal visible={modalEdicaoAberto} transparent animationType="slide" onRequestClose={() => setModalEdicaoAberto(false)}>
+      <Modal visible={modalEdicaoAberto} transparent animationType="slide" onRequestClose={() => setModalEdicaoAberto(false)} statusBarTranslucent navigationBarTranslucent>
         <View className="flex-1 justify-end bg-black/50">
           <View className="bg-card-background rounded-t-2xl p-5 pb-8">
             <View className="flex-row justify-between items-center mb-4">

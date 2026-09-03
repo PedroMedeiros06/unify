@@ -4,7 +4,7 @@ import {
   inserirTransacao,
   atualizarTransacao,
   excluirTransacao,
-  seedDadosIniciaisSeNecessario,
+  garantirBancosSuportados,
   TransacaoComBanco,
 } from "@/database/queries";
 import { dataIsoParaBR, dataBRParaIso } from "@/utils/dateUtils";
@@ -63,7 +63,11 @@ type TransacoesContextValue = {
   transacoes: Transacao[];
   carregando: boolean;
   erro: string | null;
-  adicionarTransacao: (transacao: NovaTransacaoInput) => Promise<void>;
+  // Retorna o id gerado da transação recém-inserida — usado por fluxos
+  // que precisam criar algo dependente logo em seguida (ex: vincular a
+  // transação importada a uma meta). Quem não precisa do id só ignora
+  // o retorno.
+  adicionarTransacao: (transacao: NovaTransacaoInput) => Promise<string>;
   editarTransacao: (id: string, campos: CamposEditaveis) => Promise<void>;
   removerTransacao: (id: string) => Promise<void>;
   recarregar: () => Promise<void>;
@@ -141,7 +145,7 @@ export function TransacoesProvider({ children }: { children: ReactNode }) {
     async function inicializar() {
       setCarregando(true);
       try {
-        await seedDadosIniciaisSeNecessario();
+        await garantirBancosSuportados();
         await carregarDoBanco();
       } finally {
         if (ativo) setCarregando(false);
@@ -193,6 +197,8 @@ export function TransacoesProvider({ children }: { children: ReactNode }) {
           },
           ...prev,
         ]);
+
+        return id;
       } catch (e) {
         setErro(e instanceof Error ? e.message : "Erro ao salvar transação");
         console.error("[TransacoesContext] Falha ao inserir transação:", e);

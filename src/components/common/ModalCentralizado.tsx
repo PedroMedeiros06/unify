@@ -9,14 +9,17 @@ type Props = {
   // andamento (salvando/excluindo) — mesma ideia do `disabled` nos
   // botões de fechar que os modais já tinham.
   bloquearFechamentoExterno?: boolean;
-  // Classe do overlay escurecido atrás do card. Default: bg-black/60.
-  // Modais que precisam de mais contraste com a tela (ex: nova
-  // transação) passam algo mais opaco, ex: bg-black/85.
-  overlayClassName?: string;
+  // Opacidade do preto do overlay atrás do card, aplicada via STYLE
+  // (rgba, não className) — o escurecimento acontece mesmo que o
+  // NativeWind não resolva `bg-black/NN` neste contexto animado. 0..1.
+  // Todos os modais do app usam o padrão 0.6; só passe outro valor com
+  // um motivo claro.
+  overlayOpacidade?: number;
   // Classe extra no card em si — para modais que precisam se destacar
   // mais do fundo (borda mais viva, cor de superfície diferente). O
   // card já tem bg-card-background + border-lines-divisions + rounded;
-  // isto é adicionado por cima.
+  // isto é adicionado por cima. Se trouxer seu próprio `bg-`/`border-`,
+  // o padrão correspondente não é emitido (ver merge abaixo).
   cardClassName?: string;
   // Ativa uma sombra forte no card (elevação no Android, shadow no iOS)
   // para separá-lo visualmente da tela.
@@ -37,7 +40,7 @@ export function ModalCentralizado({
   onFechar,
   children,
   bloquearFechamentoExterno = false,
-  overlayClassName = "bg-black/60",
+  overlayOpacidade = 0.6,
   cardClassName = "",
   cardElevado = false,
 }: Props) {
@@ -72,14 +75,35 @@ export function ModalCentralizado({
   });
 
   return (
-    <Modal visible={montado} transparent animationType="none" onRequestClose={onFechar}>
+    <Modal
+      visible={montado}
+      transparent
+      animationType="none"
+      onRequestClose={onFechar}
+      // Sem isto, o container do Modal do Android não cobre a área da
+      // status bar / navigation bar e sobra uma faixa branca (fundo
+      // default do Modal) por baixo do footer, na altura dos botões de
+      // navegação do sistema.
+      statusBarTranslucent
+      navigationBarTranslucent
+    >
       <View className="flex-1 items-center justify-center px-5">
         <Animated.View
-          style={{ opacity: progresso }}
-          className={`absolute inset-0 ${overlayClassName}`}
+          style={{
+            // position/inset por STYLE (não `inset-0` do NativeWind) para
+            // garantir que o overlay cubra a tela inteira, inclusive sob
+            // a barra de navegação — senão sobra faixa branca ali.
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            opacity: progresso,
+            backgroundColor: `rgba(0,0,0,${overlayOpacidade})`,
+          }}
         >
           <Pressable
-            className="flex-1"
+            style={{ flex: 1 }}
             onPress={bloquearFechamentoExterno ? undefined : onFechar}
             accessibilityRole="button"
             accessibilityLabel="Fechar"
@@ -104,7 +128,15 @@ export function ModalCentralizado({
           }}
         >
           <View
-            className={`bg-card-background border border-lines-divisions rounded-2xl overflow-hidden max-h-[85vh] ${cardClassName}`}
+            className={[
+              // Só aplica a cor/borda padrão se `cardClassName` não
+              // trouxer a sua própria — evita duas classes `bg-`/`border-`
+              // brigando (ordem de merge do NativeWind não é garantida).
+              /\bbg-/.test(cardClassName) ? "" : "bg-card-background",
+              /\bborder-[a-z]/.test(cardClassName) ? "border" : "border border-lines-divisions",
+              "rounded-2xl overflow-hidden max-h-[85vh]",
+              cardClassName,
+            ].join(" ")}
           >
             <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
               <View className="p-5">{children}</View>

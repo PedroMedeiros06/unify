@@ -12,10 +12,12 @@ import {
   listarEvolucaoMensal,
   calcularResumoReceitasDespesas,
   FiltrosTransacao,
+  JanelaEvolucao,
 } from "@/database/queries";
 import { obterMetaDeMaiorProgresso } from "@/database/metasQueries";
 import { obterCategoriaPorId } from "@/database/categorias";
 import { useNavigation } from "@/context/NavigationContext";
+import { SeletorJanelaEvolucao } from "@/components/common/SeletorJanelaEvolucao";
 
 type Props = {
   filtrosParaQuery: FiltrosTransacao;
@@ -65,6 +67,8 @@ function AnaliseGraficaBase({ filtrosParaQuery }: Props) {
   const [totalGastos, setTotalGastos] = useState(0);
 
   const [evolucao, setEvolucao] = useState<{ mes: string; valor: number }[]>([]);
+  const [janelaEvolucao, setJanelaEvolucao] = useState<JanelaEvolucao>({ modo: "ultimos", meses: 6 });
+  const [carregandoEvolucao, setCarregandoEvolucao] = useState(true);
   const [metricas, setMetricas] = useState<MetricasResumo | null>(null);
 
   // Donut de categoria — respeita os filtros da BarraFiltros da tela
@@ -107,24 +111,39 @@ function AnaliseGraficaBase({ filtrosParaQuery }: Props) {
     };
   }, [filtrosParaQuery]);
 
-  // Evolução mensal e métricas (receitas/despesas/economia/meta) NÃO
-  // respeitam a BarraFiltros — são sempre "visão geral", igual ao Resumo
-  // consolidado do topo da Home. Filtrar isso junto misturaria duas
-  // semânticas diferentes (análise por categoria filtrada vs panorama
-  // geral do mês), o que não foi pedido.
+  // Evolução mensal: janela própria (últimos 6 meses ou um ano
+  // inteiro), escolhida no seletor do header da seção. Não respeita a
+  // BarraFiltros — é sempre "visão geral" de saídas por mês.
+  useEffect(() => {
+    let ativo = true;
+    setCarregandoEvolucao(true);
+
+    listarEvolucaoMensal(janelaEvolucao)
+      .then((pontos) => {
+        if (!ativo) return;
+        setEvolucao(pontos.map((p) => ({ mes: p.mesLabel, valor: p.totalSaidas })));
+      })
+      .finally(() => {
+        if (ativo) setCarregandoEvolucao(false);
+      });
+
+    return () => {
+      ativo = false;
+    };
+  }, [janelaEvolucao]);
+
+  // Métricas (receitas/despesas/economia/meta) — panorama geral do mês
+  // atual, também independente da BarraFiltros.
   useEffect(() => {
     let ativo = true;
 
     async function carregarPanoramaGeral() {
-      const [pontosEvolucao, receitasDespesas, metaTop] = await Promise.all([
-        listarEvolucaoMensal(6),
+      const [receitasDespesas, metaTop] = await Promise.all([
         calcularResumoReceitasDespesas(),
         obterMetaDeMaiorProgresso(),
       ]);
 
       if (!ativo) return;
-
-      setEvolucao(pontosEvolucao.map((p) => ({ mes: p.mesLabel, valor: p.totalSaidas })));
 
       const economiaAtual = receitasDespesas.receitasMesAtual - receitasDespesas.despesasMesAtual;
       const economiaAnterior = receitasDespesas.receitasMesAnterior - receitasDespesas.despesasMesAnterior;
@@ -252,17 +271,31 @@ function AnaliseGraficaBase({ filtrosParaQuery }: Props) {
         )}
       </View>
 
-      {/* EVOLUÇÃO MENSAL — dados reais via listarEvolucaoMensal */}
+      {/* EVOLUÇÃO MENSAL — dados reais via listarEvolucaoMensal.
+          Janela (últimos 6 meses / ano) escolhida no seletor à direita. */}
       <View className="mb-4 items-center">
         <View className="w-full flex-row justify-between items-center mb-3">
           <Text style={{ fontSize: sectionTitleSize }} className="text-main-text font-Inter-Medium">
             Evolução mensal
           </Text>
-          <Text style={{ fontSize: moderateScale(10) }} className="text-desactived-text">
-            Últimos 6 meses
-          </Text>
+          <SeletorJanelaEvolucao janela={janelaEvolucao} onSelecionar={setJanelaEvolucao} />
         </View>
-        {evolucao.length > 0 && <EvolucaoMensal data={evolucao} />}
+
+        {carregandoEvolucao ? (
+          <View className="items-center py-6">
+            <ActivityIndicator color={colors["active-icon"]} />
+          </View>
+        ) : evolucao.every((p) => p.valor === 0) ? (
+          <View className="items-center py-4">
+            <Text style={{ fontSize: emptyTextSize }} className="text-desactived-text text-center">
+              {janelaEvolucao.modo === "ano"
+                ? `Nenhuma despesa registrada em ${janelaEvolucao.ano}.`
+                : "Nenhuma despesa nos últimos 6 meses."}
+            </Text>
+          </View>
+        ) : (
+          <EvolucaoMensal data={evolucao} />
+        )}
       </View>
 
       {/* METRICS — dados reais via calcularResumoReceitasDespesas + obterMetaDeMaiorProgresso */}

@@ -7,6 +7,7 @@ import { memo } from "react";
 type Props = {
   totalImportado: number;
   totalSemCategoria: number;
+  totalVinculadasMeta: number;
   onVoltarInicio: () => void;
   onImportarOutro: () => void;
 };
@@ -14,6 +15,7 @@ type Props = {
 function ImportacaoConcluidaBase({
   totalImportado,
   totalSemCategoria,
+  totalVinculadasMeta,
   onVoltarInicio,
   onImportarOutro,
 }: Props) {
@@ -34,6 +36,15 @@ function ImportacaoConcluidaBase({
       <Text style={{ fontSize: subtitleSize }} className="text-second-text text-center mb-4">
         {totalImportado} {totalImportado === 1 ? "transação foi adicionada" : "transações foram adicionadas"} ao seu histórico.
       </Text>
+
+      {totalVinculadasMeta > 0 && (
+        <View className="w-full flex-row items-start gap-2 bg-active-icon/10 rounded-lg p-3 mb-3">
+          <Text style={{ fontSize: avisoSize }} className="text-active-icon flex-1">
+            🎯 {totalVinculadasMeta} {totalVinculadasMeta === 1 ? "transação foi vinculada" : "transações foram vinculadas"} a metas
+            — o progresso já foi atualizado.
+          </Text>
+        </View>
+      )}
 
       {totalSemCategoria > 0 && (
         <View className="w-full flex-row items-start gap-2 bg-warn-color/10 rounded-lg p-3 mb-4">

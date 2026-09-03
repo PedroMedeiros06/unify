@@ -23,6 +23,16 @@ export type CategoriaId =
   | "boleto"
   | "investimentos"
   | "compras"
+  | "educacao"
+  | "assinaturas"
+  | "contas"
+  | "salario"
+  | "renda_extra"
+  | "impostos"
+  | "presentes"
+  | "pets"
+  | "beleza"
+  | "viagem"
   | "outros";
 
 export type Categoria = {
@@ -43,6 +53,16 @@ export const CATEGORIAS: readonly Categoria[] = [
   { id: "boleto", nome: "Boleto", icone: "document-text-outline", cor: colors["warn-color"] },
   { id: "investimentos", nome: "Investimentos", icone: "trending-up-outline", cor: colors["sucess-color"] },
   { id: "compras", nome: "Compras", icone: "bag-handle-outline", cor: "#B06AB3" },
+  { id: "educacao", nome: "Educação", icone: "school-outline", cor: "#2E7DD1" },
+  { id: "assinaturas", nome: "Assinaturas", icone: "repeat-outline", cor: "#C0392B" },
+  { id: "contas", nome: "Contas e serviços", icone: "flash-outline", cor: "#E8A72E" },
+  { id: "salario", nome: "Salário", icone: "cash-outline", cor: "#1D9E75" },
+  { id: "renda_extra", nome: "Renda extra", icone: "wallet-outline", cor: "#16A085" },
+  { id: "impostos", nome: "Impostos e taxas", icone: "receipt-outline", cor: "#7F8C8D" },
+  { id: "presentes", nome: "Presentes e doações", icone: "gift-outline", cor: "#E67EA8" },
+  { id: "pets", nome: "Pets", icone: "paw-outline", cor: "#A0693F" },
+  { id: "beleza", nome: "Beleza e cuidados", icone: "cut-outline", cor: "#D97EB8" },
+  { id: "viagem", nome: "Viagem", icone: "airplane-outline", cor: "#3B9CBD" },
   { id: "outros", nome: "Outros", icone: "ellipsis-horizontal-outline", cor: colors["desactived-text"] },
 ] as const;
 

@@ -4,11 +4,20 @@ import { rodarMigrations } from "./migrations";
 const DATABASE_NAME = "unify.db";
 
 let dbInstance: SQLite.SQLiteDatabase | null = null;
+// Promise de inicialização em andamento. Sem isto, duas chamadas
+// concorrentes a getDatabase() (comum: vários contextos montando ao
+// mesmo tempo, ou uma importação que dispara recarga de metas em
+// paralelo) veem `dbInstance` nulo e ambas abrem a conexão + rodam
+// `rodarMigrations` — dezenas de execAsync concorrentes na mesma
+// conexão física, que é exatamente o que estoura o
+// `java.lang.NullPointerException` em `NativeDatabase.execAsync`.
+// Guardar a promise faz a 2ª chamada esperar a 1ª terminar.
+let inicializacaoEmAndamento: Promise<SQLite.SQLiteDatabase> | null = null;
 
-export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
-  if (dbInstance) return dbInstance;
-
+async function abrirEInicializar(): Promise<SQLite.SQLiteDatabase> {
+  console.log("[database] abrirEInicializar: abrindo conexão");
   const db = await SQLite.openDatabaseAsync(DATABASE_NAME);
+  console.log("[database] conexão aberta, rodando pragma + migrations");
 
   // O SQLite desliga a checagem de foreign keys por padrão, mesmo com
   // FOREIGN KEY declarada no schema — sem este pragma, ON DELETE CASCADE
@@ -19,9 +28,22 @@ export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
   await db.execAsync(`PRAGMA foreign_keys = ON;`);
 
   await rodarMigrations(db);
+  console.log("[database] migrations concluídas");
 
   dbInstance = db;
   return db;
+}
+
+export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
+  if (dbInstance) return dbInstance;
+  // Se já há uma inicialização rodando, todo mundo aguarda a MESMA
+  // promise — nunca abre/migra duas vezes em paralelo.
+  if (inicializacaoEmAndamento) return inicializacaoEmAndamento;
+
+  inicializacaoEmAndamento = abrirEInicializar().finally(() => {
+    inicializacaoEmAndamento = null;
+  });
+  return inicializacaoEmAndamento;
 }
 
 /**
@@ -45,7 +67,12 @@ let filaExecucao: Promise<unknown> = Promise.resolve();
 
 export function executarNaFila<T>(operacao: () => Promise<T>): Promise<T> {
   const resultado = filaExecucao.then(operacao, operacao);
-  filaExecucao = resultado.catch(() => {});
+  // Loga a stack real de qualquer operação que rejeitar — sem isto o
+  // driver nativo só devolve "NativeDatabase.execAsync rejected /
+  // NullPointerException" solto, sem dizer qual query.
+  filaExecucao = resultado.catch((e) => {
+    console.error("[executarNaFila] operação rejeitada:", e, new Error().stack);
+  });
   return resultado;
 }
 
@@ -83,7 +110,14 @@ export async function resetDatabaseForDev(): Promise<void> {
   const db = await getDatabase();
   await droparTodasAsTabelas(db);
 
+  try {
+    await db.closeAsync();
+  } catch (e) {
+    console.warn("[database] closeAsync no reset de dev falhou (ignorado):", e);
+  }
+
   dbInstance = null;
+  inicializacaoEmAndamento = null;
   await getDatabase();
 }
 
@@ -99,9 +133,39 @@ export async function resetDatabaseForDev(): Promise<void> {
  * remontagem para os providers relerem o banco já vazio.
  */
 export async function apagarTodosOsDados(): Promise<void> {
-  const db = await getDatabase();
-  await droparTodasAsTabelas(db);
+  // Roda DENTRO da fila serializada: sem isso, uma leitura já
+  // enfileirada por um contexto que está remontando (ex: Resumo
+  // chamando listarResumoPorBanco) pode executar contra a conexão
+  // antiga no meio do DROP — statement inconsistente, ou pior: resolve
+  // com os dados de antes do reset e popula a tela recém-remontada com
+  // um saldo "fantasma". Enfileirar aqui garante que todo drop/recreate
+  // acontece com a fila parada.
+  await executarNaFila(async () => {
+    const db = await getDatabase();
+    await droparTodasAsTabelas(db);
 
-  dbInstance = null;
-  await getDatabase();
+    // FECHA a conexão nativa antiga antes de reabrir. Sem
+    // `closeAsync`, `openDatabaseAsync` no mesmo arquivo abre um
+    // SEGUNDO handle nativo enquanto o primeiro segue aberto — no
+    // Android o driver embaralha os dois e o `prepareAsync` seguinte
+    // estoura `java.lang.NullPointerException`. Era exatamente o crash
+    // ao importar logo após "apagar dados".
+    try {
+      await db.closeAsync();
+    } catch (e) {
+      // Se já estava fechada / erro ao fechar, seguimos — o objetivo é
+      // não deixar duas conexões vivas, e a nova abertura abaixo é o
+      // que importa.
+      console.warn("[database] closeAsync no reset falhou (ignorado):", e);
+    }
+
+    // Zera os dois estados de cache de conexão — se sobrar uma
+    // `inicializacaoEmAndamento` de antes, a recriação abaixo pegaria a
+    // conexão velha e não rodaria as migrations de novo.
+    dbInstance = null;
+    inicializacaoEmAndamento = null;
+    // Recria já com o schema atual (migrations) antes de liberar a fila,
+    // para que a próxima operação enfileirada abra sobre o banco pronto.
+    await getDatabase();
+  });
 }

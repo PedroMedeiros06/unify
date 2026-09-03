@@ -36,28 +36,39 @@ function MenuAcaoRapidaBase({ visivel, onFechar, onSelecionar }: Props) {
   // e só então desmontamos — senão o Modal do RN remove o conteúdo da
   // tela instantaneamente assim que `visivel` vira false, sem dar tempo
   // nenhum da animação ser percebida.
-  const [montado, setMontado] = useState(visivel);
+  //
+  // IMPORTANTE: começa SEMPRE em false (não `useState(visivel)`). Se o
+  // Modal já montasse com o conteúdo visível no mesmo frame em que
+  // `progresso` ainda é 0→1, o Android pintava o card já opaco antes da
+  // animação pegar — o menu "aparecia do nada". Montando num tick
+  // separado, o primeiro frame do card já é com opacity 0.
+  const [montado, setMontado] = useState(false);
 
   useEffect(() => {
     if (visivel) {
-      setMontado(true);
       progresso.setValue(0);
-      Animated.timing(progresso, {
-        toValue: 1,
-        duration: 180,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }).start();
-    } else {
-      Animated.timing(progresso, {
-        toValue: 0,
-        duration: 150,
-        easing: Easing.in(Easing.cubic),
-        useNativeDriver: true,
-      }).start(({ finished }) => {
-        if (finished) setMontado(false);
+      setMontado(true);
+      // Espera o Modal montar (próximo frame) antes de animar a entrada,
+      // senão o timing pode "pular" para o estado final no Android.
+      const raf = requestAnimationFrame(() => {
+        Animated.timing(progresso, {
+          toValue: 1,
+          duration: 180,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }).start();
       });
+      return () => cancelAnimationFrame(raf);
     }
+
+    Animated.timing(progresso, {
+      toValue: 0,
+      duration: 150,
+      easing: Easing.in(Easing.cubic),
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (finished) setMontado(false);
+    });
   }, [visivel, progresso]);
 
   const translateY = progresso.interpolate({
@@ -68,16 +79,35 @@ function MenuAcaoRapidaBase({ visivel, onFechar, onSelecionar }: Props) {
   const alturaFooter = ALTURA_FOOTER_BASE + insets.bottom;
 
   return (
-    <Modal visible={montado} transparent animationType="none" onRequestClose={onFechar}>
+    <Modal
+      visible={montado}
+      transparent
+      animationType="none"
+      onRequestClose={onFechar}
+      // Cobre status bar / navigation bar — senão sobra uma faixa branca
+      // (fundo default do Modal) na altura dos botões de navegação.
+      statusBarTranslucent
+      navigationBarTranslucent
+    >
       {/* Área de fundo: toque fora fecha o menu. Fade próprio (via
           Animated.View + opacity), não usa animationType do Modal para
-          poder combinar com o slide do card sem dessincronizar. */}
+          poder combinar com o slide do card sem dessincronizar.
+          Cor por STYLE (rgba) + position:absolute cobrindo a tela
+          inteira — inclusive sob a barra de navegação do sistema, senão
+          sobra uma faixa branca (fundo default do Modal) ali embaixo. */}
       <Animated.View
-        style={{ opacity: progresso }}
-        className="flex-1 bg-black/40"
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          opacity: progresso,
+          backgroundColor: "rgba(0,0,0,0.4)",
+        }}
       >
         <Pressable
-          className="flex-1"
+          style={{ flex: 1 }}
           onPress={onFechar}
           accessibilityRole="button"
           accessibilityLabel="Fechar menu de ações rápidas"
