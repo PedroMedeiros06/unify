@@ -2,7 +2,6 @@ import { colors } from "@/theme/colors";
 import { moderateScale } from "@/utils/scale";
 import { Ionicons } from "@expo/vector-icons";
 import { View, Text, TextInput, Pressable } from "react-native";
-import Slider from "@react-native-community/slider";
 import { memo, useCallback, useState } from "react";
 import { DropdownMenu } from "@/components/common/DropdownMenu";
 
@@ -196,35 +195,46 @@ export const CampoEntradaFinanciamento = memo(function CampoEntradaFinanciamento
 
   return (
     <View className="flex-1">
-      <View className="flex-row items-center justify-between mb-1.5">
+      {/* A linha do label tem altura FIXA igual à do texto puro do label
+          usado pelos outros campos (labelSize * 1.4 ≈ lineHeight). O
+          toggle R$/% é mais alto que o texto; ele fica num overlay
+          absoluto (top/bottom: 0 + center) pra ficar centralizado nessa
+          linha sem aumentar a altura dela — senão o input abaixo descia
+          e desalinhava do campo vizinho. */}
+      <View className="justify-center mb-1.5" style={{ height: labelSize * 1.4 }}>
         <Text style={{ fontSize: labelSize }} className="text-second-text">
           {label}
         </Text>
-        {/* Toggle R$ / % */}
-        <View className="flex-row bg-input-background border border-input-border rounded-lg overflow-hidden">
-          {(["valor", "percentual"] as ModoEntrada[]).map((m) => {
-            const ativo = modo === m;
-            return (
-              <Pressable
-                key={m}
-                onPress={() => {
-                  setRascunhoPct(null);
-                  setModo(m);
-                }}
-                className={`px-2 py-0.5 ${ativo ? "bg-active-icon" : ""}`}
-                accessibilityRole="button"
-                accessibilityState={{ selected: ativo }}
-                accessibilityLabel={m === "valor" ? "Entrada em reais" : "Entrada em porcentagem"}
-              >
-                <Text
-                  style={{ fontSize: labelSize }}
-                  className={ativo ? "text-white font-Inter-Medium" : "text-second-text"}
+        <View
+          className="absolute right-0 top-0 bottom-0 justify-center"
+          pointerEvents="box-none"
+        >
+          {/* Toggle R$ / % */}
+          <View className="flex-row bg-input-background border border-input-border rounded-lg overflow-hidden">
+            {(["valor", "percentual"] as ModoEntrada[]).map((m) => {
+              const ativo = modo === m;
+              return (
+                <Pressable
+                  key={m}
+                  onPress={() => {
+                    setRascunhoPct(null);
+                    setModo(m);
+                  }}
+                  className={`px-2 py-0.5 ${ativo ? "bg-active-icon" : ""}`}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: ativo }}
+                  accessibilityLabel={m === "valor" ? "Entrada em reais" : "Entrada em porcentagem"}
                 >
-                  {m === "valor" ? "R$" : "%"}
-                </Text>
-              </Pressable>
-            );
-          })}
+                  <Text
+                    style={{ fontSize: labelSize }}
+                    className={ativo ? "text-white font-Inter-Medium" : "text-second-text"}
+                  >
+                    {m === "valor" ? "R$" : "%"}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
         </View>
       </View>
 
@@ -267,43 +277,43 @@ export const CampoEntradaFinanciamento = memo(function CampoEntradaFinanciamento
 });
 
 // ---------------------------------------------------------------------------
-// CampoSlider — slider com valor percentual exibido ao lado
+// CampoTaxa — entrada de taxa percentual (juros / rentabilidade). Campo
+// grande igual aos de moeda: dá pra tocar em qualquer lugar da linha e
+// digitar direto, sem alvo pequeno e sem slider. O sufixo ("% a.a.")
+// fica fixo à direita. `maximo`/`minimo` só fazem clamp ao sair do
+// campo — durante a digitação o texto é livre.
 // ---------------------------------------------------------------------------
 
-export const CampoSlider = memo(function CampoSlider({
+export const CampoTaxa = memo(function CampoTaxa({
   label,
   valor,
   onChange,
-  minimo,
-  maximo,
-  passo = 0.1,
   sufixo = "% a.a.",
+  minimo = 0,
+  maximo,
 }: {
   label: string;
   valor: number;
   onChange: (valor: number) => void;
-  minimo: number;
-  maximo: number;
-  passo?: number;
   sufixo?: string;
+  minimo?: number;
+  maximo?: number;
 }) {
-  // Rascunho de texto do campo editável: enquanto o usuário digita
-  // (pode ter estados intermediários inválidos como "" ou "9,"), o
-  // rascunho manda no que aparece; ao sair do campo (blur) a gente
-  // consolida — faz o clamp em [minimo, maximo] e reflete no slider.
-  // `rascunho === null` significa "não está editando": exibe o valor
-  // formatado normal, e o slider pode mexer livremente.
+  // Enquanto digita, o texto pode ter estados intermediários ("", "9,")
+  // que não convertem pra número — o rascunho manda no que aparece.
+  // `null` = não está editando: mostra o valor formatado.
   const [rascunho, setRascunho] = useState<string | null>(null);
 
   const handleTextChange = useCallback((texto: string) => {
     setRascunho(texto.replace(/[^0-9.,]/g, ""));
   }, []);
 
-  const consolidarTexto = useCallback(() => {
+  const consolidar = useCallback(() => {
     if (rascunho === null) return;
     const n = parseFloat(rascunho.replace(",", "."));
     if (Number.isFinite(n)) {
-      onChange(Math.min(Math.max(n, minimo), maximo));
+      const limInf = Math.max(n, minimo);
+      onChange(maximo !== undefined ? Math.min(limInf, maximo) : limInf);
     }
     setRascunho(null);
   }, [rascunho, onChange, minimo, maximo]);
@@ -312,42 +322,24 @@ export const CampoSlider = memo(function CampoSlider({
     rascunho !== null ? rascunho : valor.toLocaleString("pt-BR", { maximumFractionDigits: 2 });
 
   return (
-    <View>
-      <View className="flex-row justify-between items-center mb-1">
-        <Text style={{ fontSize: labelSize }} className="text-second-text">
-          {label}
-        </Text>
-        <View className="bg-input-background border border-input-border rounded-lg px-2.5 py-1 flex-row items-center">
-          <TextInput
-            value={textoExibido}
-            onChangeText={handleTextChange}
-            onFocus={() => setRascunho(String(valor).replace(".", ","))}
-            onBlur={consolidarTexto}
-            onSubmitEditing={consolidarTexto}
-            keyboardType="numeric"
-            style={{ fontSize: labelSize, color: colors["active-icon"], padding: 0, minWidth: 34, textAlign: "right" }}
-            className="font-Inter-Medium"
-            accessibilityLabel={`${label} (editável)`}
-          />
-          <Text style={{ fontSize: labelSize }} className="text-active-icon font-Inter-Medium ml-1">
-            {sufixo}
-          </Text>
-        </View>
-      </View>
-      {/* Margem lateral para o thumb do slider não encostar na borda do
-          card (no Android o thumb estoura ~10px de cada ponta da trilha). */}
-      <View className="px-2">
-        <Slider
-          value={valor}
-          onValueChange={onChange}
-          minimumValue={minimo}
-          maximumValue={maximo}
-          step={passo}
-          minimumTrackTintColor={colors["active-icon"]}
-          maximumTrackTintColor={colors["lines-divisions"]}
-          thumbTintColor={colors["active-icon"]}
+    <View className="flex-1">
+      <Text style={{ fontSize: labelSize }} className="text-second-text mb-1.5">
+        {label}
+      </Text>
+      <View className="bg-input-background border border-input-border rounded-xl px-3 py-3 flex-row items-center justify-between">
+        <TextInput
+          value={textoExibido}
+          onChangeText={handleTextChange}
+          onFocus={() => setRascunho(String(valor).replace(".", ","))}
+          onBlur={consolidar}
+          onSubmitEditing={consolidar}
+          keyboardType="numeric"
+          style={{ fontSize: inputTextSize, color: colors["main-text"], flex: 1, padding: 0 }}
           accessibilityLabel={label}
         />
+        <Text style={{ fontSize: labelSize }} className="text-desactived-text ml-2">
+          {sufixo}
+        </Text>
       </View>
     </View>
   );

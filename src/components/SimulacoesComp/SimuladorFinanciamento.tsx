@@ -4,7 +4,7 @@ import { memo, useMemo, useState } from "react";
 import {
   CampoMoeda,
   CampoMoedaSomenteLeitura,
-  CampoSlider,
+  CampoTaxa,
   CampoNumero,
   CampoEntradaFinanciamento,
 } from "@/components/SimulacoesComp/CamposSimulacao";
@@ -70,13 +70,12 @@ function SimuladorFinanciamentoBase({ parametrosIniciais }: Props) {
           <CampoNumero label="Prazo" valor={prazoMeses} onChange={setPrazoMeses} sufixo="meses" />
         </View>
 
-        <CampoSlider
+        <CampoTaxa
           label="Taxa de juros ao ano"
           valor={taxaAnualPct}
           onChange={setTaxaAnualPct}
-          minimo={2}
-          maximo={20}
-          passo={0.1}
+          minimo={0}
+          maximo={40}
         />
       </View>
 

@@ -7,6 +7,10 @@ type ResetAppContextValue = {
   // Apaga todos os dados locais e força a remontagem da árvore de
   // providers abaixo, para que os contextos releiam o banco já vazio.
   apagarDadosDoApp: () => Promise<void>;
+  // Só força a remontagem da subárvore de providers de dados, sem tocar
+  // no banco. Usado depois de uma restauração de backup (o banco já foi
+  // reescrito por fora) para as telas relerem o conteúdo novo.
+  remontarDados: () => void;
 };
 
 const ResetAppContext = createContext<ResetAppContextValue | null>(null);
@@ -40,9 +44,13 @@ export function ResetAppProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const remontarDados = useCallback(() => {
+    setChaveRemontagem((chave) => chave + 1);
+  }, []);
+
   const value = useMemo(
-    () => ({ apagando, apagarDadosDoApp }),
-    [apagando, apagarDadosDoApp]
+    () => ({ apagando, apagarDadosDoApp, remontarDados }),
+    [apagando, apagarDadosDoApp, remontarDados]
   );
 
   return (

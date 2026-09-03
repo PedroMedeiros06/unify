@@ -1,7 +1,7 @@
 import { moderateScale } from "@/utils/scale";
 import { View, Text } from "react-native";
 import { memo, useMemo, useState } from "react";
-import { CampoMoeda, CampoSlider, CampoNumero } from "@/components/SimulacoesComp/CamposSimulacao";
+import { CampoMoeda, CampoTaxa, CampoNumero } from "@/components/SimulacoesComp/CamposSimulacao";
 import { StatTilesSimulacao, CORES_TILE } from "@/components/SimulacoesComp/StatTilesSimulacao";
 import { GraficoLinhaSimulacao } from "@/components/SimulacoesComp/GraficoLinhaSimulacao";
 import { BlocoAcoesSimulacao } from "@/components/SimulacoesComp/BlocoAcoesSimulacao";
@@ -54,13 +54,12 @@ function SimuladorEmprestimoBase({ parametrosIniciais }: Props) {
           <CampoNumero label="Prazo" valor={prazoMeses} onChange={setPrazoMeses} sufixo="meses" />
         </View>
 
-        <CampoSlider
+        <CampoTaxa
           label="Taxa de juros ao ano"
           valor={taxaAnualPct}
           onChange={setTaxaAnualPct}
           minimo={0}
           maximo={120}
-          passo={0.5}
         />
       </View>
 

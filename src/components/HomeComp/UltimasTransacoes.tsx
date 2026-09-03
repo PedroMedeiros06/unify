@@ -121,7 +121,7 @@ function UltimasTransacoesBase() {
     definirPeriodoPersonalizado,
     consultaTemRecorte,
     filtrosParaQuery,
-  } = useFiltrosTransacao({ cascata: true });
+  } = useFiltrosTransacao({ presetInicial: "tudo" });
 
   const [bancos, setBancos] = useState<Banco[]>([]);
   const [modalPeriodoAberto, setModalPeriodoAberto] = useState(false);

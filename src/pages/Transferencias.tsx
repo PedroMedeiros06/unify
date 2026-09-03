@@ -116,7 +116,7 @@ export function Transferencias() {
     possuiFiltrosAtivos,
     consultaTemRecorte,
     filtrosParaQuery,
-  } = useFiltrosTransacao({ cascata: true });
+  } = useFiltrosTransacao({ presetInicial: "esteMes" });
 
   const [bancos, setBancos] = useState<Banco[]>([]);
   const [modalPeriodoAberto, setModalPeriodoAberto] = useState(false);

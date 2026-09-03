@@ -1,16 +1,18 @@
 import { colors } from "@/theme/colors";
-import { moderateScale } from "@/utils/scale";
+import { moderateScale, scale } from "@/utils/scale";
 import { Ionicons } from "@expo/vector-icons";
 import { Pressable, ScrollView, Text, View } from "react-native";
 
-import { ContaSeguranca } from "@/components/PerfilComp/ContaSeguranca";
 import { PerfilCard } from "@/components/PerfilComp/PerfilCard";
 import { Preferencias } from "@/components/PerfilComp/Preferencias";
+import { BackupDados } from "@/components/PerfilComp/BackupDados";
 import { SuporteInformacoes } from "@/components/PerfilComp/SuporteInformacoes";
 
 export function Perfil() {
   const titleSize = moderateScale(22);
   const subtitleSize = moderateScale(12);
+  // Mesmo dimensionamento do botão de sino da Home (avatarSize).
+  const avatarSize = moderateScale(40);
 
   return (
     <ScrollView
@@ -38,21 +40,26 @@ export function Perfil() {
           </View>
 
           <Pressable
-            className="w-9 h-9 rounded-full bg-input-background border border-input-border items-center justify-center flex-shrink-0"
+            style={{
+              width: avatarSize,
+              height: avatarSize,
+              borderRadius: avatarSize / 2,
+            }}
+            className="bg-input-background border border-input-border/50 items-center justify-center shrink-0"
             accessibilityRole="button"
             accessibilityLabel="Abrir notificações"
           >
             <Ionicons
               name="notifications-outline"
               color={colors["desactived-text"]}
-              size={16}
+              size={scale(16)}
             />
           </Pressable>
         </View>
 
         <PerfilCard />
-        <ContaSeguranca />
         <Preferencias />
+        <BackupDados />
         <SuporteInformacoes />
       </View>
     </ScrollView>

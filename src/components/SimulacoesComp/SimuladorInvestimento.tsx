@@ -1,7 +1,8 @@
 import { moderateScale } from "@/utils/scale";
 import { View, Text } from "react-native";
 import { memo, useMemo, useState } from "react";
-import { CampoMoeda, CampoNumero, CampoSlider } from "@/components/SimulacoesComp/CamposSimulacao";
+import { CampoMoeda, CampoNumero, CampoTaxa } from "@/components/SimulacoesComp/CamposSimulacao";
+import { SeletorTaxaReferencia } from "@/components/SimulacoesComp/SeletorTaxaReferencia";
 import { StatTilesSimulacao, CORES_TILE } from "@/components/SimulacoesComp/StatTilesSimulacao";
 import { GraficoLinhaSimulacao } from "@/components/SimulacoesComp/GraficoLinhaSimulacao";
 import { BlocoAcoesSimulacao } from "@/components/SimulacoesComp/BlocoAcoesSimulacao";
@@ -54,18 +55,19 @@ function SimuladorInvestimentoBase({ parametrosIniciais }: Props) {
           <CampoMoeda label="Aporte mensal" valor={aporteMensal} onChange={setAporteMensal} />
         </View>
 
-        <View className="flex-row gap-3 mb-4">
+        <View className="flex-row items-start gap-3 mb-4">
           <CampoNumero label="Período" valor={meses} onChange={setMeses} sufixo="meses" />
-          <View className="flex-1" />
+          {/* Atalho: preenche o campo de rentabilidade abaixo com uma
+              taxa real do mercado (Selic/CDI/poupança/IPCA). */}
+          <SeletorTaxaReferencia onSelecionar={setTaxaAnualPct} valorAtual={taxaAnualPct} />
         </View>
 
-        <CampoSlider
+        <CampoTaxa
           label="Rentabilidade ao ano"
           valor={taxaAnualPct}
           onChange={setTaxaAnualPct}
-          minimo={1}
-          maximo={25}
-          passo={0.1}
+          minimo={0}
+          maximo={30}
         />
       </View>
 
