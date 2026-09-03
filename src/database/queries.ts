@@ -1,5 +1,4 @@
 import { getDatabase, executarNaFila } from "./database";
-import { dataHojeIso } from "@/utils/dateUtils";
 import { CategoriaId } from "./categorias";
 
 export type TipoTransacao = "entrada" | "saida";
@@ -559,42 +558,71 @@ export async function listarSerieSaldoDiario(
 
 export type PontoEvolucaoMensal = { mesAno: string; mesLabel: string; totalSaidas: number };
 
+// Janela do gráfico de evolução mensal:
+//  - { modo: "ultimos", meses }: N meses para trás a partir do mês
+//    atual, inclusive (comportamento histórico, default 6).
+//  - { modo: "ano", ano }: os 12 meses do ano-calendário informado.
+export type JanelaEvolucao =
+  | { modo: "ultimos"; meses: number }
+  | { modo: "ano"; ano: number };
+
+const NOMES_MES_ABREV = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+
 /**
- * Total de saídas por mês, para os últimos `quantidadeMeses` meses
- * (incluindo o mês atual). Usado pelo gráfico EvolucaoMensal. Uma
- * única query com GROUP BY strftime — não itera mês a mês no banco.
+ * Total de saídas por mês para o gráfico EvolucaoMensal. Uma única
+ * query com GROUP BY strftime — não itera mês a mês no banco.
  *
- * Meses sem nenhuma transação aparecem com totalSaidas = 0 (preenchidos
- * em memória), para o gráfico sempre ter os N pontos esperados.
+ * `janela` aceita number (retrocompat: N últimos meses) ou um
+ * JanelaEvolucao. Meses sem transação vêm com totalSaidas = 0
+ * (preenchidos em memória), para o gráfico ter sempre os pontos
+ * esperados.
  */
-export async function listarEvolucaoMensal(quantidadeMeses: number = 6): Promise<PontoEvolucaoMensal[]> {
+export async function listarEvolucaoMensal(
+  janela: number | JanelaEvolucao = 6
+): Promise<PontoEvolucaoMensal[]> {
   return executarNaFila(async () => {
     const db = await getDatabase();
 
-    const hoje = new Date();
-    const dataInicioObj = new Date(hoje.getFullYear(), hoje.getMonth() - (quantidadeMeses - 1), 1);
+    const janelaResolvida: JanelaEvolucao =
+      typeof janela === "number" ? { modo: "ultimos", meses: janela } : janela;
+
+    // dataInicioObj = 1º dia do primeiro mês da janela; quantidade = nº
+    // de meses a plotar.
+    let dataInicioObj: Date;
+    let quantidade: number;
+    if (janelaResolvida.modo === "ano") {
+      dataInicioObj = new Date(janelaResolvida.ano, 0, 1);
+      quantidade = 12;
+    } else {
+      const hoje = new Date();
+      quantidade = janelaResolvida.meses;
+      dataInicioObj = new Date(hoje.getFullYear(), hoje.getMonth() - (quantidade - 1), 1);
+    }
+
     const dataInicioIso = `${dataInicioObj.getFullYear()}-${String(dataInicioObj.getMonth() + 1).padStart(2, "0")}-01`;
+    // Fim exclusivo: 1º dia do mês seguinte ao último da janela.
+    const fimObj = new Date(dataInicioObj.getFullYear(), dataInicioObj.getMonth() + quantidade, 1);
+    const dataFimIso = `${fimObj.getFullYear()}-${String(fimObj.getMonth() + 1).padStart(2, "0")}-01`;
 
     const linhas = await db.getAllAsync<{ mesAno: string; totalSaidas: number }>(
       `SELECT
          strftime('%Y-%m', t.data) as mesAno,
          COALESCE(SUM(CASE WHEN t.tipo = 'saida' THEN t.valor ELSE 0 END), 0) as totalSaidas
        FROM transacoes t
-       WHERE t.data >= ?
+       WHERE t.data >= ? AND t.data < ?
        GROUP BY mesAno;`,
-      [dataInicioIso]
+      [dataInicioIso, dataFimIso]
     );
 
     const totalPorMes = new Map(linhas.map((l) => [l.mesAno, l.totalSaidas]));
-    const NOMES_MES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
     const resultado: PontoEvolucaoMensal[] = [];
-    for (let i = 0; i < quantidadeMeses; i++) {
+    for (let i = 0; i < quantidade; i++) {
       const dataMes = new Date(dataInicioObj.getFullYear(), dataInicioObj.getMonth() + i, 1);
       const mesAno = `${dataMes.getFullYear()}-${String(dataMes.getMonth() + 1).padStart(2, "0")}`;
       resultado.push({
         mesAno,
-        mesLabel: NOMES_MES[dataMes.getMonth()],
+        mesLabel: NOMES_MES_ABREV[dataMes.getMonth()],
         totalSaidas: totalPorMes.get(mesAno) ?? 0,
       });
     }
@@ -669,10 +697,18 @@ export async function calcularResumoReceitasDespesas(
   });
 }
 
-export async function seedDadosIniciaisSeNecessario(): Promise<void> {
-  const bancosExistentes = await listarBancos();
-  if (bancosExistentes.length > 0) return;
-
+/**
+ * Garante que os bancos suportados existem na tabela `bancos` (id, nome,
+ * sigla, cor). NÃO cria transação nenhuma — o app começa zerado, tanto
+ * na primeira instalação quanto depois de "apagar dados do app".
+ *
+ * Os bancos precisam existir de antemão porque `transacoes.banco_id`
+ * tem FOREIGN KEY para `bancos(id)` e o PRAGMA de foreign keys está
+ * ligado: inserir uma transação (manual ou importada) com um banco
+ * ausente falharia. É catálogo fixo dos bancos com parser de CSV, não
+ * dado de exemplo.
+ */
+export async function garantirBancosSuportados(): Promise<void> {
   const bancosPadrao: Banco[] = [
     { id: "nubank", nome: "Nubank", sigla: "nu", cor: "#8D11DA" },
     { id: "inter", nome: "Inter", sigla: "in", cor: "#FF7A01" },
@@ -681,59 +717,5 @@ export async function seedDadosIniciaisSeNecessario(): Promise<void> {
 
   for (const banco of bancosPadrao) {
     await upsertBanco(banco);
-  }
-
-  const hoje = dataHojeIso();
-
-  const transacoesIniciais: Transacao[] = [
-    {
-      id: "seed-1",
-      nome: "UBER",
-      subtitulo: "Transporte",
-      valor: 25.5,
-      tipo: "saida",
-      data: hoje,
-      hora: null,
-      bancoId: "nubank",
-      status: "concluida",
-      categoriaIcone: "car-outline",
-      categoriaId: "transporte",
-      criadoEm: new Date().toISOString(),
-      identificadorExterno: null,
-    },
-    {
-      id: "seed-2",
-      nome: "Transferência recebida",
-      subtitulo: "Transferência",
-      valor: 2500,
-      tipo: "entrada",
-      data: hoje,
-      hora: null,
-      bancoId: "inter",
-      status: "concluida",
-      categoriaIcone: "swap-horizontal-outline",
-      categoriaId: "transferencia",
-      criadoEm: new Date().toISOString(),
-      identificadorExterno: null,
-    },
-    {
-      id: "seed-3",
-      nome: "Pão de Açúcar",
-      subtitulo: "Mercado",
-      valor: 140.9,
-      tipo: "saida",
-      data: hoje,
-      hora: null,
-      bancoId: "bb",
-      status: "concluida",
-      categoriaIcone: "cart-outline",
-      categoriaId: "mercado",
-      criadoEm: new Date().toISOString(),
-      identificadorExterno: null,
-    },
-  ];
-
-  for (const transacao of transacoesIniciais) {
-    await inserirTransacao(transacao);
   }
 }

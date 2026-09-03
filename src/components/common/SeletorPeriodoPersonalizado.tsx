@@ -37,7 +37,7 @@ function SeletorPeriodoPersonalizadoBase({ visivel, inicioIso, fimIso, onConfirm
   };
 
   return (
-    <Modal visible={visivel} transparent animationType="slide" onRequestClose={onFechar}>
+    <Modal visible={visivel} transparent animationType="slide" onRequestClose={onFechar} statusBarTranslucent navigationBarTranslucent>
       <View className="flex-1 justify-end bg-black/50">
         <View className="bg-card-background rounded-t-2xl p-5 pb-8">
           <View className="flex-row justify-between items-center mb-4">

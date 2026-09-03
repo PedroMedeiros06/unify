@@ -3,7 +3,7 @@ import { moderateScale } from "@/utils/scale";
 import { FormatToCurrency } from "@/utils/formatNumber";
 import { Ionicons } from "@expo/vector-icons";
 import { Text, View, Pressable, FlatList, ScrollView } from "react-native";
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useState } from "react";
 import { useTransacoes, Transacao } from "@/context/TransacoesContext";
 import { EditarTransacaoModal } from "@/components/TransacoesComp/EditarTransacaoModal";
 import { ListaTransacoesSkeleton } from "@/components/common/ListaTransacoesSkeleton";
@@ -11,18 +11,10 @@ import { SeletorBancoMultiplo } from "@/components/common/SeletorBancoMultiplo";
 import { SeletorCategoriaMultiplo } from "@/components/common/SeletorCategoriaMultiplo";
 import { DropdownPeriodo } from "@/components/common/DropdownPeriodo";
 import { SeletorPeriodoPersonalizado } from "@/components/common/SeletorPeriodoPersonalizado";
-import {
-  useFiltrosTransacao,
-  resolverIntervaloPeriodo,
-  PeriodoPreset,
-} from "@/hooks/useFiltrosTransacao";
+import { useFiltrosTransacao } from "@/hooks/useFiltrosTransacao";
 import { useNavigation } from "@/context/NavigationContext";
 import { useNovaTransacao } from "@/context/NovaTransacaoContext";
 import { listarBancos, listarTransacoesFiltradas, Banco, TransacaoComBanco } from "@/database/queries";
-
-// Cascata de presets da lista de últimas transações: começa em "hoje" e
-// desce até achar um período com transação, parando em "tudo".
-const CASCATA_PRESETS: PeriodoPreset[] = ["hoje", "7dias", "esteMes", "tudo"];
 import { dataIsoParaBR } from "@/utils/dateUtils";
 
 function mapearParaTransacaoUI(t: TransacaoComBanco): Transacao {
@@ -127,13 +119,9 @@ function UltimasTransacoesBase() {
     limparFiltroCategoria,
     definirPeriodoPreset,
     definirPeriodoPersonalizado,
-    possuiFiltrosAtivos,
+    consultaTemRecorte,
     filtrosParaQuery,
-  } = useFiltrosTransacao({ presetInicial: "hoje" });
-
-  // Roda uma única vez: acha o primeiro preset da cascata que tem
-  // transação e fixa ele. Depois disso o usuário controla manualmente.
-  const cascataResolvidaRef = useRef(false);
+  } = useFiltrosTransacao({ cascata: true });
 
   const [bancos, setBancos] = useState<Banco[]>([]);
   const [modalPeriodoAberto, setModalPeriodoAberto] = useState(false);
@@ -151,52 +139,12 @@ function UltimasTransacoesBase() {
     listarBancos().then(setBancos);
   }, []);
 
-  // Cascata de período: na montagem, testa hoje → 7dias → esteMes → tudo
-  // e fixa o primeiro que retorna ao menos uma transação. Só considera
-  // banco/categoria já selecionados (normalmente nenhum na montagem).
+  // Usa consultaTemRecorte (não possuiFiltrosAtivos): a lista precisa
+  // respeitar a janela que a CASCATA fixou (ex: "7dias") mesmo que o
+  // usuário não tenha tocado em nada — nesse caso possuiFiltrosAtivos é
+  // false, mas ainda há um recorte de período a aplicar.
   useEffect(() => {
-    if (cascataResolvidaRef.current) return;
-    cascataResolvidaRef.current = true;
-
-    let ativo = true;
-
-    async function resolverCascata() {
-      for (const preset of CASCATA_PRESETS) {
-        const { inicio, fim } = resolverIntervaloPeriodo(preset);
-        const linhas = await listarTransacoesFiltradas(
-          {
-            bancosIds: filtros.bancosSelecionados.length > 0 ? filtros.bancosSelecionados : null,
-            categoriasIds:
-              filtros.categoriasSelecionadas.length > 0 ? filtros.categoriasSelecionadas : null,
-            dataInicio: inicio,
-            dataFim: fim,
-          },
-          1
-        );
-        if (!ativo) return;
-        if (linhas.length > 0) {
-          // "hoje" é o preset inicial do hook — só troca se a cascata
-          // parou em outro ponto.
-          if (preset !== "hoje") definirPeriodoPreset(preset);
-          return;
-        }
-      }
-      // Nenhum período tinha transação: cai em "tudo" mesmo (mostra o
-      // estado vazio com o filtro mais abrangente).
-      if (ativo) definirPeriodoPreset("tudo");
-    }
-
-    resolverCascata();
-
-    return () => {
-      ativo = false;
-    };
-    // Intencionalmente sem deps: roda uma vez na montagem.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    if (!possuiFiltrosAtivos) return;
+    if (!consultaTemRecorte) return;
 
     let ativo = true;
     setCarregandoFiltro(true);
@@ -217,15 +165,15 @@ function UltimasTransacoesBase() {
     // transacoesDoContext entra como gatilho: quando uma nova transação
     // é criada pelo modal global (ou editada/excluída), a lista filtrada
     // precisa refazer a query para refletir a mudança.
-  }, [possuiFiltrosAtivos, filtrosParaQuery, transacoesDoContext]);
+  }, [consultaTemRecorte, filtrosParaQuery, transacoesDoContext]);
 
   // Skeleton só no PRIMEIRO carregamento (sem árvore montada ainda).
   // Refetch de filtro depois disso mantém a lista atual visível para
   // não desmontar dropdowns abertos.
-  const carregandoInicial = possuiFiltrosAtivos
+  const carregandoInicial = consultaTemRecorte
     ? carregandoFiltro && !filtroJaCarregou
     : carregandoContext;
-  const transacoesRecentes = possuiFiltrosAtivos ? transacoesFiltradas : transacoesDoContext.slice(0, 5);
+  const transacoesRecentes = consultaTemRecorte ? transacoesFiltradas : transacoesDoContext.slice(0, 5);
 
   const handleLongPress = useCallback((transacao: Transacao) => {
     setTransacaoSelecionada(transacao);
@@ -319,7 +267,7 @@ function UltimasTransacoesBase() {
         <View className="items-center py-8">
           <Ionicons name="receipt-outline" color={colors["desactived-text"]} size={30} />
           <Text style={{ fontSize: emptyTitleSize }} className="text-desactived-text text-center mt-2">
-            {possuiFiltrosAtivos
+            {consultaTemRecorte
               ? "Nenhuma transação encontrada para os filtros atuais."
               : "Nenhuma transação ainda.\nImporte um extrato ou adicione manualmente."}
           </Text>

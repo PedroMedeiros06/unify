@@ -1,6 +1,8 @@
 import { ScreenType } from "@/context/NavigationContext";
+import { colors } from "@/theme/colors";
 import { Ionicons } from "@expo/vector-icons";
-import { Pressable, Text, View, useWindowDimensions } from "react-native";
+import { Pressable, Text, View, Animated, Easing, useWindowDimensions } from "react-native";
+import { useEffect, useRef } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const tabs = [
@@ -22,12 +24,35 @@ type FooterProps = {
   // não é uma tela navegável (ScreenType), então precisa de um handler
   // próprio em vez de reusar onChangeScreen, que espera um ScreenType válido.
   onPressAdicionar: () => void;
+  // Quando o menu de ações rápidas está aberto, o botão "+" gira 45°
+  // (vira "×") e fica vermelho, sinalizando que tocar de novo fecha.
+  menuAcaoAberto?: boolean;
 };
 
-export function Footer({ activeScreen, onChangeScreen, onPressAdicionar }: FooterProps) {
+export function Footer({ activeScreen, onChangeScreen, onPressAdicionar, menuAcaoAberto = false }: FooterProps) {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const isSmallDevice = width < 375;
+
+  // Progresso 0→1 do estado "menu aberto": anima rotação do botão + e
+  // faz cross-fade entre o ícone roxo e o vermelho. NÃO animamos as
+  // props do <Ionicons> direto (Animated.createAnimatedComponent nele
+  // estoura em `setNativeProps` nesta versão do @expo/vector-icons) —
+  // por isso são dois ícones sobrepostos com opacidade cruzada.
+  const progressoMenu = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(progressoMenu, {
+      toValue: menuAcaoAberto ? 1 : 0,
+      duration: 200,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true, // só opacity + rotate: ok no native driver
+    }).start();
+  }, [menuAcaoAberto, progressoMenu]);
+
+  const rotacaoMais = progressoMenu.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["0deg", "45deg"],
+  });
 
   return (
     <View 
@@ -73,7 +98,7 @@ export function Footer({ activeScreen, onChangeScreen, onPressAdicionar }: Foote
                   Fundo Branco do Ícone:
                   Agora com o tamanho reduzido para se encaixar perfeitamente no miolo da cruz.
                 */}
-                <View 
+                <View
                   style={{
                     width: whiteBgSize,
                     height: whiteBgSize,
@@ -82,11 +107,14 @@ export function Footer({ activeScreen, onChangeScreen, onPressAdicionar }: Foote
                   className="bg-main-text  absolute"
                 />
 
-                <Ionicons
-                  name={tab.icon}
-                  size={buttonSize}
-                  className="text-active-icon"
-                />
+                <Animated.View style={{ transform: [{ rotate: rotacaoMais }] }}>
+                  {/* Ícone roxo (estado normal) */}
+                  <Ionicons name={tab.icon} size={buttonSize} color={colors["active-icon"]} />
+                  {/* Ícone vermelho sobreposto, revelado quando o menu abre */}
+                  <Animated.View style={{ position: "absolute", opacity: progressoMenu }}>
+                    <Ionicons name={tab.icon} size={buttonSize} color={colors["error-color"]} />
+                  </Animated.View>
+                </Animated.View>
               </Pressable>
             </View>
           );

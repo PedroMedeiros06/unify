@@ -1,12 +1,13 @@
 import { moderateScale } from "@/utils/scale";
 import { Ionicons } from "@expo/vector-icons";
 import { colors } from "@/theme/colors";
-import { View, Text, Pressable, Alert, Share } from "react-native";
-import { memo, useCallback } from "react";
+import { View, Text, Pressable } from "react-native";
+import { memo, useCallback, useState } from "react";
 import { useSimulacoes } from "@/context/SimulacoesContext";
 import { SimulacaoSalva } from "@/database/simulacoesQueries";
 import { FormatToCurrency } from "@/utils/formatNumber";
 import { TIPOS_SIMULACAO } from "@/components/SimulacoesComp/SeletorTipoSimulacao";
+import { MenuAcoesSimulacao } from "@/components/SimulacoesComp/MenuAcoesSimulacao";
 
 /** Linha-resumo (valor destacado + subtítulo) de cada tipo de simulação. */
 function resumoDaSimulacao(s: SimulacaoSalva): { destaque: string; subtitulo: string; positivo: boolean } {
@@ -49,12 +50,10 @@ type Props = {
 
 const SimulacaoItem = memo(function SimulacaoItem({
   simulacao,
-  onAbrir,
-  onExcluir,
+  onAbrirMenu,
 }: {
   simulacao: SimulacaoSalva;
-  onAbrir: (s: SimulacaoSalva) => void;
-  onExcluir: (id: string) => void;
+  onAbrirMenu: (s: SimulacaoSalva) => void;
 }) {
   const tituloSize = moderateScale(13);
   const subSize = moderateScale(10);
@@ -63,22 +62,12 @@ const SimulacaoItem = memo(function SimulacaoItem({
   const meta = TIPOS_SIMULACAO.find((t) => t.tipo === simulacao.tipo)!;
   const resumo = resumoDaSimulacao(simulacao);
 
-  const handleLongPress = useCallback(() => {
-    Alert.alert(simulacao.titulo, undefined, [
-      { text: "Cancelar", style: "cancel" },
-      { text: "Compartilhar", onPress: () => void Share.share({ message: textoCompartilhar(simulacao) }) },
-      { text: "Excluir", style: "destructive", onPress: () => onExcluir(simulacao.id) },
-    ]);
-  }, [simulacao, onExcluir]);
-
   return (
     <Pressable
-      onPress={() => onAbrir(simulacao)}
-      onLongPress={handleLongPress}
-      delayLongPress={350}
+      onPress={() => onAbrirMenu(simulacao)}
       className="flex-row items-center gap-3 py-2.5 border-b border-lines-divisions active:opacity-70"
       accessibilityRole="button"
-      accessibilityLabel={`${simulacao.titulo}. Toque para abrir, segure para mais opções.`}
+      accessibilityLabel={`${simulacao.titulo}. Toque para ver opções: restaurar, compartilhar ou excluir.`}
     >
       <View
         style={{ backgroundColor: `${meta.cor}22` }}
@@ -103,7 +92,7 @@ const SimulacaoItem = memo(function SimulacaoItem({
       >
         {resumo.destaque}
       </Text>
-      <Ionicons name="chevron-forward" color={colors["second-text"]} size={16} />
+      <Ionicons name="ellipsis-vertical" color={colors["second-text"]} size={16} />
     </Pressable>
   );
 });
@@ -112,12 +101,17 @@ function SimulacoesRecentesBase({ onAbrir }: Props) {
   const cardTitleSize = moderateScale(15);
   const { simulacoes, carregando, removerSimulacao } = useSimulacoes();
 
+  // Simulação cujo menu de ações está aberto (null = fechado).
+  const [simulacaoNoMenu, setSimulacaoNoMenu] = useState<SimulacaoSalva | null>(null);
+
   const handleExcluir = useCallback(
     (id: string) => {
       void removerSimulacao(id);
     },
     [removerSimulacao]
   );
+
+  const handleFecharMenu = useCallback(() => setSimulacaoNoMenu(null), []);
 
   if (carregando || simulacoes.length === 0) {
     // Sem simulações salvas ainda: não mostra o card (a tela já tem
@@ -135,10 +129,17 @@ function SimulacoesRecentesBase({ onAbrir }: Props) {
         <SimulacaoItem
           key={simulacao.id}
           simulacao={simulacao}
-          onAbrir={onAbrir}
-          onExcluir={handleExcluir}
+          onAbrirMenu={setSimulacaoNoMenu}
         />
       ))}
+
+      <MenuAcoesSimulacao
+        simulacao={simulacaoNoMenu}
+        onFechar={handleFecharMenu}
+        onRestaurar={onAbrir}
+        onExcluir={handleExcluir}
+        textoCompartilhar={textoCompartilhar}
+      />
     </View>
   );
 }

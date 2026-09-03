@@ -2,7 +2,7 @@ import { useCallback, useState } from "react";
 import { View } from "react-native";
 
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Footer } from "../components/footer";
+import { Footer } from "../components/Footer";
 
 import { Home } from "../pages/home";
 import { Transferencias } from "../pages/Transferencias";
@@ -92,6 +92,7 @@ export default function AppIndex() {
             activeScreen={activeScreen}
             onChangeScreen={navigate}
             onPressAdicionar={handlePressAdicionar}
+            menuAcaoAberto={menuAcaoAberto}
           />
         </View>
       )}

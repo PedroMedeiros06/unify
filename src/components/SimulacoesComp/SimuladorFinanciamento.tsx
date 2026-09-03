@@ -5,22 +5,14 @@ import {
   CampoMoeda,
   CampoMoedaSomenteLeitura,
   CampoSlider,
-  CampoDropdown,
+  CampoNumero,
+  CampoEntradaFinanciamento,
 } from "@/components/SimulacoesComp/CamposSimulacao";
 import { StatTilesSimulacao, CORES_TILE } from "@/components/SimulacoesComp/StatTilesSimulacao";
 import { GraficoLinhaSimulacao } from "@/components/SimulacoesComp/GraficoLinhaSimulacao";
 import { BlocoAcoesSimulacao } from "@/components/SimulacoesComp/BlocoAcoesSimulacao";
 import { simularFinanciamento, ParametrosFinanciamento } from "@/utils/simulacoes";
 import { FormatToCurrency } from "@/utils/formatNumber";
-
-const PRAZOS = [
-  { valor: 60, rotulo: "60 meses (5 anos)" },
-  { valor: 120, rotulo: "120 meses (10 anos)" },
-  { valor: 180, rotulo: "180 meses (15 anos)" },
-  { valor: 240, rotulo: "240 meses (20 anos)" },
-  { valor: 300, rotulo: "300 meses (25 anos)" },
-  { valor: 360, rotulo: "360 meses (30 anos)" },
-];
 
 function formatarMilhar(valor: number): string {
   if (Math.abs(valor) >= 1000) return `R$ ${Math.round(valor / 1000)} mil`;
@@ -65,17 +57,17 @@ function SimuladorFinanciamentoBase({ parametrosIniciais }: Props) {
 
         <View className="flex-row gap-3 mb-4">
           <CampoMoeda label="Valor do imóvel ou bem" valor={valorBem} onChange={setValorBem} />
-          <View className="flex-1">
-            <CampoMoeda label="Entrada" valor={entrada} onChange={setEntrada} />
-            <Text style={{ fontSize: legendaSize }} className="text-active-icon mt-1">
-              {pctEntrada.toFixed(0)}% do valor
-            </Text>
-          </View>
+          <CampoEntradaFinanciamento
+            label="Entrada"
+            valorBem={valorBem}
+            entrada={entrada}
+            onChange={setEntrada}
+          />
         </View>
 
         <View className="flex-row gap-3 mb-4">
           <CampoMoedaSomenteLeitura label="Valor a financiar" valor={resultado.valorFinanciado} destaque />
-          <CampoDropdown label="Prazo" valor={prazoMeses} opcoes={PRAZOS} onChange={setPrazoMeses} />
+          <CampoNumero label="Prazo" valor={prazoMeses} onChange={setPrazoMeses} sufixo="meses" />
         </View>
 
         <CampoSlider

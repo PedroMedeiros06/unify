@@ -20,7 +20,7 @@ import { NovaTransacaoProvider } from "@/context/NovaTransacaoContext";
 
 export default function RootLayout() {
   const [LoadedFonts] = useAppFonts()
-  if (!LoadedFonts) return null 
+  if (!LoadedFonts) return null
 
   return (
     <ThemeProvider name="default">

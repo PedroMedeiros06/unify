@@ -32,15 +32,9 @@ type Props = {
   onAbrirPersonalizado: () => void;
 };
 
-// "esteMes" é o preset NEUTRO padrão — não deve aparecer como filtro
-// ativo (borda/texto roxo). Qualquer outro preset é destaque.
-const PRESET_NEUTRO: PeriodoPreset = "esteMes";
-
 function DropdownPeriodoBase({ periodoAtivo, rotuloPersonalizado, onSelecionarPreset, onAbrirPersonalizado }: Props) {
   const triggerTextSize = moderateScale(12);
   const itemTextSize = moderateScale(13);
-
-  const destacado = periodoAtivo !== PRESET_NEUTRO;
 
   const rotuloExibido =
     periodoAtivo === "personalizado" && rotuloPersonalizado ? rotuloPersonalizado : ROTULOS[periodoAtivo];
@@ -51,21 +45,24 @@ function DropdownPeriodoBase({ periodoAtivo, rotuloPersonalizado, onSelecionarPr
       trigger={({ abrir, aberto }) => (
         <Pressable
           onPress={abrir}
+          // Sem estado "destaque roxo" por período trocado — o trigger só
+          // reage ao menu aberto. Qualquer preset (inclusive "tudo",
+          // "hoje" etc.) fica com a borda neutra.
           className={`px-3 py-1.5 rounded-lg border flex-row items-center gap-1 ${
-            aberto || destacado ? "border-active-icon" : "border-lines-divisions bg-input-background/50"
+            aberto ? "border-active-icon" : "border-lines-divisions bg-input-background/50"
           }`}
           accessibilityRole="button"
           accessibilityLabel={`Filtrar por período. ${rotuloExibido}`}
         >
-          <Ionicons name="calendar-outline" color={destacado ? colors["active-icon"] : colors["second-text"]} size={13} />
+          <Ionicons name="calendar-outline" color={colors["second-text"]} size={13} />
           <Text
             style={{ fontSize: triggerTextSize }}
-            className={destacado ? "text-active-icon font-Inter-Medium" : "text-main-text font-Inter-Regular"}
+            className="text-main-text font-Inter-Regular"
             numberOfLines={1}
           >
             {rotuloExibido}
           </Text>
-          <Ionicons name="chevron-down" color={destacado ? colors["active-icon"] : colors["second-text"]} size={11} />
+          <Ionicons name="chevron-down" color={colors["second-text"]} size={11} />
         </Pressable>
       )}
     >

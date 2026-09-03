@@ -114,8 +114,9 @@ export function Transferencias() {
     definirPeriodoPersonalizado,
     limparTodosFiltros,
     possuiFiltrosAtivos,
+    consultaTemRecorte,
     filtrosParaQuery,
-  } = useFiltrosTransacao();
+  } = useFiltrosTransacao({ cascata: true });
 
   const [bancos, setBancos] = useState<Banco[]>([]);
   const [modalPeriodoAberto, setModalPeriodoAberto] = useState(false);
@@ -239,7 +240,7 @@ export function Transferencias() {
               <View className="items-center py-10">
                 <Ionicons name="receipt-outline" color={colors["desactived-text"]} size={30} />
                 <Text style={{ fontSize: emptyTitleSize }} className="text-desactived-text text-center mt-2">
-                  {possuiFiltrosAtivos
+                  {consultaTemRecorte
                     ? "Nenhuma transação encontrada para os filtros atuais."
                     : "Nenhuma transação ainda.\nImporte um extrato ou toque em \"Nova\" para começar."}
                 </Text>

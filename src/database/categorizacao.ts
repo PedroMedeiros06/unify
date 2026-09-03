@@ -67,17 +67,29 @@ export function normalizarPadraoDescricao(descricao: string): string {
  * useImportacaoCsv.ts — agora é a única fonte de regras de sistema.
  */
 const REGRAS_SISTEMA: { palavras: string[]; categoriaId: CategoriaId }[] = [
-  { palavras: ["uber", "99", "taxi", "combustivel", "combustível", "posto", "estacionamento"], categoriaId: "transporte" },
-  { palavras: ["pix"], categoriaId: "transferencia" },
+  // Regras específicas primeiro; as genéricas ("compra", "loja", "pix")
+  // ficam no fim porque casariam com quase tudo.
+  { palavras: ["salario", "salário", "pagamento salario", "folha de pagamento", "provento", "rem folha", "adto salarial"], categoriaId: "salario" },
+  { palavras: ["freela", "freelance", "reembolso", "restituicao", "restituição", "venda", "cashback", "comissao", "comissão"], categoriaId: "renda_extra" },
+  { palavras: ["uber", "99app", "99 *", "cabify", "taxi", "táxi", "combustivel", "combustível", "posto", "ipiranga", "shell", "petrobras", "estacionamento", "pedagio", "pedágio", "sem parar", "conectcar", "bilhete unico", "bilhete único", "metro", "metrô", "brt"], categoriaId: "transporte" },
+  { palavras: ["netflix", "spotify", "amazon prime", "prime video", "disney", "hbo", "max", "globoplay", "deezer", "youtube premium", "apple.com/bill", "google play", "icloud", "dropbox", "chatgpt", "openai", "gympass", "totalpass", "assinatura", "mensalidade digital"], categoriaId: "assinaturas" },
+  { palavras: ["escola", "colegio", "colégio", "faculdade", "universidade", "curso", "matricula", "matrícula", "udemy", "alura", "coursera", "livraria", "material escolar", "apostila", "kumon", "wizard", "cna ", "cultura inglesa"], categoriaId: "educacao" },
+  { palavras: ["luz", "energia", "enel", "cemig", "cpfl", "light", "equatorial", "copel", "agua", "água", "sabesp", "sanepar", "cedae", "gas", "gás", "comgas", "internet", "vivo", "claro", "tim", "oi ", "net ", "telefone", "banda larga", "conta de telefone"], categoriaId: "contas" },
+  { palavras: ["iptu", "ipva", "licenciamento", "darf", "das ", "gps ", "tarifa", "iof", "juros", "anuidade", "taxa bancaria", "taxa bancária", "cartorio", "cartório", "multa"], categoriaId: "impostos" },
+  { palavras: ["petshop", "pet shop", "pet ", "veterinario", "veterinário", "vet ", "racao", "ração", "cobasi", "petz", "banho e tosa"], categoriaId: "pets" },
+  { palavras: ["salao", "salão", "cabeleireiro", "barbearia", "barber", "manicure", "estetica", "estética", "spa", "sobrancelha", "depilacao", "depilação", "boticario", "boticário", "sephora", "perfumaria"], categoriaId: "beleza" },
+  { palavras: ["presente", "gift", "vaquinha", "doacao", "doação", "vakinha", "apae", "ong ", "dizimo", "dízimo", "oferta"], categoriaId: "presentes" },
+  { palavras: ["passagem", "gol ", "latam", "azul ", "voo", "cvc", "booking", "airbnb", "hotel", "hospedagem", "pousada", "decolar", "hurb", "123milhas", "resort"], categoriaId: "viagem" },
   { palavras: ["ted", "doc", "transferencia", "transferência"], categoriaId: "transferencia" },
   { palavras: ["boleto"], categoriaId: "boleto" },
   { palavras: ["aplicação", "aplicacao", "rdb", "resgate", "cdb", "tesouro"], categoriaId: "investimentos" },
-  { palavras: ["luz", "energia", "agua", "água", "condominio", "condomínio", "aluguel", "iptu"], categoriaId: "casa" },
-  { palavras: ["farmacia", "farmácia", "drogaria", "consulta", "plano de saude", "plano de saúde"], categoriaId: "saude" },
-  { palavras: ["cinema", "streaming", "netflix", "spotify", "ingresso"], categoriaId: "lazer" },
-  { palavras: ["padaria", "restaurante", "lanchonete", "ifood", "delivery", "pizzaria", "bar"], categoriaId: "alimentacao" },
-  { palavras: ["mercado", "supermercado", "supermarcon", "hortifruti", "acougue", "açougue"], categoriaId: "mercado" },
-  { palavras: ["cartão", "cartao", "compra", "loja"], categoriaId: "compras" },
+  { palavras: ["condominio", "condomínio", "aluguel", "imobiliaria", "imobiliária", "reforma", "material de construcao", "material de construção", "leroy", "telha norte"], categoriaId: "casa" },
+  { palavras: ["farmacia", "farmácia", "drogaria", "drogasil", "pacheco", "raia", "consulta", "clinica", "clínica", "laboratorio", "laboratório", "exame", "dentista", "hospital", "plano de saude", "plano de saúde", "unimed", "hapvida", "amil"], categoriaId: "saude" },
+  { palavras: ["cinema", "ingresso", "ingresso.com", "show", "teatro", "steam", "playstation", "xbox", "nintendo", "parque", "boliche"], categoriaId: "lazer" },
+  { palavras: ["padaria", "restaurante", "lanchonete", "ifood", "rappi", "delivery", "pizzaria", "hamburgueria", "cafeteria", "starbucks", "mcdonald", "burger king", "bar "], categoriaId: "alimentacao" },
+  { palavras: ["mercado", "supermercado", "supermarcon", "hortifruti", "sacolao", "sacolão", "atacadao", "atacadão", "assai", "assaí", "carrefour", "pao de acucar", "pão de açúcar", "acougue", "açougue"], categoriaId: "mercado" },
+  { palavras: ["pix"], categoriaId: "transferencia" },
+  { palavras: ["cartão", "cartao", "compra", "loja", "magazine", "americanas", "shopee", "aliexpress", "mercado livre", "mercadolivre"], categoriaId: "compras" },
 ];
 
 /** Aplica só as regras de sistema (código fixo) a uma descrição já normalizada. */

@@ -1,24 +1,12 @@
 import { moderateScale } from "@/utils/scale";
 import { View, Text } from "react-native";
 import { memo, useMemo, useState } from "react";
-import { CampoMoeda, CampoSlider, CampoDropdown } from "@/components/SimulacoesComp/CamposSimulacao";
+import { CampoMoeda, CampoSlider, CampoNumero } from "@/components/SimulacoesComp/CamposSimulacao";
 import { StatTilesSimulacao, CORES_TILE } from "@/components/SimulacoesComp/StatTilesSimulacao";
 import { GraficoLinhaSimulacao } from "@/components/SimulacoesComp/GraficoLinhaSimulacao";
 import { BlocoAcoesSimulacao } from "@/components/SimulacoesComp/BlocoAcoesSimulacao";
 import { simularEmprestimo, ParametrosEmprestimo } from "@/utils/simulacoes";
 import { FormatToCurrency } from "@/utils/formatNumber";
-
-// Empréstimo pessoal costuma ter prazos mais curtos que financiamento
-// imobiliário — no máximo 5 anos.
-const PRAZOS = [
-  { valor: 6, rotulo: "6 meses" },
-  { valor: 12, rotulo: "12 meses (1 ano)" },
-  { valor: 18, rotulo: "18 meses" },
-  { valor: 24, rotulo: "24 meses (2 anos)" },
-  { valor: 36, rotulo: "36 meses (3 anos)" },
-  { valor: 48, rotulo: "48 meses (4 anos)" },
-  { valor: 60, rotulo: "60 meses (5 anos)" },
-];
 
 function formatarMilhar(valor: number): string {
   if (Math.abs(valor) >= 1000) return `R$ ${Math.round(valor / 1000)} mil`;
@@ -63,7 +51,7 @@ function SimuladorEmprestimoBase({ parametrosIniciais }: Props) {
 
         <View className="flex-row gap-3 mb-4">
           <CampoMoeda label="Valor do empréstimo" valor={valorSolicitado} onChange={setValorSolicitado} />
-          <CampoDropdown label="Prazo" valor={prazoMeses} opcoes={PRAZOS} onChange={setPrazoMeses} />
+          <CampoNumero label="Prazo" valor={prazoMeses} onChange={setPrazoMeses} sufixo="meses" />
         </View>
 
         <CampoSlider

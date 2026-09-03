@@ -45,29 +45,23 @@ function SeletorCategoriaMultiploBase({ categoriasSelecionadas, onAlternar, onLi
       trigger={({ abrir, aberto }) => (
         <Pressable
           onPress={abrir}
+          // Sem destaque roxo por ter categoria filtrada — o rótulo já
+          // muda ("3 categorias" etc.). Trigger só reage ao menu aberto.
           className={`px-3 py-1.5 rounded-lg border flex-row items-center gap-1 ${
-            aberto || temSelecao ? "border-active-icon" : "border-lines-divisions bg-input-background/50"
+            aberto ? "border-active-icon" : "border-lines-divisions bg-input-background/50"
           }`}
           accessibilityRole="button"
           accessibilityLabel={`Filtrar por categoria. ${rotulo}`}
         >
-          <Ionicons
-            name="pricetags-outline"
-            color={temSelecao ? colors["active-icon"] : colors["second-text"]}
-            size={13}
-          />
+          <Ionicons name="pricetags-outline" color={colors["second-text"]} size={13} />
           <Text
             style={{ fontSize: triggerTextSize }}
-            className={temSelecao ? "text-active-icon font-Inter-Medium" : "text-main-text font-Inter-Regular"}
+            className="text-main-text font-Inter-Regular"
             numberOfLines={1}
           >
             {rotulo}
           </Text>
-          <Ionicons
-            name="chevron-down"
-            color={temSelecao ? colors["active-icon"] : colors["second-text"]}
-            size={11}
-          />
+          <Ionicons name="chevron-down" color={colors["second-text"]} size={11} />
         </Pressable>
       )}
     >

@@ -1,5 +1,6 @@
 import { View, Pressable, Modal, Animated, Easing, LayoutRectangle, useWindowDimensions } from "react-native";
 import { ReactNode, useEffect, useRef, useState, useCallback } from "react";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 // Distância mínima que o card deve manter das bordas da tela, para
 // nunca colar exatamente na borda.
@@ -53,6 +54,7 @@ export function DropdownMenu({
   alinhamento = "centro",
 }: Props) {
   const { width: larguraTela } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
 
   const [aberto, setAberto] = useState(false);
   const [montado, setMontado] = useState(false);
@@ -74,24 +76,30 @@ export function DropdownMenu({
 
   useEffect(() => {
     if (aberto) {
-      setMontado(true);
       progresso.setValue(0);
-      Animated.timing(progresso, {
-        toValue: 1,
-        duration: 180,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }).start();
-    } else {
-      Animated.timing(progresso, {
-        toValue: 0,
-        duration: 150,
-        easing: Easing.in(Easing.cubic),
-        useNativeDriver: true,
-      }).start(({ finished }) => {
-        if (finished) setMontado(false);
+      setMontado(true);
+      // Espera o Modal montar (próximo frame) antes de animar a entrada.
+      // Sem isto, o Android pinta o card já opaco no mesmo frame em que
+      // `progresso` ainda vai de 0→1 — a animação "não acontece".
+      const raf = requestAnimationFrame(() => {
+        Animated.timing(progresso, {
+          toValue: 1,
+          duration: 180,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }).start();
       });
+      return () => cancelAnimationFrame(raf);
     }
+
+    Animated.timing(progresso, {
+      toValue: 0,
+      duration: 150,
+      easing: Easing.in(Easing.cubic),
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (finished) setMontado(false);
+    });
   }, [aberto, progresso]);
 
   const translateY = progresso.interpolate({
@@ -128,7 +136,13 @@ export function DropdownMenu({
   const larguraCard =
     larguraDoTrigger && posicaoTrigger ? posicaoTrigger.width : largura;
   const left = posicaoTrigger ? calcularLeft(posicaoTrigger, larguraCard) : 0;
-  const top = posicaoTrigger ? posicaoTrigger.y + posicaoTrigger.height + 6 : 0;
+  // Com `statusBarTranslucent`, o conteúdo do <Modal> é desenhado a
+  // partir do topo FÍSICO da tela (atrás da status bar), enquanto
+  // measureInWindow() reporta o `y` do trigger relativo à área útil
+  // (abaixo da status bar). Somar insets.top realinha o card ao trigger.
+  const top = posicaoTrigger
+    ? posicaoTrigger.y + posicaoTrigger.height + 6 + insets.top
+    : 0;
 
   return (
     <>
@@ -136,7 +150,18 @@ export function DropdownMenu({
         {trigger({ abrir, aberto })}
       </View>
 
-      <Modal visible={montado} transparent animationType="none" onRequestClose={fechar}>
+      {/* statusBarTranslucent + navigationBarTranslucent iguais aos
+          demais modais (evita a faixa branca sob a barra de navegação).
+          O deslocamento de coordenadas que isso causa é compensado no
+          cálculo de `top` acima (+ insets.top). */}
+      <Modal
+        visible={montado}
+        transparent
+        animationType="none"
+        onRequestClose={fechar}
+        statusBarTranslucent
+        navigationBarTranslucent
+      >
         <Pressable
           className="flex-1"
           onPress={fechar}
