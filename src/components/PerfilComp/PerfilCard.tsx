@@ -2,16 +2,16 @@ import { colors } from "@/theme/colors";
 import { moderateScale } from "@/utils/scale";
 import { FormatToCurrency } from "@/utils/formatNumber";
 import { Ionicons } from "@expo/vector-icons";
-import { View, Text, Pressable, Image, Modal, TextInput, Alert } from "react-native";
+import { View, Text, Pressable, TextInput, Alert } from "react-native";
 import { memo, useCallback, useEffect, useState } from "react";
 import { listarResumoPorBanco, calcularResumoReceitasDespesas } from "@/database/queries";
 import { obterMetaDeMaiorProgresso } from "@/database/metasQueries";
 import { usePerfil } from "@/context/PerfilContext";
+import { ModalCentralizado } from "@/components/common/ModalCentralizado";
 
 function PerfilCardBase() {
   const nameSize = moderateScale(18);
   const emailSize = moderateScale(12);
-  const planoSize = moderateScale(11);
   const metricLabelSize = moderateScale(11);
   const metricValueSize = moderateScale(13);
   const modalTitleSize = moderateScale(16);
@@ -113,16 +113,11 @@ function PerfilCardBase() {
           </Text>
           <Text
             style={{ fontSize: emailSize }}
-            className="text-second-text mb-2"
+            className="text-second-text"
             numberOfLines={1}
           >
             {emailExibido}
           </Text>
-          <View className="self-start bg-active-icon/40 px-2.5 py-1 rounded-full">
-            <Text style={{ fontSize: planoSize }} className="text-main-text font-Inter-Medium">
-              Plano Gratuito
-            </Text>
-          </View>
         </View>
 
         <Ionicons name="chevron-forward" color={colors["second-text"]} size={18} />
@@ -186,63 +181,63 @@ function PerfilCardBase() {
       </View>
 
       {/* MODAL DE EDIÇÃO — cadastro local simples, sem tabela de usuário completa */}
-      <Modal visible={modalEdicaoAberto} transparent animationType="slide" onRequestClose={() => setModalEdicaoAberto(false)} statusBarTranslucent navigationBarTranslucent>
-        <View className="flex-1 justify-end bg-black/50">
-          <View className="bg-card-background rounded-t-2xl p-5 pb-8">
-            <View className="flex-row justify-between items-center mb-4">
-              <Text style={{ fontSize: modalTitleSize }} className="text-main-text font-Inter-SemiBold">
-                Seu perfil
-              </Text>
-              <Pressable onPress={() => setModalEdicaoAberto(false)} hitSlop={10} disabled={salvando} accessibilityRole="button" accessibilityLabel="Fechar">
-                <Ionicons name="close" color={colors["second-text"]} size={22} />
-              </Pressable>
-            </View>
-
-            <Text style={{ fontSize: labelSize }} className="text-second-text mb-1.5">
-              Nome
-            </Text>
-            <TextInput
-              value={nomeEdicao}
-              onChangeText={setNomeEdicao}
-              placeholder="Seu nome"
-              placeholderTextColor={colors["desactived-text"]}
-              style={{ fontSize: inputTextSize, color: colors["main-text"] }}
-              className="bg-input-background border border-input-border rounded-xl px-3 py-3 mb-4"
-              editable={!salvando}
-              autoFocus
-              accessibilityLabel="Nome"
-            />
-
-            <Text style={{ fontSize: labelSize }} className="text-second-text mb-1.5">
-              E-mail (opcional)
-            </Text>
-            <TextInput
-              value={emailEdicao}
-              onChangeText={setEmailEdicao}
-              placeholder="seuemail@exemplo.com"
-              placeholderTextColor={colors["desactived-text"]}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              style={{ fontSize: inputTextSize, color: colors["main-text"] }}
-              className="bg-input-background border border-input-border rounded-xl px-3 py-3 mb-6"
-              editable={!salvando}
-              accessibilityLabel="E-mail"
-            />
-
-            <Pressable
-              onPress={handleSalvarPerfil}
-              disabled={salvando}
-              className="w-full py-3.5 rounded-xl items-center justify-center bg-active-icon active:opacity-80"
-              accessibilityRole="button"
-              accessibilityLabel="Salvar perfil"
-            >
-              <Text style={{ fontSize: buttonTextSize }} className="text-white font-Inter-SemiBold">
-                {salvando ? "Salvando..." : "Salvar"}
-              </Text>
-            </Pressable>
-          </View>
+      <ModalCentralizado
+        visivel={modalEdicaoAberto}
+        onFechar={() => setModalEdicaoAberto(false)}
+        bloquearFechamentoExterno={salvando}
+      >
+        <View className="flex-row justify-between items-center mb-4">
+          <Text style={{ fontSize: modalTitleSize }} className="text-main-text font-Inter-SemiBold">
+            Seu perfil
+          </Text>
+          <Pressable onPress={() => setModalEdicaoAberto(false)} hitSlop={10} disabled={salvando} accessibilityRole="button" accessibilityLabel="Fechar">
+            <Ionicons name="close" color={colors["second-text"]} size={22} />
+          </Pressable>
         </View>
-      </Modal>
+
+        <Text style={{ fontSize: labelSize }} className="text-second-text mb-1.5">
+          Nome
+        </Text>
+        <TextInput
+          value={nomeEdicao}
+          onChangeText={setNomeEdicao}
+          placeholder="Seu nome"
+          placeholderTextColor={colors["desactived-text"]}
+          style={{ fontSize: inputTextSize, color: colors["main-text"] }}
+          className="bg-input-background border border-input-border rounded-xl px-3 py-3 mb-4"
+          editable={!salvando}
+          autoFocus
+          accessibilityLabel="Nome"
+        />
+
+        <Text style={{ fontSize: labelSize }} className="text-second-text mb-1.5">
+          E-mail (opcional)
+        </Text>
+        <TextInput
+          value={emailEdicao}
+          onChangeText={setEmailEdicao}
+          placeholder="seuemail@exemplo.com"
+          placeholderTextColor={colors["desactived-text"]}
+          keyboardType="email-address"
+          autoCapitalize="none"
+          style={{ fontSize: inputTextSize, color: colors["main-text"] }}
+          className="bg-input-background border border-input-border rounded-xl px-3 py-3 mb-6"
+          editable={!salvando}
+          accessibilityLabel="E-mail"
+        />
+
+        <Pressable
+          onPress={handleSalvarPerfil}
+          disabled={salvando}
+          className="w-full py-3.5 rounded-xl items-center justify-center bg-active-icon active:opacity-80"
+          accessibilityRole="button"
+          accessibilityLabel="Salvar perfil"
+        >
+          <Text style={{ fontSize: buttonTextSize }} className="text-white font-Inter-SemiBold">
+            {salvando ? "Salvando..." : "Salvar"}
+          </Text>
+        </Pressable>
+      </ModalCentralizado>
     </View>
   );
 }

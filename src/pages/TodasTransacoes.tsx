@@ -136,7 +136,7 @@ export function TodasTransacoes() {
     limparTodosFiltros,
     possuiFiltrosAtivos,
     filtrosParaQuery,
-  } = useFiltrosTransacao();
+  } = useFiltrosTransacao({ presetInicial: "tudo" });
 
   const [bancos, setBancos] = useState<Banco[]>([]);
   const [modalPeriodoAberto, setModalPeriodoAberto] = useState(false);

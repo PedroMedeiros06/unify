@@ -10,7 +10,12 @@ import { FormatToCurrency } from "@/utils/formatNumber";
  * do layout atual do app.
  */
 
-type Linha = { rotulo: string; valor: string };
+type Linha = { rotulo: string; valor: string; forte?: boolean };
+
+// Número-chave que ganha o cartão de destaque no topo do documento,
+// mais o rótulo que o descreve. É o dado que a pessoa normalmente quer
+// olhar primeiro em cada tipo de simulação.
+type Destaque = { rotulo: string; valor: string; nota?: string };
 
 const NOMES_TIPO: Record<SimulacaoSalva["tipo"], string> = {
   financiamento: "Financiamento",
@@ -27,10 +32,19 @@ function moeda(n: number): string {
   return FormatToCurrency(n);
 }
 
-/** Blocos de "parâmetros informados" e "resultado" para cada tipo. */
-function blocosDaSimulacao(s: SimulacaoSalva): { parametros: Linha[]; resultado: Linha[] } {
+/** Destaque + blocos de "parâmetros" e "resultado" para cada tipo. */
+function blocosDaSimulacao(s: SimulacaoSalva): {
+  destaque: Destaque;
+  parametros: Linha[];
+  resultado: Linha[];
+} {
   if (s.tipo === "financiamento") {
     return {
+      destaque: {
+        rotulo: "Parcela mensal",
+        valor: moeda(s.resultado.parcelaMensal),
+        nota: `${s.parametros.prazoMeses} parcelas · ${s.parametros.taxaAnualPct}% a.a.`,
+      },
       parametros: [
         { rotulo: "Valor do bem", valor: moeda(s.parametros.valorBem) },
         { rotulo: "Entrada", valor: moeda(s.parametros.entrada) },
@@ -42,13 +56,18 @@ function blocosDaSimulacao(s: SimulacaoSalva): { parametros: Linha[]; resultado:
         { rotulo: "Parcela mensal", valor: moeda(s.resultado.parcelaMensal) },
         { rotulo: "Total pago", valor: moeda(s.resultado.totalPago) },
         { rotulo: "Juros pagos", valor: moeda(s.resultado.jurosPagos) },
-        { rotulo: "Custo efetivo total", valor: pct(s.resultado.custoEfetivoTotalPct) },
+        { rotulo: "Custo efetivo total", valor: pct(s.resultado.custoEfetivoTotalPct), forte: true },
       ],
     };
   }
 
   if (s.tipo === "emprestimo") {
     return {
+      destaque: {
+        rotulo: "Parcela mensal",
+        valor: moeda(s.resultado.parcelaMensal),
+        nota: `${s.parametros.prazoMeses} parcelas · ${s.parametros.taxaAnualPct}% a.a.`,
+      },
       parametros: [
         { rotulo: "Valor do empréstimo", valor: moeda(s.parametros.valorSolicitado) },
         { rotulo: "Prazo", valor: `${s.parametros.prazoMeses} meses` },
@@ -58,13 +77,18 @@ function blocosDaSimulacao(s: SimulacaoSalva): { parametros: Linha[]; resultado:
         { rotulo: "Parcela mensal", valor: moeda(s.resultado.parcelaMensal) },
         { rotulo: "Total pago", valor: moeda(s.resultado.totalPago) },
         { rotulo: "Juros pagos", valor: moeda(s.resultado.jurosPagos) },
-        { rotulo: "Custo efetivo total", valor: pct(s.resultado.custoEfetivoTotalPct) },
+        { rotulo: "Custo efetivo total", valor: pct(s.resultado.custoEfetivoTotalPct), forte: true },
       ],
     };
   }
 
   if (s.tipo === "investimento") {
     return {
+      destaque: {
+        rotulo: "Montante final",
+        valor: moeda(s.resultado.montanteFinal),
+        nota: `em ${s.parametros.meses} meses · ${s.parametros.taxaAnualPct}% a.a.`,
+      },
       parametros: [
         { rotulo: "Aporte inicial", valor: moeda(s.parametros.aporteInicial) },
         { rotulo: "Aporte mensal", valor: moeda(s.parametros.aporteMensal) },
@@ -75,13 +99,18 @@ function blocosDaSimulacao(s: SimulacaoSalva): { parametros: Linha[]; resultado:
         { rotulo: "Montante final", valor: moeda(s.resultado.montanteFinal) },
         { rotulo: "Total investido", valor: moeda(s.resultado.totalInvestido) },
         { rotulo: "Rendimento", valor: moeda(s.resultado.rendimento) },
-        { rotulo: "Rendimento (%)", valor: pct(s.resultado.rendimentoPct) },
+        { rotulo: "Rendimento (%)", valor: pct(s.resultado.rendimentoPct), forte: true },
       ],
     };
   }
 
   // câmbio
   return {
+    destaque: {
+      rotulo: `Você recebe`,
+      valor: `${s.resultado.valorConvertido.toLocaleString("pt-BR", { maximumFractionDigits: 2 })} ${s.parametros.moedaCodigo}`,
+      nota: `câmbio efetivo ${moeda(s.resultado.cotacaoEfetiva)}`,
+    },
     parametros: [
       { rotulo: "Moeda", valor: s.parametros.moedaCodigo },
       { rotulo: "Valor em reais", valor: moeda(s.parametros.valorBrl) },
@@ -97,7 +126,11 @@ function blocosDaSimulacao(s: SimulacaoSalva): { parametros: Linha[]; resultado:
       { rotulo: "Cotação efetiva", valor: moeda(s.resultado.cotacaoEfetiva) },
       { rotulo: "Custo de IOF", valor: moeda(s.resultado.custoIof) },
       { rotulo: "Custo de spread", valor: moeda(s.resultado.custoSpread) },
-      { rotulo: "Custo total", valor: `${moeda(s.resultado.custoTotal)} (${pct(s.resultado.custoTotalPct)})` },
+      {
+        rotulo: "Custo total",
+        valor: `${moeda(s.resultado.custoTotal)} (${pct(s.resultado.custoTotalPct)})`,
+        forte: true,
+      },
     ],
   };
 }
@@ -106,7 +139,7 @@ function linhasHtml(linhas: Linha[]): string {
   return linhas
     .map(
       (l) => `
-      <tr>
+      <tr${l.forte ? ' class="forte"' : ""}>
         <td class="rotulo">${escaparHtml(l.rotulo)}</td>
         <td class="valor">${escaparHtml(l.valor)}</td>
       </tr>`
@@ -123,7 +156,7 @@ function escaparHtml(texto: string): string {
 }
 
 function montarHtml(s: SimulacaoSalva): string {
-  const { parametros, resultado } = blocosDaSimulacao(s);
+  const { destaque, parametros, resultado } = blocosDaSimulacao(s);
   const dataFormatada = new Date(s.criadoEm).toLocaleDateString("pt-BR", {
     day: "2-digit",
     month: "long",
@@ -135,43 +168,113 @@ function montarHtml(s: SimulacaoSalva): string {
 <head>
 <meta charset="utf-8" />
 <style>
-  * { box-sizing: border-box; }
-  body {
-    font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
-    color: #1B1B2F;
-    margin: 0;
-    padding: 40px;
+  :root {
+    --tinta: #141821;
+    --rotulo: #5B6675;
+    --hairline: #E4E7EC;
+    --roxo: #8D51E6;
+    --roxo-fundo: #F7F3FE;
+    --roxo-borda: #E3D4F8;
   }
-  .marca { font-size: 13px; letter-spacing: 2px; color: #6C5CE7; font-weight: 700; text-transform: uppercase; }
-  h1 { font-size: 24px; margin: 6px 0 2px; }
-  .subtitulo { font-size: 13px; color: #6b7280; margin-bottom: 28px; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: var(--tinta);
+    font-size: 13px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  .folha { padding: 44px 46px 40px; max-width: 720px; margin: 0 auto; }
+
+  /* Cabeçalho */
+  .eyebrow {
+    font-size: 10px; font-weight: 700; letter-spacing: 2.5px;
+    text-transform: uppercase; color: var(--roxo);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .eyebrow::before {
+    content: ""; width: 22px; height: 2px; background: var(--roxo);
+    display: inline-block;
+  }
+  h1 {
+    font-size: 25px; font-weight: 700; letter-spacing: -0.4px;
+    margin: 12px 0 3px; text-wrap: balance;
+  }
+  .subtitulo { font-size: 12px; color: var(--rotulo); }
+
+  /* Cartão de destaque */
+  .destaque {
+    margin: 26px 0 8px; padding: 16px 20px;
+    background: var(--roxo-fundo); border: 1px solid var(--roxo-borda);
+    border-radius: 10px;
+  }
+  .destaque .rot {
+    font-size: 10px; font-weight: 700; letter-spacing: 1.5px;
+    text-transform: uppercase; color: var(--rotulo);
+  }
+  .destaque .val {
+    font-size: 28px; font-weight: 700; color: var(--roxo);
+    letter-spacing: -0.5px; margin-top: 2px;
+    font-variant-numeric: tabular-nums;
+  }
+  .destaque .nota { font-size: 11px; color: var(--rotulo); margin-top: 2px; }
+
+  /* Seções */
   h2 {
-    font-size: 12px; text-transform: uppercase; letter-spacing: 1px;
-    color: #6b7280; margin: 24px 0 8px;
+    font-size: 10.5px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 1.8px; color: var(--rotulo);
+    margin: 30px 0 4px; padding-bottom: 7px;
+    border-bottom: 1px solid var(--hairline);
   }
   table { width: 100%; border-collapse: collapse; }
-  td { padding: 9px 0; border-bottom: 1px solid #ececf2; font-size: 14px; }
-  td.rotulo { color: #4b5563; }
-  td.valor { text-align: right; font-weight: 600; }
-  .destaque td { border-bottom: none; }
-  .destaque td.valor { color: #6C5CE7; font-size: 18px; }
-  .rodape { margin-top: 40px; font-size: 11px; color: #9ca3af; }
+  td {
+    padding: 8px 0; font-size: 13px;
+    border-bottom: 1px solid var(--hairline);
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: #FAFAFB; }
+  td.rotulo { color: var(--rotulo); padding-left: 4px; }
+  td.valor {
+    text-align: right; font-weight: 600; padding-right: 4px;
+    font-variant-numeric: tabular-nums; white-space: nowrap;
+  }
+  tr.forte td { padding-top: 11px; padding-bottom: 11px; }
+  tr.forte td.rotulo { color: var(--tinta); font-weight: 600; }
+  tr.forte td.valor { color: var(--roxo); font-size: 15px; }
+
+  /* Rodapé */
+  .rodape {
+    margin-top: 34px; padding-top: 12px;
+    border-top: 1px solid var(--hairline);
+    font-size: 10px; color: #9AA3AF; line-height: 1.6;
+  }
+  .rodape strong { color: var(--rotulo); font-weight: 600; }
 </style>
 </head>
 <body>
-  <div class="marca">Unify</div>
-  <h1>${escaparHtml(s.titulo)}</h1>
-  <div class="subtitulo">Simulação de ${NOMES_TIPO[s.tipo].toLowerCase()} · gerada em ${dataFormatada}</div>
+  <div class="folha">
+    <div class="eyebrow">Unify · Simulação</div>
+    <h1>${escaparHtml(s.titulo)}</h1>
+    <div class="subtitulo">${escaparHtml(NOMES_TIPO[s.tipo])} · gerada em ${dataFormatada}</div>
 
-  <h2>Parâmetros informados</h2>
-  <table>${linhasHtml(parametros)}</table>
+    <div class="destaque">
+      <div class="rot">${escaparHtml(destaque.rotulo)}</div>
+      <div class="val">${escaparHtml(destaque.valor)}</div>
+      ${destaque.nota ? `<div class="nota">${escaparHtml(destaque.nota)}</div>` : ""}
+    </div>
 
-  <h2>Resultado</h2>
-  <table>${linhasHtml(resultado)}</table>
+    <h2>Parâmetros informados</h2>
+    <table>${linhasHtml(parametros)}</table>
 
-  <div class="rodape">
-    Os valores são estimativas e podem variar de acordo com as condições reais de mercado.
-    Documento gerado pelo aplicativo Unify.
+    <h2>Resultado</h2>
+    <table>${linhasHtml(resultado)}</table>
+
+    <div class="rodape">
+      <strong>Estimativa.</strong> Os valores usam juros compostos e as taxas informadas na
+      simulação; as condições reais de crédito, tributos e mercado podem diferir.
+      Documento gerado pelo aplicativo Unify.
+    </div>
   </div>
 </body>
 </html>`;

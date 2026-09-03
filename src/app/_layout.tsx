@@ -10,6 +10,7 @@ import { CompromissosProvider } from "@/context/CompromissosContext";
 import { LembretesProvider } from "@/context/LembretesContext";
 import { SimulacoesProvider } from "@/context/SimulacoesContext";
 import { CotacoesProvider } from "@/context/CotacoesContext";
+import { TaxasProvider } from "@/context/TaxasContext";
 import { RecorrenciasProvider } from "@/context/RecorrenciasContext";
 import { LimitesOrcamentoProvider } from "@/context/LimitesOrcamentoContext";
 import { PerfilProvider } from "@/context/PerfilContext";
@@ -33,6 +34,7 @@ export default function RootLayout() {
                   <LembretesProvider>
                     <SimulacoesProvider>
                       <CotacoesProvider>
+                       <TaxasProvider>
                         <RecorrenciasProvider>
                           <LimitesOrcamentoProvider>
                             <NovaTransacaoProvider>
@@ -40,6 +42,7 @@ export default function RootLayout() {
                             </NovaTransacaoProvider>
                           </LimitesOrcamentoProvider>
                         </RecorrenciasProvider>
+                       </TaxasProvider>
                       </CotacoesProvider>
                     </SimulacoesProvider>
                   </LembretesProvider>

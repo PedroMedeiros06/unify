@@ -435,6 +435,46 @@ const MIGRATIONS: Migration[] = [
       }
     },
   },
+  {
+    versao: 15,
+    descricao:
+      "Cria tabela taxas_referencia: taxas de juros de referência do Brasil (Selic, CDI, poupança, IPCA) em % ao ano. Mesmo padrão de cotacoes_moeda — vem semeada com um snapshot fixo para o simulador de investimento funcionar offline; a cada abertura do app COM internet, TaxasContext busca a API de dados do Banco Central e sobrescreve estas linhas.",
+    async executar(db) {
+      // Uma linha por indicador. `codigo` é uma chave curta interna
+      // ("selic", "cdi", "poupanca", "ipca"). `valor_anual_pct` é a taxa
+      // já convertida para % ao ano (a poupança, por exemplo, é publicada
+      // pelo BC ao mês e anualizada aqui). `serie_bcb` é o número da série
+      // no SGS do Banco Central que alimenta esse valor (referência, não
+      // usado em query). `data_referencia` é a data do dado na fonte.
+      await db.execAsync(`
+        CREATE TABLE IF NOT EXISTS taxas_referencia (
+          codigo          TEXT PRIMARY KEY NOT NULL,
+          nome            TEXT NOT NULL,
+          valor_anual_pct REAL NOT NULL,
+          serie_bcb       INTEGER,
+          data_referencia TEXT NOT NULL,
+          atualizado_em   TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+      `);
+
+      // Snapshot inicial aproximado (meados de 2025) — será substituído
+      // na primeira abertura online.
+      const semente: [string, string, number, number][] = [
+        ["selic", "Selic (meta)", 15.0, 432],
+        ["cdi", "CDI", 14.9, 4389],
+        ["poupanca", "Poupança", 8.32, 196],
+        ["ipca", "IPCA (12 meses)", 5.35, 13522],
+      ];
+
+      for (const [codigo, nome, valor, serie] of semente) {
+        await db.runAsync(
+          `INSERT OR IGNORE INTO taxas_referencia (codigo, nome, valor_anual_pct, serie_bcb, data_referencia)
+           VALUES (?, ?, ?, ?, '2025-06-01');`,
+          [codigo, nome, valor, serie]
+        );
+      }
+    },
+  },
 ];
 
 export async function rodarMigrations(db: SQLiteDatabase): Promise<void> {

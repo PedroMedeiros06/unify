@@ -1,4 +1,4 @@
-import { View, Pressable, Modal, Animated, Easing, LayoutRectangle, useWindowDimensions } from "react-native";
+import { View, Pressable, Modal, Animated, Easing, LayoutRectangle, LayoutChangeEvent, useWindowDimensions } from "react-native";
 import { ReactNode, useEffect, useRef, useState, useCallback } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -53,15 +53,34 @@ export function DropdownMenu({
   larguraDoTrigger = false,
   alinhamento = "centro",
 }: Props) {
-  const { width: larguraTela } = useWindowDimensions();
+  const { width: larguraTela, height: alturaTela } = useWindowDimensions();
   const insets = useSafeAreaInsets();
 
   const [aberto, setAberto] = useState(false);
   const [montado, setMontado] = useState(false);
   const [posicaoTrigger, setPosicaoTrigger] = useState<LayoutRectangle | null>(null);
+  // Compensação vertical do conteúdo do <Modal>. Com `statusBarTranslucent`
+  // o comportamento difere entre Expo Go e build standalone (APK):
+  //  - APK (edge-to-edge padrão do SDK 57): o conteúdo do Modal ocupa a
+  //    tela FÍSICA inteira e o measureInWindow() do trigger já conta a
+  //    status bar no `y` — as duas coordenadas batem, compensação = 0.
+  //  - Expo Go: o conteúdo do Modal começa ABAIXO da status bar, mas o
+  //    measureInWindow() do trigger reporta `y` a partir do topo físico
+  //    — falta somar a altura da status bar (insets.top).
+  // Distinguimos os dois medindo a altura real do conteúdo do Modal: se
+  // for ~a tela inteira, é edge-to-edge (APK) e não compensa; se for
+  // menor (faltando a status bar), é Expo Go e soma insets.top.
+  const [alturaConteudoModal, setAlturaConteudoModal] = useState(0);
+  const modalEhEdgeToEdge =
+    alturaConteudoModal > 0 && alturaTela - alturaConteudoModal < insets.top / 2;
+  const compensacaoTop = modalEhEdgeToEdge ? 0 : insets.top;
 
   const triggerRef = useRef<View>(null);
   const progresso = useRef(new Animated.Value(0)).current;
+
+  const aoMedirConteudoModal = useCallback((e: LayoutChangeEvent) => {
+    setAlturaConteudoModal(e.nativeEvent.layout.height);
+  }, []);
 
   const abrir = useCallback(() => {
     triggerRef.current?.measureInWindow((x, y, width, height) => {
@@ -136,12 +155,13 @@ export function DropdownMenu({
   const larguraCard =
     larguraDoTrigger && posicaoTrigger ? posicaoTrigger.width : largura;
   const left = posicaoTrigger ? calcularLeft(posicaoTrigger, larguraCard) : 0;
-  // Com `statusBarTranslucent`, o conteúdo do <Modal> é desenhado a
-  // partir do topo FÍSICO da tela (atrás da status bar), enquanto
-  // measureInWindow() reporta o `y` do trigger relativo à área útil
-  // (abaixo da status bar). Somar insets.top realinha o card ao trigger.
+  // trigger.y é medido a partir do topo físico da tela. No Expo Go o
+  // conteúdo do Modal começa ABAIXO da status bar, então o mesmo `y`
+  // dentro do Modal está deslocado insets.top para cima — somamos essa
+  // altura via `compensacaoTop`. No APK edge-to-edge as origens batem e
+  // `compensacaoTop` é 0.
   const top = posicaoTrigger
-    ? posicaoTrigger.y + posicaoTrigger.height + 6 + insets.top
+    ? posicaoTrigger.y + posicaoTrigger.height + 6 + compensacaoTop
     : 0;
 
   return (
@@ -152,8 +172,9 @@ export function DropdownMenu({
 
       {/* statusBarTranslucent + navigationBarTranslucent iguais aos
           demais modais (evita a faixa branca sob a barra de navegação).
-          O deslocamento de coordenadas que isso causa é compensado no
-          cálculo de `top` acima (+ insets.top). */}
+          O deslocamento vertical que isso causa varia entre Expo Go e
+          APK; a View de fora mede a própria altura e `compensacaoTop`
+          resolve qual dos dois casos é (ver acima). */}
       <Modal
         visible={montado}
         transparent
@@ -162,30 +183,32 @@ export function DropdownMenu({
         statusBarTranslucent
         navigationBarTranslucent
       >
-        <Pressable
-          className="flex-1"
-          onPress={fechar}
-          accessibilityRole="button"
-          accessibilityLabel="Fechar menu"
-        />
+        <View style={{ flex: 1 }} onLayout={aoMedirConteudoModal}>
+          <Pressable
+            className="flex-1"
+            onPress={fechar}
+            accessibilityRole="button"
+            accessibilityLabel="Fechar menu"
+          />
 
-        {posicaoTrigger && (
-          <Animated.View
-            pointerEvents={montado ? "auto" : "none"}
-            style={{
-              position: "absolute",
-              top,
-              left,
-              width: larguraCard,
-              opacity: progresso,
-              transform: [{ translateY }],
-            }}
-          >
-            <View className="bg-card-background border border-lines-divisions rounded-2xl overflow-hidden shadow-lg">
-              {children({ fechar })}
-            </View>
-          </Animated.View>
-        )}
+          {posicaoTrigger && (
+            <Animated.View
+              pointerEvents={montado ? "auto" : "none"}
+              style={{
+                position: "absolute",
+                top,
+                left,
+                width: larguraCard,
+                opacity: progresso,
+                transform: [{ translateY }],
+              }}
+            >
+              <View className="bg-card-background border border-lines-divisions rounded-2xl overflow-hidden shadow-lg">
+                {children({ fechar })}
+              </View>
+            </Animated.View>
+          )}
+        </View>
       </Modal>
     </>
   );
