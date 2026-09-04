@@ -1,12 +1,13 @@
 import { moderateScale } from "@/utils/scale";
 import { Ionicons } from "@expo/vector-icons";
 import { colors } from "@/theme/colors";
-import { View, Text, Pressable, Share, Alert } from "react-native";
+import { View, Text, Pressable, Share } from "react-native";
 import { memo, useEffect, useState } from "react";
 import { SimulacaoSalva } from "@/database/simulacoesQueries";
 import { ModalCentralizado } from "@/components/common/ModalCentralizado";
 import { TIPOS_SIMULACAO } from "@/components/SimulacoesComp/SeletorTipoSimulacao";
 import { compartilharSimulacaoPdf } from "@/utils/exportarSimulacaoPdf";
+import { useDialogo } from "@/context/DialogoContext";
 
 type Props = {
   // Quando não-null, o menu está aberto para essa simulação.
@@ -54,6 +55,7 @@ function LinhaAcao({
 }
 
 function MenuAcoesSimulacaoBase({ simulacao, onFechar, onRestaurar, onExcluir, textoCompartilhar }: Props) {
+  const { avisar } = useDialogo();
   const tituloSize = moderateScale(15);
   const subSize = moderateScale(11);
 
@@ -76,11 +78,14 @@ function MenuAcoesSimulacaoBase({ simulacao, onFechar, onRestaurar, onExcluir, t
     try {
       const ok = await compartilharSimulacaoPdf(simulacao);
       if (!ok) {
-        Alert.alert("Indisponível", "O compartilhamento de arquivos não está disponível neste dispositivo.");
+        await avisar({
+          titulo: "Indisponível",
+          mensagem: "O compartilhamento de arquivos não está disponível neste dispositivo.",
+        });
       }
       onFechar();
     } catch {
-      Alert.alert("Não foi possível gerar o PDF", "Tente novamente em instantes.");
+      await avisar({ titulo: "Não foi possível gerar o PDF", mensagem: "Tente novamente em instantes." });
     } finally {
       setGerandoPdf(false);
     }

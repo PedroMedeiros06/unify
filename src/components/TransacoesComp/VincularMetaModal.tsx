@@ -2,13 +2,14 @@ import { colors } from "@/theme/colors";
 import { moderateScale } from "@/utils/scale";
 import { FormatToCurrency } from "@/utils/formatNumber";
 import { Ionicons } from "@expo/vector-icons";
-import { View, Text, Pressable, TextInput, Alert, ScrollView } from "react-native";
+import { View, Text, Pressable, TextInput, ScrollView } from "react-native";
 import { memo, useCallback, useEffect, useState } from "react";
 import { useMetas } from "@/context/MetasContext";
 import { calcularPercentualMeta, metaEstaConcluida, Meta } from "@/database/metasQueries";
 import { vincularTransacaoAMeta, desvincularTransacao } from "@/database/metaTransacoesQueries";
 import { ModalCentralizado } from "@/components/common/ModalCentralizado";
 import { obterIconeMeta } from "@/database/iconesMeta";
+import { useDialogo } from "@/context/DialogoContext";
 
 type Props = {
   visivel: boolean;
@@ -40,6 +41,7 @@ function VincularMetaModalBase({
   onFechar,
   onVinculado,
 }: Props) {
+  const { avisar } = useDialogo();
   const titleSize = moderateScale(17);
   const labelSize = moderateScale(11);
   const inputTextSize = moderateScale(14);
@@ -110,11 +112,11 @@ function VincularMetaModalBase({
       onVinculado();
       onFechar();
     } catch {
-      Alert.alert("Não foi possível vincular", "Ocorreu um erro ao vincular a transação à meta. Tente novamente.");
+      await avisar({ titulo: "Não foi possível vincular", mensagem: "Ocorreu um erro ao vincular a transação à meta. Tente novamente." });
     } finally {
       setSalvando(false);
     }
-  }, [metaSelecionada, valorValido, salvando, metaIdAtual, transacaoTipo, transacaoId, valorNumerico, onVinculado, onFechar]);
+  }, [metaSelecionada, valorValido, salvando, metaIdAtual, transacaoTipo, transacaoId, valorNumerico, onVinculado, onFechar, avisar]);
 
   return (
     <ModalCentralizado visivel={visivel} onFechar={onFechar} bloquearFechamentoExterno={salvando}>

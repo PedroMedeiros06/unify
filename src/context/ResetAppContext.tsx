@@ -1,5 +1,17 @@
 import { createContext, Fragment, useCallback, useContext, useMemo, useState, ReactNode } from "react";
+import { Directory, Paths } from "expo-file-system";
 import { apagarTodosOsDados } from "@/database/database";
+
+// Remove arquivos que o app guarda FORA do SQLite e que "apagar dados"
+// também deve zerar. Por enquanto: a pasta de fotos de perfil.
+function limparArquivosDoUsuario() {
+  try {
+    const dir = new Directory(Paths.document, "perfil");
+    if (dir.exists) dir.delete();
+  } catch (e) {
+    console.warn("[ResetApp] não foi possível apagar arquivos do usuário (ignorado):", e);
+  }
+}
 
 type ResetAppContextValue = {
   // true enquanto o banco está sendo apagado / recriado.
@@ -36,6 +48,7 @@ export function ResetAppProvider({ children }: { children: ReactNode }) {
     setApagando(true);
     try {
       await apagarTodosOsDados();
+      limparArquivosDoUsuario();
       // Só remonta depois que o banco vazio já foi recriado, senão os
       // contextos remontam e consultam um banco ainda em transição.
       setChaveRemontagem((chave) => chave + 1);

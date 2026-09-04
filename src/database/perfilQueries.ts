@@ -3,6 +3,9 @@ import { getDatabase, executarNaFila } from "./database";
 export type PerfilUsuario = {
   nome: string;
   email: string | null;
+  // Caminho local (file://...) da foto de perfil, já copiada para o
+  // diretório de documentos do app. `null` = usa o avatar padrão (ícone).
+  avatarUri: string | null;
 };
 
 /**
@@ -14,10 +17,16 @@ export type PerfilUsuario = {
 export async function obterPerfil(): Promise<PerfilUsuario> {
   return executarNaFila(async () => {
     const db = await getDatabase();
-    const linha = await db.getFirstAsync<{ nome: string; email: string | null }>(
-      `SELECT nome, email FROM perfil_usuario WHERE id = 1;`
-    );
-    return { nome: linha?.nome ?? "", email: linha?.email ?? null };
+    const linha = await db.getFirstAsync<{
+      nome: string;
+      email: string | null;
+      avatar_uri: string | null;
+    }>(`SELECT nome, email, avatar_uri FROM perfil_usuario WHERE id = 1;`);
+    return {
+      nome: linha?.nome ?? "",
+      email: linha?.email ?? null,
+      avatarUri: linha?.avatar_uri ?? null,
+    };
   });
 }
 
@@ -30,13 +39,14 @@ export async function salvarPerfil(perfil: PerfilUsuario): Promise<void> {
   return executarNaFila(async () => {
     const db = await getDatabase();
     await db.runAsync(
-      `INSERT INTO perfil_usuario (id, nome, email)
-       VALUES (1, ?, ?)
+      `INSERT INTO perfil_usuario (id, nome, email, avatar_uri)
+       VALUES (1, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          nome = excluded.nome,
          email = excluded.email,
+         avatar_uri = excluded.avatar_uri,
          atualizado_em = datetime('now');`,
-      [perfil.nome, perfil.email]
+      [perfil.nome, perfil.email, perfil.avatarUri]
     );
   });
 }

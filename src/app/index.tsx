@@ -1,8 +1,10 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { View } from "react-native";
 
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Footer } from "../components/Footer";
+import { OnboardingFluxo } from "../components/Onboarding/OnboardingFluxo";
+import { onboardingConcluido, marcarOnboardingConcluido } from "@/utils/onboardingFlag";
 
 import { Home } from "../pages/home";
 import { Transferencias } from "../pages/Transferencias";
@@ -33,6 +35,26 @@ export default function AppIndex() {
 
   const [menuAcaoAberto, setMenuAcaoAberto] = useState(false);
   const { abrir: abrirNovaTransacao } = useNovaTransacao();
+
+  // Gate de primeira abertura: enquanto `null`, ainda estamos checando a
+  // flag (não renderiza nada); `true` mostra o onboarding; `false` segue
+  // para o app normal.
+  const [precisaOnboarding, setPrecisaOnboarding] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let ativo = true;
+    onboardingConcluido().then((concluido) => {
+      if (ativo) setPrecisaOnboarding(!concluido);
+    });
+    return () => {
+      ativo = false;
+    };
+  }, []);
+
+  const handleConcluirOnboarding = useCallback(() => {
+    void marcarOnboardingConcluido();
+    setPrecisaOnboarding(false);
+  }, []);
 
   const ActiveScreen = Screens[activeScreen];
 
@@ -76,6 +98,15 @@ export default function AppIndex() {
     },
     [navigate, abrirNovaTransacao]
   );
+
+  // Ainda checando a flag: tela vazia com o fundo do app (evita flash).
+  if (precisaOnboarding === null) {
+    return <View style={{ flex: 1 }} className="bg-main-background" />;
+  }
+
+  if (precisaOnboarding) {
+    return <OnboardingFluxo onConcluir={handleConcluirOnboarding} />;
+  }
 
   return (
     <View

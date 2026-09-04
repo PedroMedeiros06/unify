@@ -1,12 +1,13 @@
 import { colors } from "@/theme/colors";
 import { moderateScale } from "@/utils/scale";
 import { Ionicons } from "@expo/vector-icons";
-import { View, Text, Pressable, TextInput, Alert } from "react-native";
+import { View, Text, Pressable, TextInput } from "react-native";
 import { memo, useCallback, useEffect, useState } from "react";
 import { Compromisso, CamposCompromisso } from "@/database/compromissosQueries";
 import { dataIsoParaBR } from "@/utils/dateUtils";
 import { SeletorData } from "@/components/common/SeletorData";
 import { ModalCentralizado } from "@/components/common/ModalCentralizado";
+import { useDialogo } from "@/context/DialogoContext";
 
 const ICONES_DISPONIVEIS: { nome: keyof typeof Ionicons.glyphMap; cor: string }[] = [
   { nome: "home-outline", cor: colors["active-icon"] },
@@ -26,6 +27,7 @@ type Props = {
 };
 
 function EditarCompromissoModalBase({ visivel, compromissoEditando, onFechar, onSalvar, onExcluir }: Props) {
+  const { confirmar, avisar } = useDialogo();
   const titleSize = moderateScale(17);
   const labelSize = moderateScale(11);
   const inputTextSize = moderateScale(14);
@@ -81,34 +83,33 @@ function EditarCompromissoModalBase({ visivel, compromissoEditando, onFechar, on
       });
       onFechar();
     } catch {
-      Alert.alert("Não foi possível salvar", "Ocorreu um erro ao salvar o compromisso. Tente novamente.");
+      await avisar({ titulo: "Não foi possível salvar", mensagem: "Ocorreu um erro ao salvar o compromisso. Tente novamente." });
     } finally {
       setSalvando(false);
     }
-  }, [formularioValido, dataVencimentoIso, salvando, nome, valorNumerico, iconeSelecionado, compromissoEditando, onSalvar, onFechar]);
+  }, [formularioValido, dataVencimentoIso, salvando, nome, valorNumerico, iconeSelecionado, compromissoEditando, onSalvar, onFechar, avisar]);
 
-  const handleExcluir = useCallback(() => {
+  const handleExcluir = useCallback(async () => {
     if (!compromissoEditando || !onExcluir) return;
 
-    Alert.alert("Excluir compromisso", `Tem certeza que deseja excluir "${compromissoEditando.nome}"?`, [
-      { text: "Cancelar", style: "cancel" },
-      {
-        text: "Excluir",
-        style: "destructive",
-        onPress: async () => {
-          setExcluindo(true);
-          try {
-            await onExcluir(compromissoEditando.id);
-            onFechar();
-          } catch {
-            Alert.alert("Não foi possível excluir", "Ocorreu um erro ao excluir o compromisso. Tente novamente.");
-          } finally {
-            setExcluindo(false);
-          }
-        },
-      },
-    ]);
-  }, [compromissoEditando, onExcluir, onFechar]);
+    const ok = await confirmar({
+      titulo: "Excluir compromisso",
+      mensagem: `Tem certeza que deseja excluir "${compromissoEditando.nome}"?`,
+      textoConfirmar: "Excluir",
+      destrutivo: true,
+    });
+    if (!ok) return;
+
+    setExcluindo(true);
+    try {
+      await onExcluir(compromissoEditando.id);
+      onFechar();
+    } catch {
+      await avisar({ titulo: "Não foi possível excluir", mensagem: "Ocorreu um erro ao excluir o compromisso. Tente novamente." });
+    } finally {
+      setExcluindo(false);
+    }
+  }, [compromissoEditando, onExcluir, onFechar, confirmar, avisar]);
 
   return (
     <ModalCentralizado visivel={visivel} onFechar={onFechar} bloquearFechamentoExterno={ocupado}>

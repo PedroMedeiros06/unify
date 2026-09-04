@@ -1,7 +1,7 @@
 import { colors } from "@/theme/colors";
 import { moderateScale } from "@/utils/scale";
 import { Ionicons } from "@expo/vector-icons";
-import { View, Text, Pressable, TextInput, Alert } from "react-native";
+import { View, Text, Pressable, TextInput } from "react-native";
 import { memo, useCallback, useEffect, useState } from "react";
 import { useTransacoes } from "@/context/TransacoesContext";
 import { SeletorData } from "@/components/common/SeletorData";
@@ -11,6 +11,7 @@ import { CategoriaId, obterCategoriaPorId } from "@/database/categorias";
 import { BANCOS_SUPORTADOS, BancoSuportado } from "@/database/parsers/bancosSuportados";
 import { dataHojeIso } from "@/utils/dateUtils";
 import { ModalCentralizado } from "@/components/common/ModalCentralizado";
+import { useDialogo } from "@/context/DialogoContext";
 
 type Props = {
   visivel: boolean;
@@ -28,6 +29,7 @@ type Props = {
  * fluxo de importar extrato.
  */
 function NovaTransacaoModalBase({ visivel, onFechar }: Props) {
+  const { avisar } = useDialogo();
   const titleSize = moderateScale(17);
   const labelSize = moderateScale(11);
   const inputTextSize = moderateScale(14);
@@ -85,11 +87,11 @@ function NovaTransacaoModalBase({ visivel, onFechar }: Props) {
       });
       onFechar();
     } catch {
-      Alert.alert("Não foi possível salvar", "Ocorreu um erro ao criar a transação. Tente novamente.");
+      await avisar({ titulo: "Não foi possível salvar", mensagem: "Ocorreu um erro ao criar a transação. Tente novamente." });
     } finally {
       setSalvando(false);
     }
-  }, [formularioValido, banco, dataIso, salvando, nome, valorNumerico, tipo, categoriaId, adicionarTransacao, onFechar]);
+  }, [formularioValido, banco, dataIso, salvando, nome, valorNumerico, tipo, categoriaId, adicionarTransacao, onFechar, avisar]);
 
   return (
     <ModalCentralizado

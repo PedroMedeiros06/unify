@@ -2,7 +2,7 @@
   "expo": {
     "name": "Unify",
     "slug": "Unify",
-    "version": "0.5.0",
+    "version": "0.5.1",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "unify",
@@ -57,7 +57,13 @@
       ],
       "expo-sqlite",
       "@react-native-community/datetimepicker",
-      "expo-sharing"
+      "expo-sharing",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "O Unify usa suas fotos apenas para definir a imagem de perfil, que fica salva só neste aparelho."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

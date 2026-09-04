@@ -1,13 +1,14 @@
 import { colors } from "@/theme/colors";
 import { moderateScale } from "@/utils/scale";
 import { Ionicons } from "@expo/vector-icons";
-import { View, Text, Pressable, TextInput, Alert, Platform } from "react-native";
+import { View, Text, Pressable, TextInput, Platform } from "react-native";
 import { memo, useCallback, useEffect, useState } from "react";
 import DateTimePicker, { DateTimePickerEvent } from "@react-native-community/datetimepicker";
 import { Lembrete, CamposLembrete } from "@/database/lembretesQueries";
 import { dataIsoParaBR } from "@/utils/dateUtils";
 import { SeletorData } from "@/components/common/SeletorData";
 import { ModalCentralizado } from "@/components/common/ModalCentralizado";
+import { useDialogo } from "@/context/DialogoContext";
 
 /** "HH:MM" -> Date de hoje com essa hora (só para alimentar o picker). */
 function horaParaDate(horaHHMM: string | null): Date {
@@ -32,6 +33,7 @@ type Props = {
 };
 
 function EditarLembreteModalBase({ visivel, lembreteEditando, onFechar, onSalvar, onExcluir }: Props) {
+  const { confirmar, avisar } = useDialogo();
   const titleSize = moderateScale(17);
   const labelSize = moderateScale(11);
   const inputTextSize = moderateScale(14);
@@ -86,34 +88,33 @@ function EditarLembreteModalBase({ visivel, lembreteEditando, onFechar, onSalvar
       });
       onFechar();
     } catch {
-      Alert.alert("Não foi possível salvar", "Ocorreu um erro ao salvar o lembrete. Tente novamente.");
+      await avisar({ titulo: "Não foi possível salvar", mensagem: "Ocorreu um erro ao salvar o lembrete. Tente novamente." });
     } finally {
       setSalvando(false);
     }
-  }, [formularioValido, dataIso, hora, salvando, titulo, descricao, lembreteEditando, onSalvar, onFechar]);
+  }, [formularioValido, dataIso, hora, salvando, titulo, descricao, lembreteEditando, onSalvar, onFechar, avisar]);
 
-  const handleExcluir = useCallback(() => {
+  const handleExcluir = useCallback(async () => {
     if (!lembreteEditando || !onExcluir) return;
 
-    Alert.alert("Excluir lembrete", `Tem certeza que deseja excluir "${lembreteEditando.titulo}"?`, [
-      { text: "Cancelar", style: "cancel" },
-      {
-        text: "Excluir",
-        style: "destructive",
-        onPress: async () => {
-          setExcluindo(true);
-          try {
-            await onExcluir(lembreteEditando.id);
-            onFechar();
-          } catch {
-            Alert.alert("Não foi possível excluir", "Ocorreu um erro ao excluir o lembrete. Tente novamente.");
-          } finally {
-            setExcluindo(false);
-          }
-        },
-      },
-    ]);
-  }, [lembreteEditando, onExcluir, onFechar]);
+    const ok = await confirmar({
+      titulo: "Excluir lembrete",
+      mensagem: `Tem certeza que deseja excluir "${lembreteEditando.titulo}"?`,
+      textoConfirmar: "Excluir",
+      destrutivo: true,
+    });
+    if (!ok) return;
+
+    setExcluindo(true);
+    try {
+      await onExcluir(lembreteEditando.id);
+      onFechar();
+    } catch {
+      await avisar({ titulo: "Não foi possível excluir", mensagem: "Ocorreu um erro ao excluir o lembrete. Tente novamente." });
+    } finally {
+      setExcluindo(false);
+    }
+  }, [lembreteEditando, onExcluir, onFechar, confirmar, avisar]);
 
   return (
     <ModalCentralizado visivel={visivel} onFechar={onFechar} bloquearFechamentoExterno={ocupado}>

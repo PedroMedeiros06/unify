@@ -1,7 +1,7 @@
 import { colors } from "@/theme/colors";
 import { moderateScale } from "@/utils/scale";
 import { Ionicons } from "@expo/vector-icons";
-import { View, Text, Pressable, TextInput, Alert } from "react-native";
+import { View, Text, Pressable, TextInput } from "react-native";
 import { memo, useCallback, useEffect, useState } from "react";
 import { Transacao, CamposEditaveis, useTransacoes } from "@/context/TransacoesContext";
 import { useMetas } from "@/context/MetasContext";
@@ -19,6 +19,7 @@ import {
   VinculoDaTransacao,
 } from "@/database/metaTransacoesQueries";
 import { obterIconeMeta } from "@/database/iconesMeta";
+import { useDialogo } from "@/context/DialogoContext";
 
 type Props = {
   transacao: Transacao | null;
@@ -40,6 +41,7 @@ function EditarTransacaoModalBase({
 
   const { verificarImpactoNoVinculo } = useTransacoes();
   const { recarregar: recarregarMetas } = useMetas();
+  const { confirmar, avisar } = useDialogo();
 
   const [nome, setNome] = useState("");
   const [subtitulo, setSubtitulo] = useState("");
@@ -125,14 +127,14 @@ function EditarTransacaoModalBase({
       recarregarMetas();
       onFechar();
     } catch {
-      Alert.alert(
-        "Não foi possível salvar",
-        "Ocorreu um erro ao atualizar a transação. Tente novamente.",
-      );
+      await avisar({
+        titulo: "Não foi possível salvar",
+        mensagem: "Ocorreu um erro ao atualizar a transação. Tente novamente.",
+      });
     } finally {
       setSalvando(false);
     }
-  }, [transacao, dataIso, categoriaId, nome, subtitulo, valorNumerico, tipo, onSalvar, onFechar, recarregarMetas]);
+  }, [transacao, dataIso, categoriaId, nome, subtitulo, valorNumerico, tipo, onSalvar, onFechar, recarregarMetas, avisar]);
 
   const handleSalvar = useCallback(async () => {
     if (!transacao || !formularioValido || !dataIso || ocupado) return;
@@ -147,71 +149,62 @@ function EditarTransacaoModalBase({
     if (vinculo) {
       const impacto = await verificarImpactoNoVinculo(transacao.id, tipo);
       if (impacto.mudaSinal) {
-        Alert.alert(
-          "Isso afeta uma meta vinculada",
-          `Essa transação está vinculada à meta "${impacto.metaNome}". Mudar o tipo (entrada/saída) muda a natureza dessa movimentação para a meta — não é possível ajustar isso automaticamente.\n\nO que deseja fazer?`,
-          [
-            { text: "Cancelar edição", style: "cancel" },
-            {
-              text: "Remover vínculo e salvar",
-              style: "destructive",
-              onPress: async () => {
-                setProcessandoVinculo(true);
-                try {
-                  await desvincularTodosDaTransacao(transacao.id);
-                  setVinculo(null);
-                  recarregarMetas();
-                } finally {
-                  setProcessandoVinculo(false);
-                }
-                await salvarDeFato();
-              },
-            },
-          ],
-        );
+        const ok = await confirmar({
+          titulo: "Isso afeta uma meta vinculada",
+          mensagem: `Essa transação está vinculada à meta "${impacto.metaNome}". Mudar o tipo (entrada/saída) muda a natureza dessa movimentação para a meta — não é possível ajustar isso automaticamente.\n\nO que deseja fazer?`,
+          textoCancelar: "Cancelar edição",
+          textoConfirmar: "Remover vínculo e salvar",
+          destrutivo: true,
+        });
+        if (!ok) return;
+
+        setProcessandoVinculo(true);
+        try {
+          await desvincularTodosDaTransacao(transacao.id);
+          setVinculo(null);
+          recarregarMetas();
+        } finally {
+          setProcessandoVinculo(false);
+        }
+        await salvarDeFato();
         return;
       }
     }
 
     await salvarDeFato();
-  }, [transacao, formularioValido, dataIso, ocupado, vinculo, tipo, verificarImpactoNoVinculo, salvarDeFato, recarregarMetas]);
+  }, [transacao, formularioValido, dataIso, ocupado, vinculo, tipo, verificarImpactoNoVinculo, salvarDeFato, recarregarMetas, confirmar]);
 
-  const handleExcluir = useCallback(() => {
+  const handleExcluir = useCallback(async () => {
     if (!transacao) return;
 
-    Alert.alert(
-      "Excluir transação",
-      `Tem certeza que deseja excluir "${transacao.nome}"? Esta ação não pode ser desfeita.`,
-      [
-        { text: "Cancelar", style: "cancel" },
-        {
-          text: "Excluir",
-          style: "destructive",
-          onPress: async () => {
-            setExcluindo(true);
-            try {
-              // Não precisa desvincular explicitamente antes — ON
-              // DELETE CASCADE em meta_transacoes cuida disso quando a
-              // transação é removida (ver migrations.ts + database.ts).
-              await onExcluir(transacao.id);
-              // Se a transação excluída tinha vínculo, o progresso da
-              // meta muda — MetasContext precisa recarregar para
-              // refletir isso sem esperar reabrir o app.
-              recarregarMetas();
-              onFechar();
-            } catch {
-              Alert.alert(
-                "Não foi possível excluir",
-                "Ocorreu um erro ao excluir a transação. Tente novamente.",
-              );
-            } finally {
-              setExcluindo(false);
-            }
-          },
-        },
-      ],
-    );
-  }, [transacao, onExcluir, onFechar, recarregarMetas]);
+    const ok = await confirmar({
+      titulo: "Excluir transação",
+      mensagem: `Tem certeza que deseja excluir "${transacao.nome}"? Esta ação não pode ser desfeita.`,
+      textoConfirmar: "Excluir",
+      destrutivo: true,
+    });
+    if (!ok) return;
+
+    setExcluindo(true);
+    try {
+      // Não precisa desvincular explicitamente antes — ON DELETE CASCADE
+      // em meta_transacoes cuida disso quando a transação é removida
+      // (ver migrations.ts + database.ts).
+      await onExcluir(transacao.id);
+      // Se a transação excluída tinha vínculo, o progresso da meta muda —
+      // MetasContext precisa recarregar para refletir isso sem esperar
+      // reabrir o app.
+      recarregarMetas();
+      onFechar();
+    } catch {
+      await avisar({
+        titulo: "Não foi possível excluir",
+        mensagem: "Ocorreu um erro ao excluir a transação. Tente novamente.",
+      });
+    } finally {
+      setExcluindo(false);
+    }
+  }, [transacao, onExcluir, onFechar, recarregarMetas, confirmar, avisar]);
 
   const handleAbrirVincular = useCallback(() => {
     setModalVincularAberto(true);
@@ -229,33 +222,28 @@ function EditarTransacaoModalBase({
     recarregarMetas();
   }, [transacao, carregarVinculo, recarregarMetas]);
 
-  const handleDesvincular = useCallback(() => {
+  const handleDesvincular = useCallback(async () => {
     if (!transacao || !vinculo) return;
 
-    Alert.alert(
-      "Desvincular meta",
-      `Remover o vínculo desta transação com a meta "${vinculo.metaNome}"? O progresso da meta será recalculado.`,
-      [
-        { text: "Cancelar", style: "cancel" },
-        {
-          text: "Desvincular",
-          style: "destructive",
-          onPress: async () => {
-            setProcessandoVinculo(true);
-            try {
-              await desvincularTransacao(vinculo.metaId, transacao.id);
-              setVinculo(null);
-              recarregarMetas();
-            } catch {
-              Alert.alert("Não foi possível desvincular", "Ocorreu um erro. Tente novamente.");
-            } finally {
-              setProcessandoVinculo(false);
-            }
-          },
-        },
-      ],
-    );
-  }, [transacao, vinculo, recarregarMetas]);
+    const ok = await confirmar({
+      titulo: "Desvincular meta",
+      mensagem: `Remover o vínculo desta transação com a meta "${vinculo.metaNome}"? O progresso da meta será recalculado.`,
+      textoConfirmar: "Desvincular",
+      destrutivo: true,
+    });
+    if (!ok) return;
+
+    setProcessandoVinculo(true);
+    try {
+      await desvincularTransacao(vinculo.metaId, transacao.id);
+      setVinculo(null);
+      recarregarMetas();
+    } catch {
+      await avisar({ titulo: "Não foi possível desvincular", mensagem: "Ocorreu um erro. Tente novamente." });
+    } finally {
+      setProcessandoVinculo(false);
+    }
+  }, [transacao, vinculo, recarregarMetas, confirmar, avisar]);
 
   return (
     <ModalCentralizado visivel={visivel} onFechar={onFechar} bloquearFechamentoExterno={ocupado}>

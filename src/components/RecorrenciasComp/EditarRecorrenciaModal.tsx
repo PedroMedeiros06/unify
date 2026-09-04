@@ -1,7 +1,7 @@
 import { colors } from "@/theme/colors";
 import { moderateScale } from "@/utils/scale";
 import { Ionicons } from "@expo/vector-icons";
-import { View, Text, Pressable, TextInput, Alert } from "react-native";
+import { View, Text, Pressable, TextInput } from "react-native";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { Recorrencia, CamposRecorrencia, TipoRecorrencia, TipoVencimento } from "@/database/recorrenciasQueries";
 import { CategoriaId, obterCategoriaPorId } from "@/database/categorias";
@@ -14,6 +14,7 @@ import { SeletorData } from "@/components/common/SeletorData";
 import { SeletorCategoria } from "@/components/common/SeletorCategoria";
 import { SeletorRegraVencimento } from "@/components/RecorrenciasComp/SeletorRegraVencimento";
 import { ModalCentralizado } from "@/components/common/ModalCentralizado";
+import { useDialogo } from "@/context/DialogoContext";
 
 type Props = {
   visivel: boolean;
@@ -29,6 +30,7 @@ const TIPOS: { valor: TipoRecorrencia; label: string; icone: keyof typeof Ionico
 ];
 
 function EditarRecorrenciaModalBase({ visivel, recorrenciaEditando, onFechar, onSalvar, onExcluir }: Props) {
+  const { confirmar, avisar } = useDialogo();
   const titleSize = moderateScale(17);
   const labelSize = moderateScale(11);
   const inputTextSize = moderateScale(14);
@@ -144,7 +146,7 @@ function EditarRecorrenciaModalBase({ visivel, recorrenciaEditando, onFechar, on
       });
       onFechar();
     } catch {
-      Alert.alert("Não foi possível salvar", "Ocorreu um erro ao salvar a recorrência. Tente novamente.");
+      await avisar({ titulo: "Não foi possível salvar", mensagem: "Ocorreu um erro ao salvar a recorrência. Tente novamente." });
     } finally {
       setSalvando(false);
     }
@@ -163,34 +165,30 @@ function EditarRecorrenciaModalBase({ visivel, recorrenciaEditando, onFechar, on
     recorrenciaEditando,
     onSalvar,
     onFechar,
+    avisar,
   ]);
 
-  const handleExcluir = useCallback(() => {
+  const handleExcluir = useCallback(async () => {
     if (!recorrenciaEditando || !onExcluir) return;
 
-    Alert.alert(
-      "Excluir recorrência",
-      `Tem certeza que deseja excluir "${recorrenciaEditando.nome}"? Meses já encerrados não são afetados.`,
-      [
-        { text: "Cancelar", style: "cancel" },
-        {
-          text: "Excluir",
-          style: "destructive",
-          onPress: async () => {
-            setExcluindo(true);
-            try {
-              await onExcluir(recorrenciaEditando.id);
-              onFechar();
-            } catch {
-              Alert.alert("Não foi possível excluir", "Ocorreu um erro ao excluir a recorrência. Tente novamente.");
-            } finally {
-              setExcluindo(false);
-            }
-          },
-        },
-      ]
-    );
-  }, [recorrenciaEditando, onExcluir, onFechar]);
+    const ok = await confirmar({
+      titulo: "Excluir recorrência",
+      mensagem: `Tem certeza que deseja excluir "${recorrenciaEditando.nome}"? Meses já encerrados não são afetados.`,
+      textoConfirmar: "Excluir",
+      destrutivo: true,
+    });
+    if (!ok) return;
+
+    setExcluindo(true);
+    try {
+      await onExcluir(recorrenciaEditando.id);
+      onFechar();
+    } catch {
+      await avisar({ titulo: "Não foi possível excluir", mensagem: "Ocorreu um erro ao excluir a recorrência. Tente novamente." });
+    } finally {
+      setExcluindo(false);
+    }
+  }, [recorrenciaEditando, onExcluir, onFechar, confirmar, avisar]);
 
   const categoria = obterCategoriaPorId(categoriaId);
   const corPreview = categoria?.cor ?? colors["desactived-text"];

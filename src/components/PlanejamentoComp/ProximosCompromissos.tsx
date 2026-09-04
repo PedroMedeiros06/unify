@@ -2,7 +2,7 @@ import { moderateScale } from "@/utils/scale";
 import { FormatToCurrency } from "@/utils/formatNumber";
 import { Ionicons } from "@expo/vector-icons";
 import { colors } from "@/theme/colors";
-import { View, Text, Pressable, Alert } from "react-native";
+import { View, Text, Pressable } from "react-native";
 import { memo, useCallback, useRef, useState } from "react";
 import { useCompromissos } from "@/context/CompromissosContext";
 import { Compromisso, CamposCompromisso } from "@/database/compromissosQueries";
@@ -10,6 +10,7 @@ import { EditarCompromissoModal } from "@/components/PlanejamentoComp/EditarComp
 import { VincularTransacaoCompromissoModal } from "@/components/PlanejamentoComp/VincularTransacaoCompromissoModal";
 import { dataIsoParaBR } from "@/utils/dateUtils";
 import { CompromissosSkeleton } from "@/components/common/CompromissosSkeleton";
+import { useDialogo } from "@/context/DialogoContext";
 
 function calcularDiasRestantes(dataVencimentoIso: string): number {
   const hoje = new Date();
@@ -132,6 +133,7 @@ function ProximosCompromissosBase() {
     desmarcarPagoCompromisso,
     removerCompromisso,
   } = useCompromissos();
+  const { confirmar } = useDialogo();
 
   const [modalVisivel, setModalVisivel] = useState(false);
   const [compromissoEditando, setCompromissoEditando] = useState<Compromisso | null>(null);
@@ -141,21 +143,21 @@ function ProximosCompromissosBase() {
   const [compromissoVinculando, setCompromissoVinculando] = useState<Compromisso | null>(null);
 
   const handleToggle = useCallback(
-    (c: Compromisso) => {
+    async (c: Compromisso) => {
       if (c.pago) {
-        Alert.alert(
-          "Remover pagamento?",
-          "Isso remove apenas o vínculo com a transação e o compromisso volta a ficar pendente. A transação em si não é alterada nem excluída.",
-          [
-            { text: "Cancelar", style: "cancel" },
-            { text: "Remover", style: "destructive", onPress: () => void desmarcarPagoCompromisso(c.id) },
-          ]
-        );
+        const ok = await confirmar({
+          titulo: "Remover pagamento?",
+          mensagem:
+            "Isso remove apenas o vínculo com a transação e o compromisso volta a ficar pendente. A transação em si não é alterada nem excluída.",
+          textoConfirmar: "Remover",
+          destrutivo: true,
+        });
+        if (ok) void desmarcarPagoCompromisso(c.id);
         return;
       }
       setCompromissoVinculando(c);
     },
-    [desmarcarPagoCompromisso]
+    [desmarcarPagoCompromisso, confirmar]
   );
 
   const handleVincularTransacao = useCallback(

@@ -1,8 +1,9 @@
 import { moderateScale } from "@/utils/scale";
-import { View, Text, Alert } from "react-native";
+import { View, Text } from "react-native";
 import { memo, useCallback, useState } from "react";
 import { MenuItem } from "./MenuItem";
 import { useResetApp } from "@/context/ResetAppContext";
+import { useDialogo } from "@/context/DialogoContext";
 import {
   exportarBackupParaArquivo,
   escolherEValidarBackup,
@@ -20,6 +21,7 @@ function BackupDadosBase() {
   const legendaSize = moderateScale(11);
 
   const { remontarDados } = useResetApp();
+  const { confirmar, avisar } = useDialogo();
 
   const [exportando, setExportando] = useState(false);
   const [importando, setImportando] = useState(false);
@@ -31,16 +33,19 @@ function BackupDadosBase() {
     try {
       const r = await exportarBackupParaArquivo();
       if (r.status === "indisponivel") {
-        Alert.alert("Indisponível", "O compartilhamento de arquivos não está disponível neste aparelho.");
+        await avisar({
+          titulo: "Indisponível",
+          mensagem: "O compartilhamento de arquivos não está disponível neste aparelho.",
+        });
       } else if (r.status === "erro") {
-        Alert.alert("Não foi possível exportar", r.mensagem);
+        await avisar({ titulo: "Não foi possível exportar", mensagem: r.mensagem });
       }
       // "ok" e "cancelado" não precisam de aviso — a própria folha de
       // compartilhamento já deu o retorno visual.
     } finally {
       setExportando(false);
     }
-  }, [ocupado]);
+  }, [ocupado, avisar]);
 
   const handleImportar = useCallback(async () => {
     if (ocupado) return;
@@ -50,47 +55,37 @@ function BackupDadosBase() {
 
       if (escolha.status === "cancelado") return;
       if (escolha.status === "arquivo_invalido") {
-        Alert.alert("Arquivo inválido", escolha.mensagem);
+        await avisar({ titulo: "Arquivo inválido", mensagem: escolha.mensagem });
         return;
       }
       if (escolha.status === "erro") {
-        Alert.alert("Não foi possível ler o arquivo", escolha.mensagem);
+        await avisar({ titulo: "Não foi possível ler o arquivo", mensagem: escolha.mensagem });
         return;
       }
 
       const { arquivo, totalLinhas } = escolha;
 
-      Alert.alert(
-        "Restaurar backup",
-        `Este backup foi gerado em ${formatarDataArquivo(arquivo.geradoEm)} e contém ${totalLinhas} registro(s).\n\n` +
+      const ok = await confirmar({
+        titulo: "Restaurar backup",
+        mensagem:
+          `Este backup foi gerado em ${formatarDataArquivo(arquivo.geradoEm)} e contém ${totalLinhas} registro(s).\n\n` +
           "Restaurar vai APAGAR todos os dados atuais deste aparelho e substituí-los pelos do backup. Não é possível desfazer.",
-        [
-          { text: "Cancelar", style: "cancel" },
-          {
-            text: "Restaurar",
-            style: "destructive",
-            onPress: () => {
-              // A UI já saiu do Alert; recoloca o estado "importando"
-              // para o item mostrar "Restaurando...".
-              setImportando(true);
-              aplicarBackup(arquivo)
-                .then((r) => {
-                  if (r.status === "ok") {
-                    remontarDados();
-                    Alert.alert("Backup restaurado", `${r.totalLinhas} registro(s) restaurados.`);
-                  } else {
-                    Alert.alert("Não foi possível restaurar", r.mensagem);
-                  }
-                })
-                .finally(() => setImportando(false));
-            },
-          },
-        ]
-      );
+        textoConfirmar: "Restaurar",
+        destrutivo: true,
+      });
+      if (!ok) return;
+
+      const r = await aplicarBackup(arquivo);
+      if (r.status === "ok") {
+        remontarDados();
+        await avisar({ titulo: "Backup restaurado", mensagem: `${r.totalLinhas} registro(s) restaurados.` });
+      } else {
+        await avisar({ titulo: "Não foi possível restaurar", mensagem: r.mensagem });
+      }
     } finally {
       setImportando(false);
     }
-  }, [ocupado, remontarDados]);
+  }, [ocupado, remontarDados, confirmar, avisar]);
 
   return (
     <View className="bg-card-background border border-lines-divisions rounded-xl p-4">

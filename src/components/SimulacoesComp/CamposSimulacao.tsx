@@ -1,7 +1,7 @@
 import { colors } from "@/theme/colors";
 import { moderateScale } from "@/utils/scale";
 import { Ionicons } from "@expo/vector-icons";
-import { View, Text, TextInput, Pressable } from "react-native";
+import { View, Text, TextInput, Pressable, ScrollView } from "react-native";
 import { memo, useCallback, useState } from "react";
 import { DropdownMenu } from "@/components/common/DropdownMenu";
 
@@ -195,60 +195,24 @@ export const CampoEntradaFinanciamento = memo(function CampoEntradaFinanciamento
 
   return (
     <View className="flex-1">
-      {/* A linha do label tem altura FIXA igual à do texto puro do label
-          usado pelos outros campos (labelSize * 1.4 ≈ lineHeight). O
-          toggle R$/% é mais alto que o texto; ele fica num overlay
-          absoluto (top/bottom: 0 + center) pra ficar centralizado nessa
-          linha sem aumentar a altura dela — senão o input abaixo descia
-          e desalinhava do campo vizinho. */}
-      <View className="justify-center mb-1.5" style={{ height: labelSize * 1.4 }}>
-        <Text style={{ fontSize: labelSize }} className="text-second-text">
-          {label}
-        </Text>
-        <View
-          className="absolute right-0 top-0 bottom-0 justify-center"
-          pointerEvents="box-none"
-        >
-          {/* Toggle R$ / % */}
-          <View className="flex-row bg-input-background border border-input-border rounded-lg overflow-hidden">
-            {(["valor", "percentual"] as ModoEntrada[]).map((m) => {
-              const ativo = modo === m;
-              return (
-                <Pressable
-                  key={m}
-                  onPress={() => {
-                    setRascunhoPct(null);
-                    setModo(m);
-                  }}
-                  className={`px-2 py-0.5 ${ativo ? "bg-active-icon" : ""}`}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: ativo }}
-                  accessibilityLabel={m === "valor" ? "Entrada em reais" : "Entrada em porcentagem"}
-                >
-                  <Text
-                    style={{ fontSize: labelSize }}
-                    className={ativo ? "text-white font-Inter-Medium" : "text-second-text"}
-                  >
-                    {m === "valor" ? "R$" : "%"}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        </View>
-      </View>
+      {/* Label simples, igual aos outros campos — o alternador R$/% mora
+          DENTRO do input, à direita (como o sufixo "meses" do
+          CampoNumero), então a linha do label não muda de altura e o
+          input alinha com o campo vizinho. */}
+      <Text style={{ fontSize: labelSize }} className="text-second-text mb-1.5">
+        {label}
+      </Text>
 
-      {modo === "valor" ? (
-        <TextInput
-          value={exibicaoValor}
-          onChangeText={handleValorChange}
-          keyboardType="numeric"
-          style={{ fontSize: inputTextSize, color: colors["main-text"] }}
-          className="bg-input-background border border-input-border rounded-xl px-3 py-3"
-          accessibilityLabel={`${label} em reais`}
-        />
-      ) : (
-        <View className="bg-input-background border border-input-border rounded-xl px-3 py-3 flex-row items-center justify-between">
+      <View className="bg-input-background border border-input-border rounded-xl pl-3 pr-1.5 py-1.5 flex-row items-center">
+        {modo === "valor" ? (
+          <TextInput
+            value={exibicaoValor}
+            onChangeText={handleValorChange}
+            keyboardType="numeric"
+            style={{ fontSize: inputTextSize, color: colors["main-text"], flex: 1, padding: 0, paddingVertical: 6 }}
+            accessibilityLabel={`${label} em reais`}
+          />
+        ) : (
           <TextInput
             value={exibicaoPct}
             onChangeText={handlePctChange}
@@ -256,21 +220,45 @@ export const CampoEntradaFinanciamento = memo(function CampoEntradaFinanciamento
             onBlur={consolidarPct}
             onSubmitEditing={consolidarPct}
             keyboardType="numeric"
-            style={{ fontSize: inputTextSize, color: colors["main-text"], flex: 1, padding: 0 }}
+            style={{ fontSize: inputTextSize, color: colors["main-text"], flex: 1, padding: 0, paddingVertical: 6 }}
             accessibilityLabel={`${label} em porcentagem`}
           />
-          <Text style={{ fontSize: labelSize }} className="text-desactived-text ml-2">
-            % do bem
-          </Text>
+        )}
+
+        {/* Alternador R$ / % — segmentado, dentro do campo */}
+        <View className="flex-row bg-main-background rounded-lg overflow-hidden ml-2">
+          {(["valor", "percentual"] as ModoEntrada[]).map((m) => {
+            const ativo = modo === m;
+            return (
+              <Pressable
+                key={m}
+                onPress={() => {
+                  setRascunhoPct(null);
+                  setModo(m);
+                }}
+                className={`px-2.5 py-1 ${ativo ? "bg-active-icon" : ""}`}
+                accessibilityRole="button"
+                accessibilityState={{ selected: ativo }}
+                accessibilityLabel={m === "valor" ? "Entrada em reais" : "Entrada em porcentagem do valor do bem"}
+              >
+                <Text
+                  style={{ fontSize: labelSize }}
+                  className={ativo ? "text-white font-Inter-SemiBold" : "text-second-text font-Inter-Medium"}
+                >
+                  {m === "valor" ? "R$" : "%"}
+                </Text>
+              </Pressable>
+            );
+          })}
         </View>
-      )}
+      </View>
 
       {/* Linha auxiliar: mostra o "outro" formato, para o usuário ver a
           equivalência sem trocar o modo. */}
       <Text style={{ fontSize: labelSize }} className="text-active-icon mt-1">
         {modo === "valor"
-          ? `${pctAtual.toFixed(0)}% do valor`
-          : `${entrada.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}`}
+          ? `equivale a ${pctAtual.toFixed(0)}% do bem`
+          : `equivale a ${entrada.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}`}
       </Text>
     </View>
   );
@@ -356,11 +344,16 @@ function CampoDropdownInner<T extends string | number>({
   valor,
   opcoes,
   onChange,
+  // Acima de ~6 itens a lista fica alta demais; passe uma altura máxima
+  // (px) e o conteúdo do dropdown vira rolável. Sem isto, renderiza a
+  // lista inteira.
+  alturaMaxima,
 }: {
   label: string;
   valor: T;
   opcoes: OpcaoDropdown<T>[];
   onChange: (valor: T) => void;
+  alturaMaxima?: number;
 }) {
   const selecionada = opcoes.find((o) => o.valor === valor);
 
@@ -390,32 +383,44 @@ function CampoDropdownInner<T extends string | number>({
           </Pressable>
         )}
       >
-        {({ fechar }) => (
-          <View className="py-1">
-            {opcoes.map((opcao) => {
-              const ativa = opcao.valor === valor;
-              return (
-                <Pressable
-                  key={String(opcao.valor)}
-                  onPress={() => {
-                    onChange(opcao.valor);
-                    fechar();
-                  }}
-                  className="px-3 py-2.5 flex-row items-center justify-between active:bg-input-background"
-                  accessibilityRole="button"
+        {({ fechar }) => {
+          const itens = opcoes.map((opcao) => {
+            const ativa = opcao.valor === valor;
+            return (
+              <Pressable
+                key={String(opcao.valor)}
+                onPress={() => {
+                  onChange(opcao.valor);
+                  fechar();
+                }}
+                className="px-3 py-2.5 flex-row items-center justify-between active:bg-input-background"
+                accessibilityRole="button"
+              >
+                <Text
+                  style={{ fontSize: inputTextSize }}
+                  className={ativa ? "text-active-icon font-Inter-Medium" : "text-main-text"}
                 >
-                  <Text
-                    style={{ fontSize: inputTextSize }}
-                    className={ativa ? "text-active-icon font-Inter-Medium" : "text-main-text"}
-                  >
-                    {opcao.rotulo}
-                  </Text>
-                  {ativa && <Ionicons name="checkmark" color={colors["active-icon"]} size={16} />}
-                </Pressable>
-              );
-            })}
-          </View>
-        )}
+                  {opcao.rotulo}
+                </Text>
+                {ativa && <Ionicons name="checkmark" color={colors["active-icon"]} size={16} />}
+              </Pressable>
+            );
+          });
+
+          return alturaMaxima ? (
+            <ScrollView
+              style={{ maxHeight: alturaMaxima }}
+              className="py-1"
+              nestedScrollEnabled
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator
+            >
+              {itens}
+            </ScrollView>
+          ) : (
+            <View className="py-1">{itens}</View>
+          );
+        }}
       </DropdownMenu>
     </View>
   );
