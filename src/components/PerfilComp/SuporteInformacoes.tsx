@@ -1,5 +1,5 @@
 import { moderateScale } from "@/utils/scale";
-import { View, Text, Alert } from "react-native";
+import { View, Text } from "react-native";
 import { memo, useCallback, useMemo, useState } from "react";
 import Constants from "expo-constants";
 import { MenuItem } from "./MenuItem";
@@ -7,6 +7,7 @@ import { SobreUnifyModal } from "./SobreUnifyModal";
 import { useResetApp } from "@/context/ResetAppContext";
 import { useCotacoes } from "@/context/CotacoesContext";
 import { useTaxas } from "@/context/TaxasContext";
+import { useDialogo } from "@/context/DialogoContext";
 
 // Versão exibida no "Sobre o Unify" — vem do app.json (expo.version),
 // que é mantido igual ao package.json e às tags de commit (vX.Y.Z).
@@ -31,6 +32,7 @@ function tempoRelativo(iso: string | null): string {
 function SuporteInformacoesBase() {
   const sectionTitleSize = moderateScale(15);
   const { apagando, apagarDadosDoApp } = useResetApp();
+  const { confirmar, avisar } = useDialogo();
   const [sobreAberto, setSobreAberto] = useState(false);
 
   const {
@@ -65,27 +67,25 @@ function SuporteInformacoesBase() {
   // O Unify não tem login/conta — não existe "sair da conta". A ação
   // equivalente aqui é apagar tudo que está salvo localmente e voltar
   // o app ao estado de primeiro uso.
-  const handleApagarDados = useCallback(() => {
+  const handleApagarDados = useCallback(async () => {
     if (apagando) return;
 
-    Alert.alert(
-      "Apagar dados do app",
-      "Isso remove permanentemente todas as transações, metas, compromissos, recorrências, limites e o perfil deste dispositivo. Não é possível desfazer.",
-      [
-        { text: "Cancelar", style: "cancel" },
-        {
-          text: "Apagar tudo",
-          style: "destructive",
-          onPress: () => {
-            apagarDadosDoApp().catch((e) => {
-              console.error("[SuporteInformacoes] Falha ao apagar dados:", e);
-              Alert.alert("Erro", "Não foi possível apagar os dados. Tente novamente.");
-            });
-          },
-        },
-      ]
-    );
-  }, [apagando, apagarDadosDoApp]);
+    const ok = await confirmar({
+      titulo: "Apagar dados do app",
+      mensagem:
+        "Isso remove permanentemente todas as transações, metas, compromissos, recorrências, limites e o perfil deste dispositivo. Não é possível desfazer.",
+      textoConfirmar: "Apagar tudo",
+      destrutivo: true,
+    });
+    if (!ok) return;
+
+    try {
+      await apagarDadosDoApp();
+    } catch (e) {
+      console.error("[SuporteInformacoes] Falha ao apagar dados:", e);
+      await avisar({ titulo: "Erro", mensagem: "Não foi possível apagar os dados. Tente novamente." });
+    }
+  }, [apagando, apagarDadosDoApp, confirmar, avisar]);
 
   return (
     <View className="bg-card-background border border-lines-divisions rounded-xl p-4">

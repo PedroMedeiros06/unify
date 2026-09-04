@@ -475,6 +475,33 @@ const MIGRATIONS: Migration[] = [
       }
     },
   },
+  {
+    versao: 16,
+    descricao:
+      "Remove de cotacoes_moeda as moedas que a Frankfurter API não cobre (só ARS, semeada na migration 14). Elas nunca eram atualizadas online e ficavam presas na cotação de semente (data_referencia '2025-01-01'), poluindo o seletor e a lógica que lê a 'primeira' moeda por ordem alfabética.",
+    async executar(db) {
+      // Lista de moedas suportadas = as que buscarCotacoesFrankfurter
+      // realmente traz (ver NOMES_MOEDA em cotacoesApi.ts). Mantida aqui
+      // como literal para a migration não depender de import.
+      const suportadas = [
+        "USD", "EUR", "GBP", "JPY", "CHF", "CAD", "AUD", "CNY", "NZD",
+        "SEK", "NOK", "DKK", "ZAR", "MXN", "PLN", "HKD", "SGD", "TRY",
+      ];
+      const placeholders = suportadas.map(() => "?").join(", ");
+      await db.runAsync(
+        `DELETE FROM cotacoes_moeda WHERE codigo NOT IN (${placeholders});`,
+        suportadas
+      );
+    },
+  },
+  {
+    versao: 17,
+    descricao:
+      "Adiciona avatar_uri em perfil_usuario: caminho (file://) da foto de perfil escolhida da galeria e copiada para o diretório de documentos do app. Guarda só o caminho, não a imagem — a foto não entra no backup JSON.",
+    async executar(db) {
+      await db.execAsync(`ALTER TABLE perfil_usuario ADD COLUMN avatar_uri TEXT;`);
+    },
+  },
 ];
 
 export async function rodarMigrations(db: SQLiteDatabase): Promise<void> {

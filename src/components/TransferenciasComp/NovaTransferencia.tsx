@@ -2,9 +2,10 @@ import { colors } from "@/theme/colors";
 import { moderateScale } from "@/utils/scale";
 import { FormatToCurrency } from "@/utils/formatNumber";
 import { Ionicons } from "@expo/vector-icons";
-import { View, Text, Pressable, TextInput, Alert } from "react-native";
+import { View, Text, Pressable, TextInput } from "react-native";
 import { memo, useCallback, useState } from "react";
 import { useTransacoes } from "@/context/TransacoesContext";
+import { useDialogo } from "@/context/DialogoContext";
 
 // Conta de origem fixa por enquanto — no futuro viria de uma lista real de contas conectadas.
 // O `id` precisa bater com um registro já existente na tabela `bancos` (ver queries.ts / seed).
@@ -27,6 +28,7 @@ function NovaTransferenciaBase() {
   const placeholderSize = moderateScale(12);
 
   const { adicionarTransacao } = useTransacoes();
+  const { avisar } = useDialogo();
 
   const [destinatario, setDestinatario] = useState("");
   const [valorTexto, setValorTexto] = useState("");
@@ -71,14 +73,14 @@ function NovaTransferenciaBase() {
       setDescricao("");
     } catch {
       // Erro já foi logado dentro do Context — aqui só avisamos o usuário
-      Alert.alert(
-        "Não foi possível concluir",
-        "Ocorreu um erro ao salvar a transferência. Tente novamente."
-      );
+      await avisar({
+        titulo: "Não foi possível concluir",
+        mensagem: "Ocorreu um erro ao salvar a transferência. Tente novamente.",
+      });
     } finally {
       setEnviando(false);
     }
-  }, [formularioValido, enviando, destinatario, valorNumerico, adicionarTransacao]);
+  }, [formularioValido, enviando, destinatario, valorNumerico, adicionarTransacao, avisar]);
 
   return (
     <View className="bg-card-background border border-lines-divisions rounded-xl p-4">

@@ -1,13 +1,14 @@
 import { colors } from "@/theme/colors";
 import { moderateScale } from "@/utils/scale";
 import { Ionicons } from "@expo/vector-icons";
-import { View, Text, Pressable, TextInput, Alert } from "react-native";
+import { View, Text, Pressable, TextInput } from "react-native";
 import { memo, useCallback, useEffect, useState } from "react";
 import { CategoriaId, obterCategoriaPorId } from "@/database/categorias";
 import { LimiteCategoria } from "@/database/limitesCategoriaQueries";
 import { dataIsoParaBR } from "@/utils/dateUtils";
 import { SeletorCategoria } from "@/components/common/SeletorCategoria";
 import { ModalCentralizado } from "@/components/common/ModalCentralizado";
+import { useDialogo } from "@/context/DialogoContext";
 
 type Props = {
   visivel: boolean;
@@ -36,6 +37,7 @@ function DefinirLimiteCategoriaModalBase({
   onSalvar,
   onExcluir,
 }: Props) {
+  const { confirmar, avisar } = useDialogo();
   const titleSize = moderateScale(17);
   const labelSize = moderateScale(11);
   const inputTextSize = moderateScale(14);
@@ -80,35 +82,34 @@ function DefinirLimiteCategoriaModalBase({
       await onSalvar(categoriaId, valorNumerico);
       onFechar();
     } catch {
-      Alert.alert("Não foi possível salvar", "Ocorreu um erro ao salvar o limite. Tente novamente.");
+      await avisar({ titulo: "Não foi possível salvar", mensagem: "Ocorreu um erro ao salvar o limite. Tente novamente." });
     } finally {
       setSalvando(false);
     }
-  }, [formularioValido, categoriaId, salvando, valorNumerico, onSalvar, onFechar]);
+  }, [formularioValido, categoriaId, salvando, valorNumerico, onSalvar, onFechar, avisar]);
 
-  const handleExcluir = useCallback(() => {
+  const handleExcluir = useCallback(async () => {
     if (!limiteEditando) return;
     const nome = obterCategoriaPorId(limiteEditando.categoriaId)?.nome ?? "esta categoria";
 
-    Alert.alert("Excluir limite", `Remover o limite de "${nome}" em ${rotuloMes(mesAno)}? Outros meses não são afetados.`, [
-      { text: "Cancelar", style: "cancel" },
-      {
-        text: "Excluir",
-        style: "destructive",
-        onPress: async () => {
-          setExcluindo(true);
-          try {
-            await onExcluir(limiteEditando.categoriaId);
-            onFechar();
-          } catch {
-            Alert.alert("Não foi possível excluir", "Ocorreu um erro ao excluir o limite. Tente novamente.");
-          } finally {
-            setExcluindo(false);
-          }
-        },
-      },
-    ]);
-  }, [limiteEditando, mesAno, onExcluir, onFechar]);
+    const ok = await confirmar({
+      titulo: "Excluir limite",
+      mensagem: `Remover o limite de "${nome}" em ${rotuloMes(mesAno)}? Outros meses não são afetados.`,
+      textoConfirmar: "Excluir",
+      destrutivo: true,
+    });
+    if (!ok) return;
+
+    setExcluindo(true);
+    try {
+      await onExcluir(limiteEditando.categoriaId);
+      onFechar();
+    } catch {
+      await avisar({ titulo: "Não foi possível excluir", mensagem: "Ocorreu um erro ao excluir o limite. Tente novamente." });
+    } finally {
+      setExcluindo(false);
+    }
+  }, [limiteEditando, mesAno, onExcluir, onFechar, confirmar, avisar]);
 
   const categoriaFixa = editando ? obterCategoriaPorId(limiteEditando.categoriaId) : null;
 

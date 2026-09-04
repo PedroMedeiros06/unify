@@ -1,7 +1,7 @@
 import { colors } from "@/theme/colors";
 import { moderateScale } from "@/utils/scale";
 import { Ionicons } from "@expo/vector-icons";
-import { View, Text, Pressable, TextInput, Alert, ScrollView } from "react-native";
+import { View, Text, Pressable, TextInput, ScrollView } from "react-native";
 import { memo, useCallback, useEffect, useState } from "react";
 import { Meta, CamposMeta, calcularRitmoNecessario } from "@/database/metasQueries";
 import { IndicadorPassos } from "@/components/common/IndicadorPassos";
@@ -10,6 +10,7 @@ import { FormatToCurrency } from "@/utils/formatNumber";
 import { dataIsoParaBR } from "@/utils/dateUtils";
 import { ICONES_META_DISPONIVEIS, obterIconeMeta } from "@/database/iconesMeta";
 import { ModalCentralizado } from "@/components/common/ModalCentralizado";
+import { useDialogo } from "@/context/DialogoContext";
 
 type Props = {
   visivel: boolean;
@@ -22,6 +23,7 @@ type Props = {
 const TOTAL_PASSOS = 2;
 
 function EditarMetaModalBase({ visivel, metaEditando, onFechar, onSalvar, onExcluir }: Props) {
+  const { confirmar, avisar } = useDialogo();
   const titleSize = moderateScale(17);
   const labelSize = moderateScale(11);
   const inputTextSize = moderateScale(14);
@@ -106,34 +108,33 @@ function EditarMetaModalBase({ visivel, metaEditando, onFechar, onSalvar, onExcl
       });
       onFechar();
     } catch {
-      Alert.alert("Não foi possível salvar", "Ocorreu um erro ao salvar a meta. Tente novamente.");
+      await avisar({ titulo: "Não foi possível salvar", mensagem: "Ocorreu um erro ao salvar a meta. Tente novamente." });
     } finally {
       setSalvando(false);
     }
-  }, [passo1Valido, salvando, nome, valorNumerico, iconeSelecionado, dataAlvo, metaEditando, onSalvar, onFechar]);
+  }, [passo1Valido, salvando, nome, valorNumerico, iconeSelecionado, dataAlvo, metaEditando, onSalvar, onFechar, avisar]);
 
-  const handleExcluir = useCallback(() => {
+  const handleExcluir = useCallback(async () => {
     if (!metaEditando || !onExcluir) return;
 
-    Alert.alert("Excluir meta", `Tem certeza que deseja excluir "${metaEditando.nome}"?`, [
-      { text: "Cancelar", style: "cancel" },
-      {
-        text: "Excluir",
-        style: "destructive",
-        onPress: async () => {
-          setExcluindo(true);
-          try {
-            await onExcluir(metaEditando.id);
-            onFechar();
-          } catch {
-            Alert.alert("Não foi possível excluir", "Ocorreu um erro ao excluir a meta. Tente novamente.");
-          } finally {
-            setExcluindo(false);
-          }
-        },
-      },
-    ]);
-  }, [metaEditando, onExcluir, onFechar]);
+    const ok = await confirmar({
+      titulo: "Excluir meta",
+      mensagem: `Tem certeza que deseja excluir "${metaEditando.nome}"?`,
+      textoConfirmar: "Excluir",
+      destrutivo: true,
+    });
+    if (!ok) return;
+
+    setExcluindo(true);
+    try {
+      await onExcluir(metaEditando.id);
+      onFechar();
+    } catch {
+      await avisar({ titulo: "Não foi possível excluir", mensagem: "Ocorreu um erro ao excluir a meta. Tente novamente." });
+    } finally {
+      setExcluindo(false);
+    }
+  }, [metaEditando, onExcluir, onFechar, confirmar, avisar]);
 
   return (
     <ModalCentralizado visivel={visivel} onFechar={onFechar} bloquearFechamentoExterno={ocupado}>

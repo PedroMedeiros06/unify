@@ -1,63 +1,33 @@
 import { colors } from "@/theme/colors";
 import { moderateScale } from "@/utils/scale";
-import { FormatToCurrency } from "@/utils/formatNumber";
 import { Ionicons } from "@expo/vector-icons";
-import { View, Text, Pressable, TextInput, Alert } from "react-native";
-import { memo, useCallback, useEffect, useState } from "react";
-import { listarResumoPorBanco, calcularResumoReceitasDespesas } from "@/database/queries";
-import { obterMetaDeMaiorProgresso } from "@/database/metasQueries";
+import { View, Text, Pressable, TextInput } from "react-native";
+import { Image } from "expo-image";
+import { memo, useCallback, useState } from "react";
 import { usePerfil } from "@/context/PerfilContext";
+import { useDialogo } from "@/context/DialogoContext";
 import { ModalCentralizado } from "@/components/common/ModalCentralizado";
+import { escolherFotoPerfil, apagarFotoPerfil } from "@/utils/fotoPerfil";
 
 function PerfilCardBase() {
   const nameSize = moderateScale(18);
   const emailSize = moderateScale(12);
-  const metricLabelSize = moderateScale(11);
-  const metricValueSize = moderateScale(13);
   const modalTitleSize = moderateScale(16);
   const inputTextSize = moderateScale(14);
   const labelSize = moderateScale(11);
   const buttonTextSize = moderateScale(14);
 
-  // Nome/email vêm do PerfilContext (fonte única, compartilhada com a
-  // Home) — este componente não busca mais o perfil por conta própria.
+  // Nome/email/foto vêm do PerfilContext (fonte única, compartilhada com
+  // a Home). Métricas (saldo, gastos, meta) não ficam mais aqui — já
+  // aparecem completas nas telas de Home/Planejamento.
   const { perfil, atualizarPerfil } = usePerfil();
-
-  const [saldoConsolidado, setSaldoConsolidado] = useState(0);
-  const [gastosNoMes, setGastosNoMes] = useState(0);
-  const [metaAtingida, setMetaAtingida] = useState(0);
-  const [carregando, setCarregando] = useState(true);
+  const { avisar } = useDialogo();
 
   const [modalEdicaoAberto, setModalEdicaoAberto] = useState(false);
   const [nomeEdicao, setNomeEdicao] = useState("");
   const [emailEdicao, setEmailEdicao] = useState("");
   const [salvando, setSalvando] = useState(false);
-
-  const carregarDados = useCallback(async () => {
-    setCarregando(true);
-    try {
-      const [resumoBancos, receitasDespesas, metaTop] = await Promise.all([
-        listarResumoPorBanco(),
-        calcularResumoReceitasDespesas(),
-        obterMetaDeMaiorProgresso(),
-      ]);
-
-      const saldo = resumoBancos.reduce((acc, r) => acc + (r.totalEntradas - r.totalSaidas), 0);
-      setSaldoConsolidado(saldo);
-      setGastosNoMes(receitasDespesas.despesasMesAtual);
-
-      const percentual = metaTop && metaTop.valorMeta > 0
-        ? Math.min(100, Math.round((metaTop.progressoAtual / metaTop.valorMeta) * 100))
-        : 0;
-      setMetaAtingida(percentual);
-    } finally {
-      setCarregando(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    carregarDados();
-  }, [carregarDados]);
+  const [trocandoFoto, setTrocandoFoto] = useState(false);
 
   const handleAbrirEdicao = useCallback(() => {
     setNomeEdicao(perfil.nome);
@@ -67,7 +37,7 @@ function PerfilCardBase() {
 
   const handleSalvarPerfil = useCallback(async () => {
     if (!nomeEdicao.trim()) {
-      Alert.alert("Nome obrigatório", "Informe um nome para continuar.");
+      await avisar({ titulo: "Nome obrigatório", mensagem: "Informe um nome para continuar." });
       return;
     }
 
@@ -76,34 +46,78 @@ function PerfilCardBase() {
       await atualizarPerfil({ nome: nomeEdicao.trim(), email: emailEdicao.trim() || null });
       setModalEdicaoAberto(false);
     } catch {
-      Alert.alert("Não foi possível salvar", "Ocorreu um erro ao salvar seu perfil. Tente novamente.");
+      await avisar({
+        titulo: "Não foi possível salvar",
+        mensagem: "Ocorreu um erro ao salvar seu perfil. Tente novamente.",
+      });
     } finally {
       setSalvando(false);
     }
-  }, [nomeEdicao, emailEdicao, atualizarPerfil]);
+  }, [nomeEdicao, emailEdicao, atualizarPerfil, avisar]);
+
+  const handleEscolherFoto = useCallback(async () => {
+    if (trocandoFoto) return;
+    setTrocandoFoto(true);
+    try {
+      const r = await escolherFotoPerfil(perfil.avatarUri);
+      if (r.status === "ok") {
+        await atualizarPerfil({ avatarUri: r.uri });
+      } else if (r.status === "sem_permissao") {
+        await avisar({
+          titulo: "Permissão necessária",
+          mensagem: "Para escolher uma foto, permita o acesso às fotos nas configurações do aparelho.",
+        });
+      } else if (r.status === "erro") {
+        await avisar({ titulo: "Não foi possível usar a imagem", mensagem: r.mensagem });
+      }
+    } finally {
+      setTrocandoFoto(false);
+    }
+  }, [trocandoFoto, perfil.avatarUri, atualizarPerfil, avisar]);
+
+  const handleRemoverFoto = useCallback(() => {
+    const uri = perfil.avatarUri;
+    if (!uri) return;
+    void atualizarPerfil({ avatarUri: null }).then(() => apagarFotoPerfil(uri));
+  }, [perfil.avatarUri, atualizarPerfil]);
 
   const nomeExibido = perfil.nome || "Toque para se cadastrar";
   const emailExibido = perfil.email ?? "Adicione um e-mail (opcional)";
+  const temFoto = !!perfil.avatarUri;
 
   return (
     <View className="bg-active-icon/15 border border-active-icon/30 rounded-xl overflow-hidden">
-      {/* CABEÇALHO: avatar + nome + email + plano */}
-      <Pressable
-        onPress={handleAbrirEdicao}
-        className="flex-row items-center gap-4 p-4 active:opacity-80"
-        accessibilityRole="button"
-        accessibilityLabel="Editar informações do perfil"
-      >
-        <View className="relative">
+      <View className="flex-row items-center gap-4 p-4">
+        {/* AVATAR — toque troca a foto */}
+        <Pressable
+          onPress={handleEscolherFoto}
+          className="relative active:opacity-80"
+          accessibilityRole="button"
+          accessibilityLabel={temFoto ? "Trocar foto de perfil" : "Adicionar foto de perfil"}
+        >
           <View className="w-16 h-16 rounded-full bg-active-icon/30 items-center justify-center overflow-hidden">
-            <Ionicons name="person" color={colors["active-icon"]} size={32} />
+            {temFoto ? (
+              <Image
+                source={{ uri: perfil.avatarUri! }}
+                style={{ width: "100%", height: "100%" }}
+                contentFit="cover"
+              />
+            ) : (
+              <Ionicons name="person" color={colors["active-icon"]} size={32} />
+            )}
           </View>
           <View className="absolute -bottom-0.5 -right-0.5 w-6 h-6 rounded-full bg-active-icon items-center justify-center border-2 border-main-background">
-            <Ionicons name="pencil" color="#fff" size={11} />
+            <Ionicons name={trocandoFoto ? "hourglass-outline" : "camera"} color="#fff" size={11} />
           </View>
-        </View>
+        </Pressable>
 
-        <View className="flex-1">
+        {/* NOME + EMAIL — toque abre o modal de edição */}
+        <Pressable
+          onPress={handleAbrirEdicao}
+          className="flex-1 active:opacity-80"
+          accessibilityRole="button"
+          accessibilityLabel="Editar nome e e-mail"
+        >
           <Text
             style={{ fontSize: nameSize }}
             className={perfil.nome ? "text-main-text font-Inter-SemiBold mb-0.5" : "text-desactived-text font-Inter-SemiBold mb-0.5"}
@@ -111,74 +125,28 @@ function PerfilCardBase() {
           >
             {nomeExibido}
           </Text>
-          <Text
-            style={{ fontSize: emailSize }}
-            className="text-second-text"
-            numberOfLines={1}
-          >
+          <Text style={{ fontSize: emailSize }} className="text-second-text" numberOfLines={1}>
             {emailExibido}
           </Text>
-        </View>
+        </Pressable>
 
-        <Ionicons name="chevron-forward" color={colors["second-text"]} size={18} />
-      </Pressable>
-
-      {/* MÉTRICAS RÁPIDAS */}
-      <View className="flex-row border-t border-active-icon/20">
-        <View className="flex-1 flex-row items-center gap-2 p-3">
-          <View className="w-8 h-8 rounded-lg bg-active-icon/30 items-center justify-center flex-shrink-0">
-            <Ionicons name="wallet-outline" color={colors["main-text"]} size={15} />
-          </View>
-          <View className="flex-1">
-            <Text style={{ fontSize: metricLabelSize }} className="text-second-text" numberOfLines={1}>
-              Saldo consolidado
-            </Text>
-            <Text
-              style={{ fontSize: metricValueSize }}
-              className="text-main-text font-Inter-SemiBold"
-              numberOfLines={1}
-            >
-              {carregando ? "···" : FormatToCurrency(saldoConsolidado)}
-            </Text>
-          </View>
-        </View>
-
-        <View className="flex-1 flex-row items-center gap-2 p-3 border-l border-active-icon/20">
-          <View className="w-8 h-8 rounded-lg bg-active-icon/30 items-center justify-center flex-shrink-0">
-            <Ionicons name="pie-chart-outline" color={colors["main-text"]} size={15} />
-          </View>
-          <View className="flex-1">
-            <Text style={{ fontSize: metricLabelSize }} className="text-second-text" numberOfLines={1}>
-              Gastos no mês
-            </Text>
-            <Text
-              style={{ fontSize: metricValueSize }}
-              className="text-main-text font-Inter-SemiBold"
-              numberOfLines={1}
-            >
-              {carregando ? "···" : FormatToCurrency(gastosNoMes)}
-            </Text>
-          </View>
-        </View>
-
-        <View className="flex-1 flex-row items-center gap-2 p-3 border-l border-active-icon/20">
-          <View className="w-8 h-8 rounded-lg bg-active-icon/30 items-center justify-center flex-shrink-0">
-            <Ionicons name="radio-button-on-outline" color={colors["main-text"]} size={15} />
-          </View>
-          <View className="flex-1">
-            <Text style={{ fontSize: metricLabelSize }} className="text-second-text" numberOfLines={1}>
-              Meta mensal
-            </Text>
-            <Text
-              style={{ fontSize: metricValueSize }}
-              className="text-active-icon font-Inter-SemiBold"
-              numberOfLines={1}
-            >
-              {carregando ? "···" : `${metaAtingida}% atingido`}
-            </Text>
-          </View>
-        </View>
+        <Pressable onPress={handleAbrirEdicao} hitSlop={8} accessibilityRole="button" accessibilityLabel="Editar perfil">
+          <Ionicons name="chevron-forward" color={colors["second-text"]} size={18} />
+        </Pressable>
       </View>
+
+      {temFoto && (
+        <Pressable
+          onPress={handleRemoverFoto}
+          className="border-t border-active-icon/20 py-2.5 items-center active:opacity-70"
+          accessibilityRole="button"
+          accessibilityLabel="Remover foto de perfil"
+        >
+          <Text style={{ fontSize: moderateScale(11) }} className="text-second-text">
+            Remover foto
+          </Text>
+        </Pressable>
+      )}
 
       {/* MODAL DE EDIÇÃO — cadastro local simples, sem tabela de usuário completa */}
       <ModalCentralizado

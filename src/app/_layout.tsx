@@ -16,6 +16,7 @@ import { LimitesOrcamentoProvider } from "@/context/LimitesOrcamentoContext";
 import { PerfilProvider } from "@/context/PerfilContext";
 import { ResetAppProvider } from "@/context/ResetAppContext";
 import { NovaTransacaoProvider } from "@/context/NovaTransacaoContext";
+import { DialogoProvider } from "@/context/DialogoContext";
 
 
 
@@ -26,6 +27,7 @@ export default function RootLayout() {
   return (
     <ThemeProvider name="default">
       <NavigationProvider>
+       <DialogoProvider>
         <ResetAppProvider>
           <PerfilProvider>
             <TransacoesProvider>
@@ -51,6 +53,7 @@ export default function RootLayout() {
             </TransacoesProvider>
           </PerfilProvider>
         </ResetAppProvider>
+       </DialogoProvider>
       </NavigationProvider>
     </ThemeProvider>
   );

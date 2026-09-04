@@ -95,6 +95,7 @@ function SimuladorCambioBase({ parametrosIniciais }: Props) {
             valor={moedaCodigo}
             opcoes={opcoesMoeda.length > 0 ? opcoesMoeda : [{ valor: moedaCodigo, rotulo: moedaCodigo }]}
             onChange={setMoedaCodigo}
+            alturaMaxima={moderateScale(240)}
           />
         </View>
 

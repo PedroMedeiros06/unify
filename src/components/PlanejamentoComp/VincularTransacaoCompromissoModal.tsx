@@ -2,9 +2,10 @@ import { colors } from "@/theme/colors";
 import { moderateScale } from "@/utils/scale";
 import { FormatToCurrency } from "@/utils/formatNumber";
 import { Ionicons } from "@expo/vector-icons";
-import { View, Text, Pressable, Alert } from "react-native";
+import { View, Text, Pressable } from "react-native";
 import { memo, useMemo } from "react";
 import { ModalCentralizado } from "@/components/common/ModalCentralizado";
+import { useDialogo } from "@/context/DialogoContext";
 import { useTransacoes, Transacao } from "@/context/TransacoesContext";
 import { useCompromissos } from "@/context/CompromissosContext";
 import { Compromisso } from "@/database/compromissosQueries";
@@ -52,6 +53,7 @@ type TransacaoAvaliada = {
 };
 
 function VincularTransacaoCompromissoModalBase({ visivel, compromisso, onFechar, onVincular }: Props) {
+  const { confirmar } = useDialogo();
   const titleSize = moderateScale(17);
   const subtitleSize = moderateScale(12);
   const noteSize = moderateScale(11);
@@ -103,23 +105,20 @@ function VincularTransacaoCompromissoModalBase({ visivel, compromisso, onFechar,
     return avaliadas;
   }, [transacoes, compromisso, idsJaVinculados]);
 
-  const handleSelecionar = (item: TransacaoAvaliada) => {
+  const handleSelecionar = async (item: TransacaoAvaliada) => {
     if (!compromisso || item.jaVinculada) return;
     const { transacao } = item;
-    Alert.alert(
-      "Vincular esta transação?",
-      `${transacao.nome} · ${FormatToCurrency(transacao.valor)} · ${transacao.data}\n\n` +
+    const ok = await confirmar({
+      titulo: "Vincular esta transação?",
+      mensagem:
+        `${transacao.nome} · ${FormatToCurrency(transacao.valor)} · ${transacao.data}\n\n` +
         "Isso só marca o compromisso como pago. O valor e os dados da transação não são alterados.",
-      [
-        { text: "Cancelar", style: "cancel" },
-        {
-          text: "Vincular",
-          onPress: () => {
-            void Promise.resolve(onVincular(transacao.id)).then(onFechar);
-          },
-        },
-      ]
-    );
+      textoConfirmar: "Vincular",
+    });
+    if (ok) {
+      await Promise.resolve(onVincular(transacao.id));
+      onFechar();
+    }
   };
 
   return (
