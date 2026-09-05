@@ -33,7 +33,7 @@ function SimuladorFinanciamentoBase({ parametrosIniciais }: Props) {
   const [taxaAnualPct, setTaxaAnualPct] = useState(parametrosIniciais?.taxaAnualPct ?? 0);
 
   const parametros: ParametrosFinanciamento = { valorBem, entrada, prazoMeses, taxaAnualPct };
-  const resultado = useMemo(() => simularFinanciamento(parametros), [valorBem, entrada, prazoMeses, taxaAnualPct]);
+  const resultado = useMemo(() => simularFinanciamento(parametros), [parametros]);
 
   const pctEntrada = valorBem > 0 ? (entrada / valorBem) * 100 : 0;
 

@@ -38,6 +38,8 @@ function calcularVariacao(atual: number, anterior: number): number | null {
 
 function useFatiasComOffset(fatias: FatiaExibicao[]) {
   return useMemo(() => {
+    // Acumulador local ao cálculo memoizado — cada fatia do donut
+    // começa onde a anterior terminou. Não é estado de render.
     let offsetAcumulado = 0;
     return fatias.map((fatia) => {
       const dash = (fatia.percentual / 100) * CIRCUMFERENCE;

@@ -122,7 +122,6 @@ function VisaoGeralMesBase() {
 
   const saldoEstavel = variacaoSaldoPercentual === null || Math.abs(variacaoSaldoPercentual) < LIMIAR_ESTAVEL_PERCENTUAL;
   const saldoSubiu = variacaoSaldoPercentual !== null && variacaoSaldoPercentual >= LIMIAR_ESTAVEL_PERCENTUAL;
-  const saldoCaiu = variacaoSaldoPercentual !== null && variacaoSaldoPercentual <= -LIMIAR_ESTAVEL_PERCENTUAL;
 
   const textoComparacaoSaldo = saldoEstavel
     ? "＝ Estável vs mês anterior"

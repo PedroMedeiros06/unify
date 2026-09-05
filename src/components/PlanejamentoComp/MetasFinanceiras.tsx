@@ -5,7 +5,6 @@ import { colors } from "@/theme/colors";
 import { View, Text, Pressable } from "react-native";
 import { memo, useCallback, useMemo, useState } from "react";
 import { useMetas } from "@/context/MetasContext";
-import { useNavigation } from "@/context/NavigationContext";
 import { Meta, CamposMeta, calcularPercentualMeta, metaEstaConcluida } from "@/database/metasQueries";
 import { EditarMetaModal } from "@/components/PlanejamentoComp/EditarMetaModal";
 import { MetasSkeleton } from "@/components/common/MetasSkeleton";
@@ -58,9 +57,7 @@ const MetaItem = memo(function MetaItem({ meta, onLongPress }: { meta: Meta; onL
 
 function MetasFinanceirasBase() {
   const cardTitleSize = moderateScale(15);
-  const actionTextSize = moderateScale(12);
   const { metas, carregando, adicionarMeta, editarMeta, removerMeta } = useMetas();
-  const { navigate } = useNavigation();
 
   const [modalVisivel, setModalVisivel] = useState(false);
   const [metaEditando, setMetaEditando] = useState<Meta | null>(null);

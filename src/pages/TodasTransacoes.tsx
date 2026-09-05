@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
-import { ScrollView, Text, View, Pressable, FlatList } from "react-native";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Text, View, Pressable, FlatList } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { colors } from "@/theme/colors";
 import { moderateScale } from "@/utils/scale";
@@ -201,12 +201,12 @@ export function TodasTransacoes() {
     [removerTransacao, carregarTransacoes],
   );
 
-  return (
-    <ScrollView
-      className="flex-1"
-      showsVerticalScrollIndicator={false}
-      contentContainerStyle={{ paddingBottom: 100 }}
-    >
+  // O cabeçalho da tela (voltar + título + filtros + contador) rola
+  // junto com a lista como ListHeaderComponent — assim a tela toda é
+  // um único FlatList virtualizado, sem ScrollView externo anulando a
+  // reciclagem de linhas.
+  const Cabecalho = useMemo(
+    () => (
       <View className="flex-col gap-4">
         {/* HEADER */}
         <View className="w-full flex-row items-center gap-3">
@@ -249,11 +249,9 @@ export function TodasTransacoes() {
           onLimparTodos={limparTodosFiltros}
         />
 
-        {carregando ? (
-          <ListaTransacoesSkeleton linhas={8} titulo={false} />
-        ) : (
-          <View className="bg-card-background border border-lines-divisions rounded-xl px-4 py-2">
-            <View className="flex-row justify-between items-center py-2 border-b border-lines-divisions">
+        {!carregando && transacoes.length > 0 && (
+          <View className="bg-card-background border border-lines-divisions rounded-xl px-4">
+            <View className="flex-row justify-between items-center py-3">
               <Text
                 style={{ fontSize: countTextSize }}
                 className="text-second-text"
@@ -264,38 +262,79 @@ export function TodasTransacoes() {
                   : "transações encontradas"}
               </Text>
             </View>
-
-            {transacoes.length === 0 ? (
-              <View className="items-center py-10">
-                <Ionicons
-                  name="receipt-outline"
-                  color={colors["desactived-text"]}
-                  size={30}
-                />
-                <Text
-                  style={{ fontSize: emptyTitleSize }}
-                  className="text-desactived-text text-center mt-2"
-                >
-                  Nenhuma transação encontrada para os filtros atuais.
-                </Text>
-              </View>
-            ) : (
-              <FlatList
-                data={transacoes}
-                keyExtractor={(item) => item.id}
-                scrollEnabled={false}
-                renderItem={({ item, index }) => (
-                  <TransacaoItem
-                    item={item}
-                    isLast={index === transacoes.length - 1}
-                    onLongPress={handleLongPress}
-                  />
-                )}
-              />
-            )}
           </View>
         )}
       </View>
+    ),
+    [
+      goBack,
+      titleSize,
+      subtitleSize,
+      countTextSize,
+      bancos,
+      filtros,
+      possuiFiltrosAtivos,
+      alternarBanco,
+      limparFiltroBanco,
+      alternarCategoria,
+      limparFiltroCategoria,
+      definirPeriodoPreset,
+      limparTodosFiltros,
+      carregando,
+      transacoes.length,
+    ],
+  );
+
+  return (
+    <View className="flex-1">
+      <FlatList
+        data={carregando ? [] : transacoes}
+        keyExtractor={(item) => item.id}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 100 }}
+        ListHeaderComponent={Cabecalho}
+        // A lista de linhas vive dentro do mesmo "card" do contador; como
+        // o card agora é desenhado pelo header, cada linha só precisa da
+        // borda lateral + fundo para manter o visual.
+        renderItem={({ item, index }) => (
+          <View className="bg-card-background border-x border-lines-divisions px-4">
+            <TransacaoItem
+              item={item}
+              isLast={index === transacoes.length - 1}
+              onLongPress={handleLongPress}
+            />
+          </View>
+        )}
+        ListFooterComponent={
+          !carregando && transacoes.length > 0 ? (
+            <View className="bg-card-background border-x border-b border-lines-divisions rounded-b-xl h-2" />
+          ) : null
+        }
+        ListEmptyComponent={
+          carregando ? (
+            <ListaTransacoesSkeleton linhas={8} titulo={false} />
+          ) : (
+            <View className="bg-card-background border border-lines-divisions rounded-xl items-center py-10">
+              <Ionicons
+                name="receipt-outline"
+                color={colors["desactived-text"]}
+                size={30}
+              />
+              <Text
+                style={{ fontSize: emptyTitleSize }}
+                className="text-desactived-text text-center mt-2"
+              >
+                Nenhuma transação encontrada para os filtros atuais.
+              </Text>
+            </View>
+          )
+        }
+        // Reciclagem de linhas: mantém só ~2 telas montadas.
+        initialNumToRender={12}
+        maxToRenderPerBatch={12}
+        windowSize={7}
+        removeClippedSubviews
+      />
 
       <SeletorPeriodoPersonalizado
         visivel={modalPeriodoAberto}
@@ -311,6 +350,6 @@ export function TodasTransacoes() {
         onSalvar={handleSalvarEdicao}
         onExcluir={handleExcluir}
       />
-    </ScrollView>
+    </View>
   );
 }

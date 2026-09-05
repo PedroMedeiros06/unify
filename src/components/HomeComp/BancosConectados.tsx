@@ -1,6 +1,6 @@
 import { moderateScale } from "@/utils/scale";
 import { Ionicons } from "@expo/vector-icons";
-import { View, Text, ScrollView, Pressable } from "react-native";
+import { Text, ScrollView, Pressable } from "react-native";
 import { memo } from "react";
 
 export type BancoComSaldo = {

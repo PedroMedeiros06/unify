@@ -52,10 +52,7 @@ function SimuladorCambioBase({ parametrosIniciais }: Props) {
   const cotacao = cotacaoAtual?.cotacaoBrl ?? parametrosIniciais?.cotacao ?? 0;
 
   const parametros: ParametrosCambio = { moedaCodigo, valorBrl, cotacao, iofPct, spreadPct };
-  const resultado = useMemo(
-    () => simularCambio(parametros),
-    [moedaCodigo, valorBrl, cotacao, iofPct, spreadPct]
-  );
+  const resultado = useMemo(() => simularCambio(parametros), [parametros]);
 
   const tiles = [
     {

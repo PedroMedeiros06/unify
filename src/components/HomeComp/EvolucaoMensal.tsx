@@ -1,4 +1,3 @@
-import { colors } from "@/theme/colors";
 import { moderateScale } from "@/utils/scale";
 import { View, Text } from "react-native";
 import Svg, { Rect, Defs, LinearGradient, Stop } from "react-native-svg";
