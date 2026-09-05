@@ -28,10 +28,7 @@ function SimuladorInvestimentoBase({ parametrosIniciais }: Props) {
   const [taxaAnualPct, setTaxaAnualPct] = useState(parametrosIniciais?.taxaAnualPct ?? 0);
 
   const parametros: ParametrosInvestimento = { aporteInicial, aporteMensal, meses, taxaAnualPct };
-  const resultado = useMemo(
-    () => simularInvestimento(parametros),
-    [aporteInicial, aporteMensal, meses, taxaAnualPct]
-  );
+  const resultado = useMemo(() => simularInvestimento(parametros), [parametros]);
 
   const tiles = [
     { icone: "wallet-outline" as const, cor: CORES_TILE[0], rotulo: "Montante final", valor: FormatToCurrency(resultado.montanteFinal) },

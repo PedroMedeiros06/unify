@@ -3,6 +3,7 @@ import { moderateScale } from "@/utils/scale";
 import { FormatToCurrency } from "@/utils/formatNumber";
 import { Ionicons } from "@expo/vector-icons";
 import { View, Text, Pressable } from "react-native";
+import Svg, { Circle } from "react-native-svg";
 import { memo, useCallback, useMemo, useState } from "react";
 import { useMetas } from "@/context/MetasContext";
 import { useNavigation } from "@/context/NavigationContext";
@@ -11,9 +12,54 @@ import { obterIconeMeta } from "@/database/iconesMeta";
 import { EditarMetaModal } from "@/components/PlanejamentoComp/EditarMetaModal";
 import { MetasSkeleton } from "@/components/common/MetasSkeleton";
 
+// Anel de progresso desenhado em volta do ícone da meta. O traço
+// começa no topo (rotação -90°) e avança no sentido horário.
+const AnelProgressoIcone = memo(function AnelProgressoIcone({
+  percentual,
+  cor,
+  icone,
+}: {
+  percentual: number;
+  cor: string;
+  icone: keyof typeof Ionicons.glyphMap;
+}) {
+  const tamanho = moderateScale(58);
+  const espessura = moderateScale(4);
+  const raio = (tamanho - espessura) / 2;
+  const circunferencia = 2 * Math.PI * raio;
+  const fracao = Math.min(100, Math.max(0, percentual)) / 100;
+  const centro = tamanho / 2;
+
+  return (
+    <View style={{ width: tamanho, height: tamanho }} className="items-center justify-center flex-shrink-0">
+      <Svg width={tamanho} height={tamanho} style={{ position: "absolute" }}>
+        <Circle cx={centro} cy={centro} r={raio} stroke={colors["lines-divisions"]} strokeWidth={espessura} fill="none" />
+        <Circle
+          cx={centro}
+          cy={centro}
+          r={raio}
+          stroke={cor}
+          strokeWidth={espessura}
+          fill="none"
+          strokeLinecap="round"
+          strokeDasharray={circunferencia}
+          strokeDashoffset={circunferencia * (1 - fracao)}
+          transform={`rotate(-90 ${centro} ${centro})`}
+        />
+      </Svg>
+      <View
+        style={{ backgroundColor: `${cor}22`, width: tamanho - espessura * 3, height: tamanho - espessura * 3 }}
+        className="rounded-full items-center justify-center"
+      >
+        <Ionicons name={icone} color={cor} size={moderateScale(22)} />
+      </View>
+    </View>
+  );
+});
+
 const MetaCard = memo(function MetaCard({ meta, onLongPress }: { meta: Meta; onLongPress: (meta: Meta) => void }) {
   const nomeSize = moderateScale(15);
-  const percentualSize = moderateScale(12);
+  const percentualSize = moderateScale(11);
   const valorSize = moderateScale(15);
   const totalSize = moderateScale(12);
   const faltamSize = moderateScale(11);
@@ -26,43 +72,32 @@ const MetaCard = memo(function MetaCard({ meta, onLongPress }: { meta: Meta; onL
     <Pressable
       onLongPress={() => onLongPress(meta)}
       delayLongPress={350}
-      className="bg-card-background border border-lines-divisions rounded-xl p-4 flex-row items-center gap-3 active:opacity-80"
+      className="bg-card-background border border-lines-divisions rounded-xl p-4 flex-row items-center gap-3.5 active:opacity-80"
       accessibilityRole="button"
       accessibilityLabel={`${meta.nome}, ${percentual}% concluído. Toque e segure para editar.`}
     >
-      <View
-        style={{ backgroundColor: `${icone.cor}22` }}
-        className="w-14 h-14 rounded-full items-center justify-center flex-shrink-0"
-      >
-        <Ionicons name={icone.nome} color={icone.cor} size={26} />
-      </View>
+      <AnelProgressoIcone percentual={percentual} cor={icone.cor} icone={icone.nome} />
 
       <View className="flex-1">
-        <View className="flex-row justify-between items-start">
-          <Text style={{ fontSize: nomeSize }} className="text-main-text font-Inter-SemiBold flex-1 pr-2" numberOfLines={1}>
+        <View className="flex-row items-baseline justify-between gap-2">
+          <Text style={{ fontSize: nomeSize }} className="text-main-text font-Inter-SemiBold flex-1" numberOfLines={1}>
             {meta.nome}
           </Text>
-          <View className="items-end flex-shrink-0">
-            <Text style={{ fontSize: valorSize }} className="text-active-icon font-Inter-SemiBold" numberOfLines={1}>
-              {FormatToCurrency(meta.progressoAtual)}
-            </Text>
-            <Text style={{ fontSize: totalSize }} className="text-desactived-text" numberOfLines={1}>
-              de {FormatToCurrency(meta.valorMeta)}
-            </Text>
-          </View>
+          <Text style={{ fontSize: percentualSize }} className="text-active-icon font-Inter-Medium flex-shrink-0">
+            {percentual}%
+          </Text>
         </View>
 
-        <Text style={{ fontSize: percentualSize }} className="text-active-icon font-Inter-Medium mt-1 mb-1.5">
-          {percentual}% concluído
-        </Text>
-
-        <View className="flex-row items-center gap-2">
-          <View className="h-2 bg-lines-divisions rounded-full overflow-hidden flex-1">
-            <View style={{ width: `${percentual}%`, backgroundColor: icone.cor }} className="h-full rounded-full" />
-          </View>
+        <View className="flex-row items-baseline gap-1 mt-1.5">
+          <Text style={{ fontSize: valorSize }} className="text-main-text font-Inter-SemiBold" numberOfLines={1}>
+            {FormatToCurrency(meta.progressoAtual)}
+          </Text>
+          <Text style={{ fontSize: totalSize }} className="text-desactived-text" numberOfLines={1}>
+            de {FormatToCurrency(meta.valorMeta)}
+          </Text>
         </View>
 
-        <Text style={{ fontSize: faltamSize }} className="text-desactived-text mt-1.5">
+        <Text style={{ fontSize: faltamSize }} className="text-desactived-text mt-0.5">
           Faltam {FormatToCurrency(faltam)}
         </Text>
       </View>
@@ -224,7 +259,7 @@ function MinhasMetasBase() {
         <View className="bg-card-background border border-lines-divisions rounded-xl items-center py-10">
           <Ionicons name="flag-outline" color={colors["desactived-text"]} size={28} />
           <Text style={{ fontSize: emptyTitleSize }} className="text-desactived-text text-center mt-2">
-            Nenhuma meta em andamento. Toque em "Criar nova meta" para começar.
+            Nenhuma meta em andamento. Toque em “Criar nova meta” para começar.
           </Text>
         </View>
       ) : (

@@ -26,10 +26,7 @@ function SimuladorEmprestimoBase({ parametrosIniciais }: Props) {
   const [taxaAnualPct, setTaxaAnualPct] = useState(parametrosIniciais?.taxaAnualPct ?? 0);
 
   const parametros: ParametrosEmprestimo = { valorSolicitado, prazoMeses, taxaAnualPct };
-  const resultado = useMemo(
-    () => simularEmprestimo(parametros),
-    [valorSolicitado, prazoMeses, taxaAnualPct]
-  );
+  const resultado = useMemo(() => simularEmprestimo(parametros), [parametros]);
 
   const tiles = [
     { icone: "card-outline" as const, cor: CORES_TILE[0], rotulo: "Parcela mensal", valor: FormatToCurrency(resultado.parcelaMensal) },

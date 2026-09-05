@@ -61,15 +61,24 @@ type LinhaBruta = {
   criadoEm: string;
 };
 
-function mapearLinha(linha: LinhaBruta): SimulacaoSalva {
-  return {
-    id: linha.id,
-    tipo: linha.tipo,
-    titulo: linha.titulo,
-    parametros: JSON.parse(linha.parametros),
-    resultado: JSON.parse(linha.resultado),
-    criadoEm: linha.criadoEm,
-  } as SimulacaoSalva;
+// Retorna null (em vez de lançar) quando a linha tem JSON inválido —
+// pode acontecer se o banco corromper ou um backup adulterado for
+// restaurado. Uma linha ruim é descartada, o resto da lista continua
+// funcionando.
+function mapearLinha(linha: LinhaBruta): SimulacaoSalva | null {
+  try {
+    return {
+      id: linha.id,
+      tipo: linha.tipo,
+      titulo: linha.titulo,
+      parametros: JSON.parse(linha.parametros),
+      resultado: JSON.parse(linha.resultado),
+      criadoEm: linha.criadoEm,
+    } as SimulacaoSalva;
+  } catch (e) {
+    console.warn(`[simulacoes] linha ${linha.id} com JSON inválido, ignorada:`, e);
+    return null;
+  }
 }
 
 export async function listarSimulacoes(): Promise<SimulacaoSalva[]> {
@@ -80,7 +89,7 @@ export async function listarSimulacoes(): Promise<SimulacaoSalva[]> {
        FROM simulacoes
        ORDER BY criado_em DESC;`
     );
-    return linhas.map(mapearLinha);
+    return linhas.map(mapearLinha).filter((s): s is SimulacaoSalva => s !== null);
   });
 }
 

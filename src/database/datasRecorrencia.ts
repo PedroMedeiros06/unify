@@ -1,4 +1,4 @@
-import { Recorrencia, TipoVencimento } from "./recorrenciasQueries";
+import { Recorrencia } from "./recorrenciasQueries";
 
 /**
  * Resolução de datas de recorrência — módulo PURO (só usa `Date` local,

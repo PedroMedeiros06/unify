@@ -1,4 +1,3 @@
-import { colors } from "@/theme/colors";
 import { moderateScale } from "@/utils/scale";
 import { View, Text, Pressable } from "react-native";
 import { createContext, useCallback, useContext, useMemo, useRef, useState, ReactNode } from "react";

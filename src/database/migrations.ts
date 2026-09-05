@@ -516,8 +516,15 @@ export async function rodarMigrations(db: SQLiteDatabase): Promise<void> {
     console.log(`[migrations] Aplicando migration ${migration.versao}: ${migration.descricao}`);
 
     try {
-      await migration.executar(db);
-      await db.execAsync(`PRAGMA user_version = ${migration.versao};`);
+      // Cada migration roda numa transação: se um dos statements falhar,
+      // a transação reverte e o banco fica exatamente como estava antes
+      // desta migration. O `user_version` só avança se tudo passou —
+      // assim um crash no meio nunca deixa o schema pela metade.
+      // (DDL em SQLite é transacional.)
+      await db.withTransactionAsync(async () => {
+        await migration.executar(db);
+        await db.execAsync(`PRAGMA user_version = ${migration.versao};`);
+      });
     } catch (erro) {
       console.error(`[migrations] Falha ao aplicar migration ${migration.versao}:`, erro);
       throw new Error(

@@ -1,4 +1,4 @@
-import { listarTransacoesPorPeriodo, existeIdentificadorExterno, Transacao } from "@/database/queries";
+import { listarTransacoesPorPeriodo, existeIdentificadorExterno } from "@/database/queries";
 import { TransacaoImportada } from "@/database/parsers/TransacaoImportada";
 
 export type TransacaoComStatusDuplicata = TransacaoImportada & {

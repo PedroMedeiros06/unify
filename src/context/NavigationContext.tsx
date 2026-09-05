@@ -40,7 +40,9 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
   const [params, setParams] = useState<NavigationParams>({});
   // Histórico simples só para permitir "voltar" — suficiente para o
   // padrão de navegação atual do app (sem pilhas profundas ou rotas aninhadas).
-  const [historico, setHistorico] = useState<ScreenType[]>([]);
+  // O array em si só é lido dentro dos updaters de `setHistorico` (via
+  // `prev`), nunca direto no render — daí o prefixo `_`.
+  const [_historico, setHistorico] = useState<ScreenType[]>([]);
 
   const navigate = useCallback((screen: ScreenType, novosParams: NavigationParams = {}) => {
     setHistorico((prev) => [...prev, activeScreen]);
