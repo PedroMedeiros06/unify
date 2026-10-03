@@ -79,6 +79,40 @@ export async function removerLimiteCategoria(categoriaId: CategoriaId, mesAno: s
   });
 }
 
+/**
+ * Mês mais recente ANTES de `mesAno` que tem algum limite definido — a
+ * origem sugerida para "copiar limites". null se não houver nenhum.
+ */
+export async function obterMesAnteriorComLimites(mesAno: string): Promise<string | null> {
+  return executarNaFila(async () => {
+    const db = await getDatabase();
+    const r = await db.getFirstAsync<{ mes: string }>(
+      `SELECT MAX(mes_ano) as mes FROM limite_categoria WHERE mes_ano < ?;`,
+      [mesAno]
+    );
+    return r?.mes ?? null;
+  });
+}
+
+/**
+ * Copia os limites de `origem` para `destino` ("aaaa-mm"). Categorias
+ * que já têm limite no destino são mantidas (não sobrescreve). Devolve
+ * quantos limites foram criados.
+ */
+export async function copiarLimitesDoMes(origem: string, destino: string): Promise<number> {
+  return executarNaFila(async () => {
+    const db = await getDatabase();
+    const r = await db.runAsync(
+      `INSERT INTO limite_categoria (id, categoria_id, mes_ano, valor_limite)
+       SELECT lower(hex(randomblob(8))), categoria_id, ?, valor_limite
+       FROM limite_categoria WHERE mes_ano = ?
+       ON CONFLICT (categoria_id, mes_ano) DO NOTHING;`,
+      [destino, origem]
+    );
+    return r.changes;
+  });
+}
+
 /** Percentual (0-100) do limite já consumido, limitado a 100 para a barra/UI. */
 export function calcularPercentualLimite(gasto: number, limite: number): number {
   if (limite <= 0) return 0;

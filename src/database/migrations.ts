@@ -613,6 +613,19 @@ const MIGRATIONS: Migration[] = [
       await db.execAsync(`ALTER TABLE lembretes ADD COLUMN dia_base INTEGER;`);
     },
   },
+  {
+    versao: 24,
+    descricao:
+      "Cria alertas_enviados: registro dos avisos automáticos já disparados (limite de orçamento a 80%/100% por categoria e mês, meta concluída) para cada aviso sair UMA vez só. Chave textual livre por tipo — ex: 'orcamento:mercado:2026-10:80', 'meta:<id>'.",
+    async executar(db) {
+      await db.execAsync(`
+        CREATE TABLE IF NOT EXISTS alertas_enviados (
+          chave      TEXT PRIMARY KEY NOT NULL,
+          enviado_em TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+      `);
+    },
+  },
 ];
 
 export async function rodarMigrations(db: SQLiteDatabase): Promise<void> {

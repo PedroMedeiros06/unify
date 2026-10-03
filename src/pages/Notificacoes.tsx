@@ -21,7 +21,18 @@ import { CompromissosSkeleton } from "@/components/common/CompromissosSkeleton";
  */
 
 function iconePorOrigem(origem: NotificacaoHistorico["origem"]): keyof typeof Ionicons.glyphMap {
-  return origem === "compromisso" ? "calendar-outline" : "alarm-outline";
+  switch (origem) {
+    case "compromisso":
+      return "calendar-outline";
+    case "orcamento":
+      return "pie-chart-outline";
+    case "meta":
+      return "trophy-outline";
+    case "relatorio":
+      return "bar-chart-outline";
+    default:
+      return "alarm-outline";
+  }
 }
 
 /** "aaaa-mm-ddTHH:MM:SS" (horário local) -> Date. */

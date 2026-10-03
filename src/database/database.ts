@@ -105,6 +105,7 @@ async function droparTodasAsTabelas(db: SQLite.SQLiteDatabase): Promise<void> {
   // migration, ela entra aqui também (e em TABELAS_EM_ORDEM_DE_INSERCAO
   // do backup.ts, se for dado do usuário).
   await db.execAsync(`DROP TABLE IF EXISTS categorias_personalizadas;`);
+  await db.execAsync(`DROP TABLE IF EXISTS alertas_enviados;`);
   await db.execAsync(`PRAGMA user_version = 0;`);
 }
 

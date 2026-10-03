@@ -16,7 +16,9 @@ import { dataHoraLocalIso } from "@/utils/dateUtils";
  * - abrir a tela de histórico -> marcarTodasComoLidas()
  */
 
-export type OrigemNotificacao = "compromisso" | "lembrete";
+// "orcamento": alerta de limite de categoria (80%/100%); "meta": meta
+// concluída; "relatorio": resumo mensal do dia 1.
+export type OrigemNotificacao = "compromisso" | "lembrete" | "orcamento" | "meta" | "relatorio";
 
 export type NotificacaoHistorico = {
   id: string;

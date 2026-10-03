@@ -3,16 +3,25 @@ import { moderateScale } from "@/utils/scale";
 import { FormatToCurrency } from "@/utils/formatNumber";
 import { Ionicons } from "@expo/vector-icons";
 import { View, Text, Pressable, ActivityIndicator } from "react-native";
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { obterCategoriaPorId } from "@/database/categorias";
 import { listarResumoPorCategoria } from "@/database/queries";
 import { somarCompromissosNaoPagosPorCategoria } from "@/database/compromissosQueries";
 import {
   LimiteCategoria,
   calcularPercentualLimite,
+  obterMesAnteriorComLimites,
 } from "@/database/limitesCategoriaQueries";
 import { useLimitesOrcamento } from "@/context/LimitesOrcamentoContext";
 import { useTransacoes } from "@/context/TransacoesContext";
+
+const NOMES_MES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+
+/** "aaaa-mm" -> "setembro" (ou "setembro de 2025" se for de outro ano). */
+function rotuloMes(mesAno: string, anoReferencia: number): string {
+  const [a, m] = mesAno.split("-").map(Number);
+  return a === anoReferencia ? NOMES_MES[m - 1] : `${NOMES_MES[m - 1]} de ${a}`;
+}
 
 type Props = {
   anoExibido: number;
@@ -118,7 +127,10 @@ function CategoriasOrcamentoBase({ anoExibido, mesExibido, onAbrirNovoLimite, on
   const actionTextSize = moderateScale(12);
   const emptySize = moderateScale(12);
 
-  const { limites, carregando, definirMesExibido } = useLimitesOrcamento();
+  const { limites, carregando, definirMesExibido, copiarLimitesDe } = useLimitesOrcamento();
+  // Mês anterior com limites — oferecido para copiar quando este mês está vazio.
+  const [mesParaCopiar, setMesParaCopiar] = useState<string | null>(null);
+  const [copiando, setCopiando] = useState(false);
 
   // Mantém o contexto de limites apontando para o mês exibido no card.
   const mesAnoExibido = useMemo(
@@ -163,6 +175,31 @@ function CategoriasOrcamentoBase({ anoExibido, mesExibido, onAbrirNovoLimite, on
     };
   }, [anoExibido, mesExibido, versaoDados]);
 
+  useEffect(() => {
+    let ativo = true;
+    if (carregando || limites.length > 0) return;
+    obterMesAnteriorComLimites(mesAnoExibido)
+      .then((mes) => {
+        if (ativo) setMesParaCopiar(mes);
+      })
+      .catch((e) => console.warn("[CategoriasOrcamento] Falha ao buscar mês anterior:", e));
+    return () => {
+      ativo = false;
+    };
+  }, [carregando, limites.length, mesAnoExibido]);
+
+  const handleCopiar = useCallback(async () => {
+    if (!mesParaCopiar || copiando) return;
+    setCopiando(true);
+    try {
+      await copiarLimitesDe(mesParaCopiar);
+    } catch (e) {
+      console.warn("[CategoriasOrcamento] Falha ao copiar limites:", e);
+    } finally {
+      setCopiando(false);
+    }
+  }, [mesParaCopiar, copiando, copiarLimitesDe]);
+
   const ocupado = carregando || carregandoGasto;
 
   return (
@@ -195,6 +232,20 @@ function CategoriasOrcamentoBase({ anoExibido, mesExibido, onAbrirNovoLimite, on
           <Text style={{ fontSize: emptySize }} className="text-desactived-text text-center mt-2 px-6">
             Nenhum limite definido. Toque em + para escolher uma categoria.
           </Text>
+          {mesParaCopiar && (
+            <Pressable
+              onPress={handleCopiar}
+              disabled={copiando}
+              style={{ borderColor: colors["active-icon"] }}
+              className="mt-4 flex-row items-center gap-1.5 border rounded-lg px-3 py-2 active:opacity-70"
+              accessibilityRole="button"
+            >
+              <Ionicons name="copy-outline" size={14} color={colors["active-icon"]} />
+              <Text style={{ fontSize: emptySize, color: colors["active-icon"] }} className="font-Inter-Medium">
+                {copiando ? "Copiando..." : `Copiar limites de ${rotuloMes(mesParaCopiar, anoExibido)}`}
+              </Text>
+            </Pressable>
+          )}
         </View>
       ) : (
         limites.map((limite, index) => (

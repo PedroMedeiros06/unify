@@ -14,6 +14,7 @@ import { CategoriaId, obterCategoriaPorId } from "@/database/categorias";
 import { normalizarPadraoDescricao } from "@/database/categorizacao";
 import { salvarRegraCategorizacao } from "@/database/regrasAprendidasQueries";
 import { obterVinculoDaTransacao, ajustarVinculoAposEdicaoDeValor } from "@/database/metaTransacoesQueries";
+import { verificarAlertasOrcamento } from "@/database/alertasAutomaticos";
 
 export type Transacao = {
   id: string;
@@ -214,6 +215,8 @@ export function TransacoesProvider({ children }: { children: ReactNode }) {
       try {
         await inserirTransacao(paraLinhaBanco(id, novaTransacao));
         sinalizarMudanca();
+        // Alerta de limite do orçamento (80%/100%) — em segundo plano.
+        void verificarAlertasOrcamento();
         return id;
       } catch (e) {
         setErro(e instanceof Error ? e.message : "Erro ao salvar transação");
@@ -232,6 +235,8 @@ export function TransacoesProvider({ children }: { children: ReactNode }) {
       try {
         await inserirTransacoesEmLote(linhas);
         sinalizarMudanca();
+        // Alerta de limite do orçamento (80%/100%) — em segundo plano.
+        void verificarAlertasOrcamento();
         return linhas.map((l) => l.id);
       } catch (e) {
         setErro(e instanceof Error ? e.message : "Erro ao salvar transações");
@@ -297,6 +302,8 @@ export function TransacoesProvider({ children }: { children: ReactNode }) {
 
         aprenderComEdicaoManual(campos.nome, categoriaAnterior, campos.categoriaId);
         sinalizarMudanca();
+        // Alerta de limite do orçamento (80%/100%) — em segundo plano.
+        void verificarAlertasOrcamento();
       } catch (e) {
         setErro(e instanceof Error ? e.message : "Erro ao editar transação");
         console.error("[TransacoesContext] Falha ao editar transação:", e);

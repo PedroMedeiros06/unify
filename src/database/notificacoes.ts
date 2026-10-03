@@ -1,6 +1,7 @@
 import { Platform } from "react-native";
 import Constants, { ExecutionEnvironment } from "expo-constants";
 import {
+  OrigemNotificacao,
   registrarNotificacao,
   removerPorNotificacaoId,
   removerAgendadasFuturas,
@@ -254,6 +255,76 @@ export async function agendarNotificacaoLembrete(
     return ids.length > 0 ? ids.join(",") : null;
   } catch (erro) {
     console.error("[notificacoes] Falha ao agendar notificação de lembrete:", erro);
+    return null;
+  }
+}
+
+/**
+ * Notificação avulsa do próprio app (alerta de orçamento, meta
+ * concluída, resumo mensal). `quando` ausente = dispara agora.
+ *
+ * `identificador` fixo (ex: "relatorio-mensal") faz um novo agendamento
+ * SUBSTITUIR o anterior com o mesmo id no sistema — usado para avisos
+ * que são reagendados a cada abertura do app. A linha antiga do
+ * histórico (se ainda não disparou) é removida junto.
+ *
+ * Respeita a preferência global e nunca lança; devolve o id ou null.
+ */
+export async function enviarNotificacaoApp(opcoes: {
+  titulo: string;
+  corpo: string;
+  origem: OrigemNotificacao;
+  refId?: string | null;
+  quando?: Date | null;
+  identificador?: string;
+}): Promise<string | null> {
+  if (rodandoNoExpoGo) {
+    avisarLimitacaoExpoGo();
+    return null;
+  }
+  if (!(await notificacoesPermitidasPeloUsuario())) return null;
+
+  try {
+    const Notifications = await carregarModuloNotifications();
+    if (!(await garantirPermissao(Notifications))) return null;
+
+    if (opcoes.quando && opcoes.quando.getTime() <= Date.now()) return null;
+
+    if (opcoes.identificador) {
+      try {
+        await removerPorNotificacaoId(opcoes.identificador);
+      } catch (e) {
+        console.warn("[notificacoes] Falha ao limpar histórico do aviso substituído:", e);
+      }
+    }
+
+    const notificacaoId = await Notifications.scheduleNotificationAsync({
+      identifier: opcoes.identificador,
+      content: {
+        title: opcoes.titulo,
+        body: opcoes.corpo,
+        sound: Platform.OS === "ios" ? "default" : undefined,
+      },
+      trigger: opcoes.quando
+        ? { type: Notifications.SchedulableTriggerInputTypes.DATE, date: opcoes.quando }
+        : null,
+    });
+
+    try {
+      await registrarNotificacao({
+        titulo: opcoes.titulo,
+        corpo: opcoes.corpo,
+        disparaEm: dataHoraLocalIso(opcoes.quando ?? new Date()),
+        notificacaoId,
+        origem: opcoes.origem,
+        refId: opcoes.refId ?? null,
+      });
+    } catch (erroHistorico) {
+      console.warn("[notificacoes] Falha ao registrar notificação no histórico:", erroHistorico);
+    }
+    return notificacaoId;
+  } catch (erro) {
+    console.error("[notificacoes] Falha ao enviar notificação:", erro);
     return null;
   }
 }
