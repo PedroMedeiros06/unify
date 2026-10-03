@@ -7,6 +7,7 @@ import {
 } from "./notificacoesHistoricoQueries";
 import { obterPerfil } from "./perfilQueries";
 import { dataHoraLocalIso } from "@/utils/dateUtils";
+import { RepeticaoLembrete, proximasOcorrencias } from "@/utils/repeticaoLembrete";
 
 /**
  * Notificações locais agendadas pelo próprio app — diferente de ler
@@ -168,21 +169,38 @@ export async function agendarNotificacaoVencimento(
   }
 }
 
+// Quantas ocorrências futuras de um lembrete repetido ficam agendadas
+// de uma vez. Cobre o caso do app ficar dias sem ser aberto (só ao abrir
+// o LembretesContext avança e reagenda a janela). Semanal: 2 meses;
+// mensal: meio ano; anual: 2 anos.
+const OCORRENCIAS_AGENDADAS: Record<RepeticaoLembrete, number> = {
+  nenhuma: 1,
+  semanal: 8,
+  mensal: 6,
+  anual: 2,
+};
+
 /**
- * Agenda uma notificação local para um lembrete, na DATA e HORA exatas
- * escolhidas pelo usuário (diferente de `agendarNotificacaoVencimento`,
- * que fixa 9h). Retorna o ID da notificação agendada, ou null se não foi
- * possível agendar (Expo Go, permissão negada, ou data/hora já passada) —
- * nesses casos o lembrete ainda deve ser salvo normalmente por quem chama.
+ * Agenda notificação(ões) local(is) para um lembrete, na DATA e HORA
+ * exatas escolhidas pelo usuário (diferente de
+ * `agendarNotificacaoVencimento`, que fixa 9h). `horaHHMM` em "HH:MM".
  *
- * `horaHHMM` no formato "HH:MM" (24h).
+ * Lembrete repetido: agenda as próximas N ocorrências a partir de
+ * `dataIso` (ver OCORRENCIAS_AGENDADAS) e devolve os ids separados por
+ * vírgula — `cancelarNotificacao` entende esse formato.
+ *
+ * Retorna null se nada foi agendado (Expo Go, permissão negada,
+ * preferência desligada, ou tudo no passado) — o lembrete ainda deve
+ * ser salvo normalmente por quem chama.
  */
 export async function agendarNotificacaoLembrete(
   titulo: string,
   descricao: string | null,
   dataIso: string,
   horaHHMM: string,
-  refId: string | null = null
+  refId: string | null = null,
+  repeticao: RepeticaoLembrete = "nenhuma",
+  diaBase: number | null = null
 ): Promise<string | null> {
   if (rodandoNoExpoGo) {
     avisarLimitacaoExpoGo();
@@ -197,40 +215,43 @@ export async function agendarNotificacaoLembrete(
     const permitido = await garantirPermissao(Notifications);
     if (!permitido) return null;
 
-    const [ano, mes, dia] = dataIso.split("-").map(Number);
     const [hora, minuto] = horaHHMM.split(":").map(Number);
-    const dataNotificacao = new Date(ano, mes - 1, dia, hora, minuto, 0);
-
-    if (dataNotificacao.getTime() <= Date.now()) return null;
-
     const corpo = descricao?.trim() ? descricao.trim() : "Lembrete";
+    const ids: string[] = [];
 
-    const notificacaoId = await Notifications.scheduleNotificationAsync({
-      content: {
-        title: titulo,
-        body: corpo,
-        sound: Platform.OS === "ios" ? "default" : undefined,
-      },
-      trigger: {
-        type: Notifications.SchedulableTriggerInputTypes.DATE,
-        date: dataNotificacao,
-      },
-    });
+    for (const data of proximasOcorrencias(dataIso, repeticao, diaBase, OCORRENCIAS_AGENDADAS[repeticao])) {
+      const [ano, mes, dia] = data.split("-").map(Number);
+      const dataNotificacao = new Date(ano, mes - 1, dia, hora, minuto, 0);
+      if (dataNotificacao.getTime() <= Date.now()) continue;
 
-    try {
-      await registrarNotificacao({
-        titulo,
-        corpo,
-        disparaEm: dataHoraLocalIso(dataNotificacao),
-        notificacaoId,
-        origem: "lembrete",
-        refId,
+      const notificacaoId = await Notifications.scheduleNotificationAsync({
+        content: {
+          title: titulo,
+          body: corpo,
+          sound: Platform.OS === "ios" ? "default" : undefined,
+        },
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.DATE,
+          date: dataNotificacao,
+        },
       });
-    } catch (erroHistorico) {
-      console.warn("[notificacoes] Falha ao registrar notificação no histórico:", erroHistorico);
+      ids.push(notificacaoId);
+
+      try {
+        await registrarNotificacao({
+          titulo,
+          corpo,
+          disparaEm: dataHoraLocalIso(dataNotificacao),
+          notificacaoId,
+          origem: "lembrete",
+          refId,
+        });
+      } catch (erroHistorico) {
+        console.warn("[notificacoes] Falha ao registrar notificação no histórico:", erroHistorico);
+      }
     }
 
-    return notificacaoId;
+    return ids.length > 0 ? ids.join(",") : null;
   } catch (erro) {
     console.error("[notificacoes] Falha ao agendar notificação de lembrete:", erro);
     return null;
@@ -248,6 +269,12 @@ export async function agendarNotificacaoLembrete(
  */
 export async function cancelarNotificacao(notificacaoId: string | null): Promise<void> {
   if (!notificacaoId) return;
+
+  // Lembrete repetido guarda vários ids separados por vírgula.
+  if (notificacaoId.includes(",")) {
+    for (const id of notificacaoId.split(",")) await cancelarNotificacao(id.trim() || null);
+    return;
+  }
 
   // A remoção do histórico independe do Expo Go — a linha pode ter sido
   // gravada num build anterior (dev/produção) e o app estar rodando no

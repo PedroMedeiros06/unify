@@ -9,6 +9,7 @@ import { dataHoraLocalIso, dataIsoParaBR } from "@/utils/dateUtils";
 import { SeletorData } from "@/components/common/SeletorData";
 import { ModalCentralizado } from "@/components/common/ModalCentralizado";
 import { useDialogo } from "@/context/DialogoContext";
+import { RepeticaoLembrete, ROTULO_REPETICAO } from "@/utils/repeticaoLembrete";
 
 /** "HH:MM" -> Date de hoje com essa hora (só para alimentar o picker). */
 function horaParaDate(horaHHMM: string | null): Date {
@@ -44,6 +45,7 @@ function EditarLembreteModalBase({ visivel, lembreteEditando, onFechar, onSalvar
   const [descricao, setDescricao] = useState("");
   const [dataIso, setDataIso] = useState<string | null>(null);
   const [hora, setHora] = useState<string | null>(null);
+  const [repeticao, setRepeticao] = useState<RepeticaoLembrete>("nenhuma");
   const [mostrarPickerHora, setMostrarPickerHora] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [excluindo, setExcluindo] = useState(false);
@@ -56,11 +58,13 @@ function EditarLembreteModalBase({ visivel, lembreteEditando, onFechar, onSalvar
       setDescricao(lembreteEditando.descricao ?? "");
       setDataIso(lembreteEditando.data);
       setHora(lembreteEditando.hora);
+      setRepeticao(lembreteEditando.repeticao);
     } else {
       setTitulo("");
       setDescricao("");
       setDataIso(null);
       setHora(null);
+      setRepeticao("nenhuma");
     }
   }, [visivel, lembreteEditando]);
 
@@ -82,7 +86,8 @@ function EditarLembreteModalBase({ visivel, lembreteEditando, onFechar, onSalvar
     // Data/hora já passou: o lembrete é salvo, mas nenhuma notificação
     // vai disparar. Avisa antes, em vez de deixar o usuário achar que
     // será lembrado.
-    if (`${dataIso}T${hora}` <= dataHoraLocalIso().slice(0, 16)) {
+    // Repetido não precisa do aviso: começa na próxima ocorrência.
+    if (repeticao === "nenhuma" && `${dataIso}T${hora}` <= dataHoraLocalIso().slice(0, 16)) {
       const ok = await confirmar({
         titulo: "Horário já passou",
         mensagem: "Este lembrete fica salvo, mas não vai gerar notificação porque a data e a hora já passaram.",
@@ -98,6 +103,7 @@ function EditarLembreteModalBase({ visivel, lembreteEditando, onFechar, onSalvar
         descricao: descricao.trim() ? descricao.trim() : null,
         data: dataIso,
         hora,
+        repeticao,
       });
       onFechar();
     } catch {
@@ -105,7 +111,7 @@ function EditarLembreteModalBase({ visivel, lembreteEditando, onFechar, onSalvar
     } finally {
       setSalvando(false);
     }
-  }, [formularioValido, dataIso, hora, salvando, titulo, descricao, lembreteEditando, onSalvar, onFechar, avisar, confirmar]);
+  }, [formularioValido, dataIso, hora, repeticao, salvando, titulo, descricao, lembreteEditando, onSalvar, onFechar, avisar, confirmar]);
 
   const handleExcluir = useCallback(async () => {
     if (!lembreteEditando || !onExcluir) return;
@@ -201,10 +207,39 @@ function EditarLembreteModalBase({ visivel, lembreteEditando, onFechar, onSalvar
         />
       )}
 
+      <Text style={{ fontSize: labelSize }} className="text-second-text mb-1.5">
+        Repetir
+      </Text>
+      <View className="flex-row flex-wrap gap-2 mb-4">
+        {(Object.keys(ROTULO_REPETICAO) as RepeticaoLembrete[]).map((r) => {
+          const ativo = r === repeticao;
+          return (
+            <Pressable
+              key={r}
+              onPress={() => setRepeticao(r)}
+              disabled={ocupado}
+              style={{
+                borderColor: ativo ? colors["active-icon"] : colors["input-border"],
+                backgroundColor: ativo ? `${colors["active-icon"]}22` : "transparent",
+              }}
+              className="px-3 py-2 rounded-lg border"
+              accessibilityRole="radio"
+              accessibilityState={{ checked: ativo }}
+            >
+              <Text style={{ fontSize: labelSize, color: ativo ? colors["active-icon"] : colors["second-text"] }}>
+                {ROTULO_REPETICAO[r]}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
       <View className="flex-row items-start gap-2 bg-active-icon/10 rounded-lg p-2.5 mb-5">
         <Ionicons name="notifications-outline" color={colors["active-icon"]} size={14} style={{ marginTop: 1 }} />
         <Text style={{ fontSize: labelSize }} className="text-second-text flex-1">
-          Você receberá uma notificação em {dataIso ? dataIsoParaBR(dataIso) : "--"} às {hora ?? "--"}.
+          {repeticao === "nenhuma"
+            ? `Você receberá uma notificação em ${dataIso ? dataIsoParaBR(dataIso) : "--"} às ${hora ?? "--"}.`
+            : `${ROTULO_REPETICAO[repeticao]} às ${hora ?? "--"}, a partir de ${dataIso ? dataIsoParaBR(dataIso) : "--"}.`}
         </Text>
       </View>
 

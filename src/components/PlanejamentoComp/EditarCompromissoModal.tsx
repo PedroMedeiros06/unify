@@ -8,6 +8,8 @@ import { dataIsoParaBR } from "@/utils/dateUtils";
 import { SeletorData } from "@/components/common/SeletorData";
 import { ModalCentralizado } from "@/components/common/ModalCentralizado";
 import { useDialogo } from "@/context/DialogoContext";
+import { SeletorCategoria } from "@/components/common/SeletorCategoria";
+import { CategoriaId } from "@/database/categorias";
 
 // Paleta fixa de "cor do ícone do compromisso" — são rótulos de cor
 // escolhidos pelo usuário, não tokens do tema, então não mudam com
@@ -41,6 +43,7 @@ function EditarCompromissoModalBase({ visivel, compromissoEditando, onFechar, on
   const [valorTexto, setValorTexto] = useState("");
   const [dataVencimentoIso, setDataVencimentoIso] = useState<string | null>(null);
   const [iconeSelecionado, setIconeSelecionado] = useState(ICONES_DISPONIVEIS[0]);
+  const [categoriaId, setCategoriaId] = useState<CategoriaId | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [excluindo, setExcluindo] = useState(false);
 
@@ -53,11 +56,13 @@ function EditarCompromissoModalBase({ visivel, compromissoEditando, onFechar, on
       setDataVencimentoIso(compromissoEditando.dataVencimento);
       const icone = ICONES_DISPONIVEIS.find((i) => i.nome === compromissoEditando.icone) ?? ICONES_DISPONIVEIS[0];
       setIconeSelecionado(icone);
+      setCategoriaId((compromissoEditando.categoriaId as CategoriaId | null) ?? null);
     } else {
       setNome("");
       setValorTexto("");
       setDataVencimentoIso(null);
       setIconeSelecionado(ICONES_DISPONIVEIS[0]);
+      setCategoriaId(null);
     }
   }, [visivel, compromissoEditando]);
 
@@ -84,6 +89,7 @@ function EditarCompromissoModalBase({ visivel, compromissoEditando, onFechar, on
         dataVencimento: dataVencimentoIso,
         icone: iconeSelecionado.nome,
         cor: iconeSelecionado.cor,
+        categoriaId,
       });
       onFechar();
     } catch {
@@ -91,7 +97,7 @@ function EditarCompromissoModalBase({ visivel, compromissoEditando, onFechar, on
     } finally {
       setSalvando(false);
     }
-  }, [formularioValido, dataVencimentoIso, salvando, nome, valorNumerico, iconeSelecionado, compromissoEditando, onSalvar, onFechar, avisar]);
+  }, [formularioValido, dataVencimentoIso, salvando, nome, valorNumerico, iconeSelecionado, categoriaId, compromissoEditando, onSalvar, onFechar, avisar]);
 
   const handleExcluir = useCallback(async () => {
     if (!compromissoEditando || !onExcluir) return;
@@ -178,6 +184,14 @@ function EditarCompromissoModalBase({ visivel, compromissoEditando, onFechar, on
             </Pressable>
           );
         })}
+      </View>
+
+      <View className="mb-4">
+        <SeletorCategoria
+          label="Categoria (opcional)"
+          categoriaSelecionada={categoriaId}
+          onSelecionar={setCategoriaId}
+        />
       </View>
 
       <View className="bg-input-background border border-lines-divisions rounded-xl p-3 flex-row items-center gap-3 mb-2">

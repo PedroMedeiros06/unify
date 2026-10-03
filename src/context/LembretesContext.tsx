@@ -1,13 +1,17 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, ReactNode } from "react";
+import { AppState } from "react-native";
 import {
   listarLembretes,
   inserirLembrete,
   atualizarLembrete,
   atualizarNotificacaoIdLembrete,
   excluirLembrete,
+  avancarLembrete,
+  diaBaseDe,
   Lembrete,
   CamposLembrete,
 } from "@/database/lembretesQueries";
+import { primeiraOcorrenciaFutura } from "@/utils/repeticaoLembrete";
 import { agendarNotificacaoLembrete, cancelarNotificacao } from "@/database/notificacoes";
 import { dataHojeIso } from "@/utils/dateUtils";
 
@@ -27,6 +31,39 @@ type LembretesContextValue = {
 
 const LembretesContext = createContext<LembretesContextValue | null>(null);
 
+/**
+ * Lembretes repetidos cuja ocorrência atual já passou: avança `data`
+ * para a próxima ocorrência futura e reagenda a janela de notificações
+ * a partir dela. As notificações que já dispararam ficam no histórico;
+ * as ainda pendentes da janela antiga são canceladas e reagendadas
+ * (mesmas datas, ids novos). Devolve a lista atualizada.
+ */
+async function avancarRepetidosVencidos(lista: Lembrete[]): Promise<Lembrete[]> {
+  let mudou = false;
+  const resultado: Lembrete[] = [];
+  for (const l of lista) {
+    if (l.repeticao === "nenhuma") {
+      resultado.push(l);
+      continue;
+    }
+    const novaData = primeiraOcorrenciaFutura(l.data, l.hora, l.repeticao, l.diaBase);
+    if (novaData === l.data) {
+      resultado.push(l);
+      continue;
+    }
+    await cancelarNotificacao(l.notificacaoId);
+    const ids = await agendarNotificacaoLembrete(l.titulo, l.descricao, novaData, l.hora, l.id, l.repeticao, l.diaBase);
+    await avancarLembrete(l.id, novaData, ids);
+    resultado.push({ ...l, data: novaData, notificacaoId: ids });
+    mudou = true;
+  }
+  return mudou ? resultado : lista;
+}
+
+function ordenarLembretes(lista: Lembrete[]): Lembrete[] {
+  return [...lista].sort((a, b) => a.data.localeCompare(b.data) || a.hora.localeCompare(b.hora));
+}
+
 export function LembretesProvider({ children }: { children: ReactNode }) {
   const [lembretes, setLembretes] = useState<Lembrete[]>([]);
   const [carregando, setCarregando] = useState(true);
@@ -35,13 +72,22 @@ export function LembretesProvider({ children }: { children: ReactNode }) {
   const carregar = useCallback(async () => {
     try {
       setErro(null);
-      const dados = await listarLembretes();
-      setLembretes(dados);
+      const dados = await avancarRepetidosVencidos(await listarLembretes());
+      setLembretes(ordenarLembretes(dados));
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Erro ao carregar lembretes");
       console.error("[LembretesContext] Falha ao carregar lembretes:", e);
     }
   }, []);
+
+  // Ao voltar do background, uma ocorrência de lembrete repetido pode
+  // ter passado enquanto o app estava fechado — avança e reagenda.
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (estado) => {
+      if (estado === "active") void carregar();
+    });
+    return () => sub.remove();
+  }, [carregar]);
 
   useEffect(() => {
     let ativo = true;
@@ -62,11 +108,15 @@ export function LembretesProvider({ children }: { children: ReactNode }) {
     };
   }, [carregar]);
 
-  const ordenar = (lista: Lembrete[]) =>
-    [...lista].sort((a, b) => a.data.localeCompare(b.data) || a.hora.localeCompare(b.hora));
-
-  const adicionarLembrete = useCallback(async (campos: CamposLembrete) => {
+  const adicionarLembrete = useCallback(async (camposInformados: CamposLembrete) => {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    // Repetido com data inicial já passada: começa na próxima ocorrência
+    // (o dia_base continua sendo o da data escolhida).
+    const diaBase = diaBaseDe(camposInformados);
+    const campos = {
+      ...camposInformados,
+      data: primeiraOcorrenciaFutura(camposInformados.data, camposInformados.hora, camposInformados.repeticao, diaBase),
+    };
 
     try {
       const notificacaoId = await agendarNotificacaoLembrete(
@@ -74,12 +124,16 @@ export function LembretesProvider({ children }: { children: ReactNode }) {
         campos.descricao,
         campos.data,
         campos.hora,
-        id
+        id,
+        campos.repeticao,
+        diaBase
       );
 
-      await inserirLembrete(id, campos, notificacaoId);
+      // dia_base sai da data ESCOLHIDA; depois avança para a ocorrência futura.
+      await inserirLembrete(id, camposInformados, notificacaoId);
+      if (campos.data !== camposInformados.data) await avancarLembrete(id, campos.data, notificacaoId);
       setLembretes((prev) =>
-        ordenar([...prev, { id, ...campos, notificacaoId, criadoEm: new Date().toISOString() }])
+        ordenarLembretes([...prev, { id, ...campos, diaBase, notificacaoId, criadoEm: new Date().toISOString() }])
       );
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Erro ao criar lembrete");
@@ -88,8 +142,13 @@ export function LembretesProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const editarLembrete = useCallback(
-    async (id: string, campos: CamposLembrete) => {
+    async (id: string, camposInformados: CamposLembrete) => {
       const atual = lembretes.find((l) => l.id === id);
+      const diaBase = diaBaseDe(camposInformados);
+      const campos = {
+        ...camposInformados,
+        data: primeiraOcorrenciaFutura(camposInformados.data, camposInformados.hora, camposInformados.repeticao, diaBase),
+      };
 
       try {
         await cancelarNotificacao(atual?.notificacaoId ?? null);
@@ -98,13 +157,17 @@ export function LembretesProvider({ children }: { children: ReactNode }) {
           campos.descricao,
           campos.data,
           campos.hora,
-          id
+          id,
+          campos.repeticao,
+          diaBase
         );
 
-        await atualizarLembrete(id, campos, novaNotificacaoId);
+        // dia_base sai da data ESCOLHIDA (antes de avançar).
+        await atualizarLembrete(id, camposInformados, novaNotificacaoId);
+        if (campos.data !== camposInformados.data) await avancarLembrete(id, campos.data, novaNotificacaoId);
         setLembretes((prev) =>
-          ordenar(
-            prev.map((l) => (l.id === id ? { ...l, ...campos, notificacaoId: novaNotificacaoId } : l))
+          ordenarLembretes(
+            prev.map((l) => (l.id === id ? { ...l, ...campos, diaBase, notificacaoId: novaNotificacaoId } : l))
           )
         );
       } catch (e) {
@@ -145,7 +208,7 @@ export function LembretesProvider({ children }: { children: ReactNode }) {
         if (ativar) {
           const noFuturo = l.data > hojeIso || (l.data === hojeIso && l.hora > horaAgora);
           if (!noFuturo || l.notificacaoId) continue;
-          const novoId = await agendarNotificacaoLembrete(l.titulo, l.descricao, l.data, l.hora, l.id);
+          const novoId = await agendarNotificacaoLembrete(l.titulo, l.descricao, l.data, l.hora, l.id, l.repeticao, l.diaBase);
           if (novoId) atualizacoes.set(l.id, novoId);
         } else {
           if (!l.notificacaoId) continue;

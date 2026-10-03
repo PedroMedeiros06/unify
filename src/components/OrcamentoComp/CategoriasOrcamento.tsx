@@ -6,6 +6,7 @@ import { View, Text, Pressable, ActivityIndicator } from "react-native";
 import { memo, useEffect, useMemo, useState } from "react";
 import { obterCategoriaPorId } from "@/database/categorias";
 import { listarResumoPorCategoria } from "@/database/queries";
+import { somarCompromissosNaoPagosPorCategoria } from "@/database/compromissosQueries";
 import {
   LimiteCategoria,
   calcularPercentualLimite,
@@ -29,11 +30,14 @@ function paraIso(ano: number, mes0a11: number, dia: number): string {
 const ItemLimite = memo(function ItemLimite({
   limite,
   gasto,
+  aVencer,
   isLast,
   onPress,
 }: {
   limite: LimiteCategoria;
   gasto: number;
+  // Compromissos não pagos desta categoria no mês (ainda vão sair).
+  aVencer: number;
   isLast: boolean;
   onPress: (limite: LimiteCategoria) => void;
 }) {
@@ -75,6 +79,7 @@ const ItemLimite = memo(function ItemLimite({
             </Text>
             <Text style={{ fontSize: limiteSize }} className="text-desactived-text" numberOfLines={1}>
               Limite: {FormatToCurrency(limite.valorLimite)}
+              {aVencer > 0 ? ` · + ${FormatToCurrency(aVencer)} a vencer` : ""}
             </Text>
           </View>
 
@@ -127,6 +132,7 @@ function CategoriasOrcamentoBase({ anoExibido, mesExibido, onAbrirNovoLimite, on
   // Realizado por categoria no mês — reaproveita listarResumoPorCategoria
   // (GROUP BY no banco), sem query duplicada.
   const [gastoPorCategoria, setGastoPorCategoria] = useState<Map<string, number>>(new Map());
+  const [aVencerPorCategoria, setAVencerPorCategoria] = useState<Map<string, number>>(new Map());
   const [carregandoGasto, setCarregandoGasto] = useState(true);
 
   useEffect(() => {
@@ -137,14 +143,15 @@ function CategoriasOrcamentoBase({ anoExibido, mesExibido, onAbrirNovoLimite, on
     const fimObj = new Date(anoExibido, mesExibido + 1, 0);
     const fim = paraIso(fimObj.getFullYear(), fimObj.getMonth(), fimObj.getDate());
 
-    listarResumoPorCategoria({ dataInicio: inicio, dataFim: fim })
-      .then((linhas) => {
+    Promise.all([listarResumoPorCategoria({ dataInicio: inicio, dataFim: fim }), somarCompromissosNaoPagosPorCategoria(inicio, fim)])
+      .then(([linhas, aVencer]) => {
         if (!ativo) return;
         const mapa = new Map<string, number>();
         for (const linha of linhas) {
           if (linha.categoriaId) mapa.set(linha.categoriaId, linha.totalSaidas);
         }
         setGastoPorCategoria(mapa);
+        setAVencerPorCategoria(aVencer);
       })
       .catch((e) => console.warn("[CategoriasOrcamento] Falha ao carregar dados:", e))
       .finally(() => {
@@ -195,6 +202,7 @@ function CategoriasOrcamentoBase({ anoExibido, mesExibido, onAbrirNovoLimite, on
             key={limite.categoriaId}
             limite={limite}
             gasto={gastoPorCategoria.get(limite.categoriaId) ?? 0}
+            aVencer={aVencerPorCategoria.get(limite.categoriaId) ?? 0}
             isLast={index === limites.length - 1}
             onPress={onEditarLimite}
           />

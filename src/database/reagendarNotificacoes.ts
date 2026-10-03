@@ -1,5 +1,6 @@
 import { listarCompromissos, atualizarNotificacaoIdCompromisso } from "./compromissosQueries";
-import { listarLembretes, atualizarNotificacaoIdLembrete } from "./lembretesQueries";
+import { listarLembretes, atualizarNotificacaoIdLembrete, avancarLembrete } from "./lembretesQueries";
+import { primeiraOcorrenciaFutura } from "@/utils/repeticaoLembrete";
 import { agendarNotificacaoVencimento, agendarNotificacaoLembrete } from "./notificacoes";
 import { dataHojeIso, dataHoraLocalIso } from "@/utils/dateUtils";
 
@@ -31,9 +32,12 @@ export async function reagendarNotificacoesDoBanco(): Promise<void> {
   }
 
   for (const l of lembretes) {
+    // Repetido: começa da próxima ocorrência ainda não passada.
+    const data = primeiraOcorrenciaFutura(l.data, l.hora, l.repeticao, l.diaBase);
     // "aaaa-mm-ddTHH:MM" compara como texto com o agora local.
-    if (`${l.data}T${l.hora}` <= agoraLocal.slice(0, 16)) continue;
-    const id = await agendarNotificacaoLembrete(l.titulo, l.descricao, l.data, l.hora, l.id);
-    if (id) await atualizarNotificacaoIdLembrete(l.id, id);
+    if (`${data}T${l.hora}` <= agoraLocal.slice(0, 16)) continue;
+    const id = await agendarNotificacaoLembrete(l.titulo, l.descricao, data, l.hora, l.id, l.repeticao, l.diaBase);
+    if (data !== l.data) await avancarLembrete(l.id, data, id);
+    else if (id) await atualizarNotificacaoIdLembrete(l.id, id);
   }
 }

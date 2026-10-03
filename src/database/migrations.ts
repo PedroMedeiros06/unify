@@ -601,6 +601,18 @@ const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    versao: 23,
+    descricao:
+      "Compromissos ganham categoria_id (opcional — mostra no Orçamento quanto ainda vai sair por categoria). Lembretes ganham repeticao ('nenhuma' | 'semanal' | 'mensal' | 'anual') e dia_base (dia do mês original, para o mensal/anual não 'encolher' depois de um mês curto). Num lembrete repetido, `data` é sempre a próxima ocorrência.",
+    async executar(db) {
+      await db.execAsync(`ALTER TABLE compromissos ADD COLUMN categoria_id TEXT;`);
+      await db.execAsync(
+        `ALTER TABLE lembretes ADD COLUMN repeticao TEXT NOT NULL DEFAULT 'nenhuma' CHECK (repeticao IN ('nenhuma', 'semanal', 'mensal', 'anual'));`
+      );
+      await db.execAsync(`ALTER TABLE lembretes ADD COLUMN dia_base INTEGER;`);
+    },
+  },
 ];
 
 export async function rodarMigrations(db: SQLiteDatabase): Promise<void> {

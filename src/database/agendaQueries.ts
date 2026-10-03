@@ -1,5 +1,6 @@
 import { listarCompromissosNoPeriodo, Compromisso } from "@/database/compromissosQueries";
 import { listarLembretesNoPeriodo, Lembrete } from "@/database/lembretesQueries";
+import { ocorrenciasNoPeriodo as datasDoLembreteNoPeriodo, ROTULO_REPETICAO } from "@/utils/repeticaoLembrete";
 import { listarRecorrencias } from "@/database/recorrenciasQueries";
 import { listarMetasComPrazoNoPeriodo, Meta } from "@/database/metasQueries";
 import { gerarOcorrenciasDoMes, OcorrenciaDoMes } from "@/database/gerarOcorrenciasPrevistas";
@@ -52,13 +53,17 @@ function compromissoParaEvento(c: Compromisso): EventoAgenda {
   };
 }
 
-function lembreteParaEvento(l: Lembrete): EventoAgenda {
+function lembreteParaEvento(l: Lembrete, data: string = l.data): EventoAgenda {
+  const repetido = l.repeticao !== "nenhuma";
   return {
-    id: `lembrete-${l.id}`,
+    // Repetido: uma entrada por ocorrência (id único por data), todas na
+    // mesma série.
+    id: repetido ? `lembrete-${l.id}-${data}` : `lembrete-${l.id}`,
+    serieId: repetido ? `lembrete-${l.id}` : undefined,
     tipo: "lembrete",
     titulo: l.titulo,
-    subtitulo: `Lembrete · ${l.hora}`,
-    data: l.data,
+    subtitulo: repetido ? `Lembrete · ${l.hora} · ${ROTULO_REPETICAO[l.repeticao].toLowerCase()}` : `Lembrete · ${l.hora}`,
+    data,
     valor: null,
     positivo: true,
     icone: "alarm-outline",
@@ -159,7 +164,11 @@ export async function listarEventosAgenda(
 
   const eventos = [
     ...compromissosNoPeriodo.map(compromissoParaEvento),
-    ...lembretesNoPeriodo.map(lembreteParaEvento),
+    // Repetidos: expande as ocorrências dentro do período (a partir da
+    // próxima — ocorrências passadas não são reconstruídas).
+    ...lembretesNoPeriodo.flatMap((l) =>
+      datasDoLembreteNoPeriodo(l.data, l.repeticao, l.diaBase, inicioIso, fimIso).map((d) => lembreteParaEvento(l, d))
+    ),
     ...metasComPrazo.map(metaParaEvento),
     ...ocorrenciasNoPeriodo.map(ocorrenciaParaEvento),
   ];

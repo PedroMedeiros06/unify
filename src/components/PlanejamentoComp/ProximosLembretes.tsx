@@ -7,6 +7,7 @@ import { useLembretes } from "@/context/LembretesContext";
 import { Lembrete, CamposLembrete } from "@/database/lembretesQueries";
 import { EditarLembreteModal } from "@/components/PlanejamentoComp/EditarLembreteModal";
 import { dataIsoParaBR } from "@/utils/dateUtils";
+import { ROTULO_REPETICAO } from "@/utils/repeticaoLembrete";
 import { CompromissosSkeleton } from "@/components/common/CompromissosSkeleton";
 
 function calcularDiasRestantes(dataIso: string): number {
@@ -67,6 +68,7 @@ const LembreteItem = memo(function LembreteItem({
         </Text>
         <Text style={{ fontSize: itemSubtitleSize }} className="text-desactived-text" numberOfLines={1}>
           {dataIsoParaBR(lembrete.data)} às {lembrete.hora}
+          {lembrete.repeticao !== "nenhuma" ? ` · ${ROTULO_REPETICAO[lembrete.repeticao].toLowerCase()}` : ""}
         </Text>
       </View>
 

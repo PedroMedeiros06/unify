@@ -89,8 +89,8 @@ export async function contarUsoCategoria(id: string): Promise<UsoCategoria> {
 
 /**
  * Exclui a categoria. Não há FK para categorias (o id é texto livre em
- * várias tabelas), então a limpeza é explícita: transações e
- * recorrências ficam "sem categoria", limites e regras aprendidas que
+ * várias tabelas), então a limpeza é explícita: transações,
+ * recorrências e compromissos ficam "sem categoria", limites e regras aprendidas que
  * apontavam para ela são removidos. Meses congelados do orçamento
  * (ocorrencia_prevista) mantêm o snapshot.
  */
@@ -103,6 +103,7 @@ export async function excluirCategoriaPersonalizada(id: string): Promise<void> {
         [id]
       );
       await db.runAsync(`UPDATE recorrencias SET categoria_id = NULL WHERE categoria_id = ?;`, [id]);
+      await db.runAsync(`UPDATE compromissos SET categoria_id = NULL WHERE categoria_id = ?;`, [id]);
       await db.runAsync(`DELETE FROM limite_categoria WHERE categoria_id = ?;`, [id]);
       await db.runAsync(`DELETE FROM regras_categorizacao WHERE categoria_id = ?;`, [id]);
       await db.runAsync(`DELETE FROM categorias_personalizadas WHERE id = ?;`, [id]);

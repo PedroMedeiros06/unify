@@ -14,6 +14,9 @@ export type Compromisso = {
   pago: boolean;
   transacaoId: string | null;
   notificacaoId: string | null;
+  // Categoria opcional (migration 23) — usada pelo Orçamento para
+  // mostrar quanto ainda vai sair em cada categoria no mês.
+  categoriaId: string | null;
   criadoEm: string;
 };
 
@@ -23,6 +26,7 @@ export type CamposCompromisso = {
   dataVencimento: string;
   icone: string;
   cor: string;
+  categoriaId: string | null;
 };
 
 type LinhaBrutaCompromisso = Omit<Compromisso, "pago">;
@@ -37,7 +41,8 @@ export async function listarCompromissos(): Promise<Compromisso[]> {
     const linhas = await db.getAllAsync<LinhaBrutaCompromisso>(
       `SELECT
          id, nome, valor, data_vencimento as dataVencimento, icone, cor,
-         transacao_id as transacaoId, notificacao_id as notificacaoId, criado_em as criadoEm
+         transacao_id as transacaoId, notificacao_id as notificacaoId, categoria_id as categoriaId,
+         criado_em as criadoEm
        FROM compromissos
        ORDER BY data_vencimento ASC;`
     );
@@ -52,7 +57,8 @@ export async function listarCompromissosNoPeriodo(inicioIso: string, fimIso: str
     const linhas = await db.getAllAsync<LinhaBrutaCompromisso>(
       `SELECT
          id, nome, valor, data_vencimento as dataVencimento, icone, cor,
-         transacao_id as transacaoId, notificacao_id as notificacaoId, criado_em as criadoEm
+         transacao_id as transacaoId, notificacao_id as notificacaoId, categoria_id as categoriaId,
+         criado_em as criadoEm
        FROM compromissos
        WHERE data_vencimento >= ? AND data_vencimento <= ?
        ORDER BY data_vencimento ASC;`,
@@ -70,9 +76,9 @@ export async function inserirCompromisso(
   return executarNaFila(async () => {
     const db = await getDatabase();
     await db.runAsync(
-      `INSERT INTO compromissos (id, nome, valor, data_vencimento, icone, cor, pago, notificacao_id)
-       VALUES (?, ?, ?, ?, ?, ?, 0, ?);`,
-      [id, campos.nome, campos.valor, campos.dataVencimento, campos.icone, campos.cor, notificacaoId]
+      `INSERT INTO compromissos (id, nome, valor, data_vencimento, icone, cor, pago, notificacao_id, categoria_id)
+       VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?);`,
+      [id, campos.nome, campos.valor, campos.dataVencimento, campos.icone, campos.cor, notificacaoId, campos.categoriaId]
     );
   });
 }
@@ -86,9 +92,9 @@ export async function atualizarCompromisso(
     const db = await getDatabase();
     await db.runAsync(
       `UPDATE compromissos
-       SET nome = ?, valor = ?, data_vencimento = ?, icone = ?, cor = ?, notificacao_id = ?
+       SET nome = ?, valor = ?, data_vencimento = ?, icone = ?, cor = ?, notificacao_id = ?, categoria_id = ?
        WHERE id = ?;`,
-      [campos.nome, campos.valor, campos.dataVencimento, campos.icone, campos.cor, notificacaoId, id]
+      [campos.nome, campos.valor, campos.dataVencimento, campos.icone, campos.cor, notificacaoId, campos.categoriaId, id]
     );
   });
 }
@@ -165,5 +171,28 @@ export async function somarCompromissosNaoPagosNoPeriodo(
       [inicioIso, fimIso]
     );
     return resultado?.total ?? 0;
+  });
+}
+
+/**
+ * Compromissos NÃO pagos com vencimento em [inicioIso, fimIso], somados
+ * por categoria — o "a vencer" de cada linha do Orçamento. Sem
+ * categoria ficam de fora (não há linha para eles).
+ */
+export async function somarCompromissosNaoPagosPorCategoria(
+  inicioIso: string,
+  fimIso: string
+): Promise<Map<string, number>> {
+  return executarNaFila(async () => {
+    const db = await getDatabase();
+    const linhas = await db.getAllAsync<{ categoriaId: string; total: number }>(
+      `SELECT categoria_id as categoriaId, COALESCE(SUM(valor), 0) as total
+       FROM compromissos
+       WHERE transacao_id IS NULL AND categoria_id IS NOT NULL
+         AND data_vencimento >= ? AND data_vencimento <= ?
+       GROUP BY categoria_id;`,
+      [inicioIso, fimIso]
+    );
+    return new Map(linhas.map((l) => [l.categoriaId, l.total]));
   });
 }
