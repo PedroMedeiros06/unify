@@ -15,6 +15,7 @@ import { useTransacoes, Transacao, mapearParaTransacaoUI } from "@/context/Trans
 import { listarTransacoesFiltradas, contarTransacoesFiltradas } from "@/database/queries";
 import { useContas } from "@/context/ContasContext";
 import { useNavigation } from "@/context/NavigationContext";
+import { ExportarModal } from "@/components/TransacoesComp/ExportarModal";
 
 // Linhas por página do scroll infinito. ~4 telas de altura: a primeira
 // carga é rápida e o usuário raramente chega à 2ª página sem filtrar.
@@ -136,6 +137,7 @@ export function Transferencias() {
   const [modalPeriodoAberto, setModalPeriodoAberto] = useState(false);
   const [transacoes, setTransacoes] = useState<Transacao[]>([]);
   const [total, setTotal] = useState(0);
+  const [exportarAberto, setExportarAberto] = useState(false);
   const [carregando, setCarregando] = useState(true);
   const [carregandoMais, setCarregandoMais] = useState(false);
   const [transacaoSelecionada, setTransacaoSelecionada] = useState<Transacao | null>(null);
@@ -224,6 +226,14 @@ export function Transferencias() {
           </View>
 
           <Pressable
+            onPress={() => setExportarAberto(true)}
+            className="w-9 h-9 mr-2 rounded-xl bg-input-background border border-input-border items-center justify-center active:opacity-70"
+            accessibilityRole="button"
+            accessibilityLabel="Exportar transações em CSV ou PDF"
+          >
+            <Ionicons name="share-outline" color={colors["second-text"]} size={17} />
+          </Pressable>
+          <Pressable
             onPress={abrirNovaTransacao}
             className="flex-row items-center gap-1.5 bg-active-icon px-3 py-2 rounded-xl active:opacity-80"
             accessibilityRole="button"
@@ -251,6 +261,7 @@ export function Transferencias() {
       </View>
     ),
     [
+      colors,
       titleSize,
       subtitleSize,
       buttonTextSize,
@@ -349,6 +360,13 @@ export function Transferencias() {
         onFechar={handleFecharModal}
         onSalvar={handleSalvarEdicao}
         onExcluir={handleExcluir}
+      />
+
+      <ExportarModal
+        visivel={exportarAberto}
+        onFechar={() => setExportarAberto(false)}
+        filtros={filtrosParaQuery}
+        quantidade={total}
       />
     </View>
   );
