@@ -15,6 +15,8 @@ export type PerfilUsuario = {
   // Aparência escolhida na tela de Perfil. "sistema" segue o tema do
   // aparelho; "claro"/"escuro" forçam.
   temaPreferido: TemaPreferido;
+  // Pede biometria/PIN do aparelho para abrir o app (migration 25).
+  bloqueioAtivo: boolean;
 };
 
 /**
@@ -32,8 +34,9 @@ export async function obterPerfil(): Promise<PerfilUsuario> {
       avatar_uri: string | null;
       notificacoes_ativas: number | null;
       tema_preferido: string | null;
+      bloqueio_ativo: number | null;
     }>(
-      `SELECT nome, email, avatar_uri, notificacoes_ativas, tema_preferido FROM perfil_usuario WHERE id = 1;`
+      `SELECT nome, email, avatar_uri, notificacoes_ativas, tema_preferido, bloqueio_ativo FROM perfil_usuario WHERE id = 1;`
     );
     return {
       nome: linha?.nome ?? "",
@@ -46,6 +49,7 @@ export async function obterPerfil(): Promise<PerfilUsuario> {
         linha?.tema_preferido === "claro" || linha?.tema_preferido === "escuro"
           ? linha.tema_preferido
           : "sistema",
+      bloqueioAtivo: linha?.bloqueio_ativo === 1,
     };
   });
 }
@@ -59,14 +63,15 @@ export async function salvarPerfil(perfil: PerfilUsuario): Promise<void> {
   return executarNaFila(async () => {
     const db = await getDatabase();
     await db.runAsync(
-      `INSERT INTO perfil_usuario (id, nome, email, avatar_uri, notificacoes_ativas, tema_preferido)
-       VALUES (1, ?, ?, ?, ?, ?)
+      `INSERT INTO perfil_usuario (id, nome, email, avatar_uri, notificacoes_ativas, tema_preferido, bloqueio_ativo)
+       VALUES (1, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          nome = excluded.nome,
          email = excluded.email,
          avatar_uri = excluded.avatar_uri,
          notificacoes_ativas = excluded.notificacoes_ativas,
          tema_preferido = excluded.tema_preferido,
+         bloqueio_ativo = excluded.bloqueio_ativo,
          atualizado_em = datetime('now');`,
       [
         perfil.nome,
@@ -74,6 +79,7 @@ export async function salvarPerfil(perfil: PerfilUsuario): Promise<void> {
         perfil.avatarUri,
         perfil.notificacoesAtivas ? 1 : 0,
         perfil.temaPreferido,
+        perfil.bloqueioAtivo ? 1 : 0,
       ]
     );
   });

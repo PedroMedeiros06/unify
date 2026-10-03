@@ -56,6 +56,12 @@
         }
       ],
       "expo-sqlite",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "O Unify usa o Face ID para proteger o acesso aos seus dados financeiros."
+        }
+      ],
       "@react-native-community/datetimepicker",
       "expo-sharing",
       [

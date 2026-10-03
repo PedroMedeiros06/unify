@@ -17,6 +17,7 @@ const PERFIL_VAZIO: PerfilUsuario = {
   avatarUri: null,
   notificacoesAtivas: true,
   temaPreferido: "sistema",
+  bloqueioAtivo: false,
 };
 
 const PerfilContext = createContext<PerfilContextValue | null>(null);

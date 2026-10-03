@@ -3,6 +3,7 @@ import { View, Text, Pressable } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { memo, useCallback, useState } from "react";
 import { MenuItem } from "./MenuItem";
+import { verificarDisponibilidadeBloqueio, autenticar } from "@/utils/autenticacaoLocal";
 import { ModalCentralizado } from "@/components/common/ModalCentralizado";
 import { usePerfil } from "@/context/PerfilContext";
 import { useCompromissos } from "@/context/CompromissosContext";
@@ -55,6 +56,33 @@ function PreferenciasBase() {
       }
     },
     [temaPreferido, definirTema, avisar]
+  );
+
+  // Ligar o bloqueio exige que o aparelho tenha alguma trava (biometria
+  // ou PIN) e uma autenticação na hora — confirma que o usuário consegue
+  // desbloquear antes de prender o app. Desligar também pede, para
+  // ninguém com o celular desbloqueado na mão tirar a proteção.
+  const [aplicandoBloqueio, setAplicandoBloqueio] = useState(false);
+  const handleToggleBloqueio = useCallback(
+    async (novoValor: boolean) => {
+      if (aplicandoBloqueio || carregando) return;
+      setAplicandoBloqueio(true);
+      try {
+        if (novoValor) {
+          const disp = await verificarDisponibilidadeBloqueio();
+          if (!disp.disponivel) {
+            await avisar({ titulo: "Bloqueio indisponível", mensagem: disp.motivo });
+            return;
+          }
+        }
+        const ok = await autenticar(novoValor ? "Confirme para ativar o bloqueio" : "Confirme para desativar o bloqueio");
+        if (!ok) return;
+        await atualizarPerfil({ bloqueioAtivo: novoValor });
+      } finally {
+        setAplicandoBloqueio(false);
+      }
+    },
+    [aplicandoBloqueio, carregando, atualizarPerfil, avisar]
   );
 
   const handleToggleNotificacoes = useCallback(
@@ -117,6 +145,19 @@ function PreferenciasBase() {
         }
         toggleValue={notificacoesAtivas}
         onToggleChange={handleToggleNotificacoes}
+      />
+      <MenuItem
+        icone="finger-print-outline"
+        titulo="Bloqueio do app"
+        subtitulo={
+          aplicandoBloqueio
+            ? "Aguardando confirmação..."
+            : perfil.bloqueioAtivo
+              ? "Pede biometria ou senha do aparelho ao abrir"
+              : "Proteja seus dados com biometria ou senha"
+        }
+        toggleValue={perfil.bloqueioAtivo}
+        onToggleChange={handleToggleBloqueio}
       />
       <MenuItem
         icone="color-palette-outline"

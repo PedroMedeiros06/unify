@@ -626,6 +626,16 @@ const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    versao: 25,
+    descricao:
+      "Adiciona bloqueio_ativo em perfil_usuario: quando 1, o app pede biometria (ou o PIN/padrão do aparelho) ao abrir e ao voltar depois de um tempo em segundo plano. DEFAULT 0 = sem bloqueio, como antes.",
+    async executar(db) {
+      await db.execAsync(
+        `ALTER TABLE perfil_usuario ADD COLUMN bloqueio_ativo INTEGER NOT NULL DEFAULT 0;`
+      );
+    },
+  },
 ];
 
 export async function rodarMigrations(db: SQLiteDatabase): Promise<void> {

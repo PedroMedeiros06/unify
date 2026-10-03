@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { BackHandler, View } from "react-native";
+import { AppState, BackHandler, View } from "react-native";
 
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Footer } from "../components/Footer";
@@ -21,9 +21,15 @@ import { Categorias } from "../pages/Categorias";
 import { Relatorio } from "../pages/Relatorio";
 import { ouvirToqueEmNotificacao } from "@/database/notificacoes";
 import { agendarAvisoRelatorioMensal } from "@/database/alertasAutomaticos";
+import { usePerfil } from "@/context/PerfilContext";
+import { TelaBloqueio } from "@/components/Bloqueio/TelaBloqueio";
+
 import { useNavigation } from "@/context/NavigationContext";
 import { MenuAcaoRapida, Acao } from "@/components/common/MenuAcaoRapida";
 import { useNovaTransacao } from "@/context/NovaTransacaoContext";
+
+// Depois de quanto tempo em segundo plano o app volta a pedir desbloqueio.
+const TEMPO_PARA_REBLOQUEAR_MS = 60_000;
 
 const Screens = {
   home: Home,
@@ -82,6 +88,26 @@ export default function AppIndex() {
   // nativa ao montar e anima a saída quando já sabemos o que mostrar
   // (onboarding ou app). A rede de segurança (timeout) fica no _layout.
   const [aberturaVisivel, setAberturaVisivel] = useState(true);
+
+  // Bloqueio com biometria/PIN do aparelho (Perfil > Preferências). O
+  // perfil precisa ter carregado antes de liberar a abertura — senão o
+  // app apareceria um instante desbloqueado.
+  const { perfil, carregando: carregandoPerfil } = usePerfil();
+  const [desbloqueado, setDesbloqueado] = useState(false);
+  const saiuEm = useRef<number | null>(null);
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (estado) => {
+      if (estado === "background") {
+        saiuEm.current = Date.now();
+      } else if (estado === "active" && saiuEm.current !== null) {
+        if (Date.now() - saiuEm.current > TEMPO_PARA_REBLOQUEAR_MS) setDesbloqueado(false);
+        saiuEm.current = null;
+      }
+    });
+    return () => sub.remove();
+  }, []);
+  const mostrarBloqueio = precisaOnboarding === false && perfil.bloqueioAtivo && !desbloqueado;
+  const handleDesbloquear = useCallback(() => setDesbloqueado(true), []);
   const handleFimAbertura = useCallback(() => setAberturaVisivel(false), []);
 
   // Com o app liberado (fora do onboarding): agenda o aviso do resumo
@@ -202,8 +228,9 @@ export default function AppIndex() {
   return (
     <View style={{ flex: 1 }}>
       {conteudo}
+      {mostrarBloqueio && <TelaBloqueio onDesbloquear={handleDesbloquear} />}
       {aberturaVisivel && (
-        <AberturaAnimada pronto={precisaOnboarding !== null} onFim={handleFimAbertura} />
+        <AberturaAnimada pronto={precisaOnboarding !== null && !carregandoPerfil} onFim={handleFimAbertura} />
       )}
     </View>
   );
