@@ -3,6 +3,7 @@ import { ScrollView, Text, View } from "react-native";
 
 import { PerfilCard } from "@/components/PerfilComp/PerfilCard";
 import { Preferencias } from "@/components/PerfilComp/Preferencias";
+import { Organizacao } from "@/components/PerfilComp/Organizacao";
 import { BackupDados } from "@/components/PerfilComp/BackupDados";
 import { SuporteInformacoes } from "@/components/PerfilComp/SuporteInformacoes";
 import { FerramentasDev } from "@/components/PerfilComp/FerramentasDev";
@@ -33,6 +34,7 @@ export function Perfil() {
         </View>
 
         <PerfilCard />
+        <Organizacao />
         <Preferencias />
         <BackupDados />
         <SuporteInformacoes />

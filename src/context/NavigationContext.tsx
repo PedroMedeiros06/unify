@@ -13,7 +13,8 @@ export type ScreenType =
   | "metasConcluidas"
   | "recorrencias"
   | "notificacoes"
-  | "contas";
+  | "contas"
+  | "categorias";
 
 // Parâmetros opcionais que uma tela pode receber ao ser aberta. Cada
 // tela decide se lê algum deles no seu próprio mount. Mantido enxuto de

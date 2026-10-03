@@ -7,6 +7,7 @@ import { ThemeProvider } from "../components/theme.provider"
 import { useAppFonts } from "@/theme/fonts";
 import { TransacoesProvider } from "@/context/TransacoesContext";
 import { ContasProvider } from "@/context/ContasContext";
+import { CategoriasProvider } from "@/context/CategoriasContext";
 import { NavigationProvider } from "@/context/NavigationContext";
 import { MetasProvider } from "@/context/MetasContext";
 import { CompromissosProvider } from "@/context/CompromissosContext";
@@ -60,6 +61,7 @@ export default function RootLayout() {
         <ResetAppProvider>
           <PerfilProvider>
            <ThemeProvider>
+           <CategoriasProvider>
             <TransacoesProvider>
              <ContasProvider>
               <MetasProvider>
@@ -85,6 +87,7 @@ export default function RootLayout() {
               </MetasProvider>
              </ContasProvider>
             </TransacoesProvider>
+           </CategoriasProvider>
            </ThemeProvider>
           </PerfilProvider>
         </ResetAppProvider>

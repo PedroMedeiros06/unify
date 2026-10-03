@@ -9,10 +9,17 @@ import { colors } from "@/theme/colors";
  * publicado, mesmo que `nome` ou `icone` sejam ajustados no futuro.
  *
  * Esta lista é o único lugar que deve ser editado para adicionar,
- * renomear ou reordenar categorias. Nenhum outro módulo deve declarar
- * categorias por conta própria (ver categorizacao.ts).
+ * renomear ou reordenar categorias DO SISTEMA. Nenhum outro módulo deve
+ * declarar categorias por conta própria (ver categorizacao.ts).
+ *
+ * Categorias PERSONALIZADAS (criadas pelo usuário, tabela
+ * `categorias_personalizadas`, migration 22) têm id com prefixo "u-" e
+ * são registradas em memória por `definirCategoriasPersonalizadas`
+ * (chamado pelo CategoriasContext ao carregar/alterar). Daí em diante
+ * `obterCategoriaPorId` e `listarCategorias` já as enxergam, sem cada
+ * tela precisar consultar o banco.
  */
-export type CategoriaId =
+export type CategoriaSistemaId =
   | "transporte"
   | "mercado"
   | "alimentacao"
@@ -35,11 +42,19 @@ export type CategoriaId =
   | "viagem"
   | "outros";
 
+/** Id de categoria personalizada: sempre "u-" + sufixo gerado. */
+export type CategoriaPersonalizadaId = `u-${string}`;
+
+export type CategoriaId = CategoriaSistemaId | CategoriaPersonalizadaId;
+
 export type Categoria = {
   id: CategoriaId;
   nome: string;
   icone: keyof typeof Ionicons.glyphMap;
   cor: string;
+  // Só nas personalizadas.
+  personalizada?: boolean;
+  arquivada?: boolean;
 };
 
 export const CATEGORIAS: readonly Categoria[] = [
@@ -66,21 +81,42 @@ export const CATEGORIAS: readonly Categoria[] = [
   { id: "outros", nome: "Outros", icone: "ellipsis-horizontal-outline", cor: colors["desactived-text"] },
 ] as const;
 
-const MAPA_CATEGORIAS: Record<CategoriaId, Categoria> = CATEGORIAS.reduce(
+const MAPA_CATEGORIAS: Record<string, Categoria> = CATEGORIAS.reduce(
   (acc, categoria) => {
     acc[categoria.id] = categoria;
     return acc;
   },
-  {} as Record<CategoriaId, Categoria>
+  {} as Record<string, Categoria>
 );
+
+// Registro em memória das personalizadas (inclui arquivadas: uma
+// transação antiga ainda precisa exibir nome/ícone da categoria).
+let personalizadas: Categoria[] = [];
+let mapaPersonalizadas = new Map<string, Categoria>();
+
+/** Substitui o registro das categorias personalizadas (CategoriasContext). */
+export function definirCategoriasPersonalizadas(lista: Categoria[]): void {
+  personalizadas = lista;
+  mapaPersonalizadas = new Map(lista.map((c) => [c.id, c]));
+}
+
+/**
+ * Todas as categorias selecionáveis: as do sistema (com "Outros" por
+ * último) e, antes de "Outros", as personalizadas não arquivadas.
+ */
+export function listarCategorias(): Categoria[] {
+  const semOutros = CATEGORIAS.filter((c) => c.id !== "outros");
+  const outros = MAPA_CATEGORIAS["outros"];
+  return [...semOutros, ...personalizadas.filter((c) => !c.arquivada), outros];
+}
 
 /** Retorna a categoria pelo id, ou null se o id for inválido/desconhecido. */
 export function obterCategoriaPorId(id: string | null | undefined): Categoria | null {
   if (!id) return null;
-  return MAPA_CATEGORIAS[id as CategoriaId] ?? null;
+  return MAPA_CATEGORIAS[id] ?? mapaPersonalizadas.get(id) ?? null;
 }
 
 /** Type guard: confirma se uma string é de fato um CategoriaId válido. */
 export function ehCategoriaIdValido(id: string): id is CategoriaId {
-  return id in MAPA_CATEGORIAS;
+  return id in MAPA_CATEGORIAS || mapaPersonalizadas.has(id);
 }

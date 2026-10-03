@@ -27,6 +27,7 @@ const FORMATO_VERSAO = 1;
 const TABELAS_EM_ORDEM_DE_INSERCAO = [
   "perfil_usuario",
   "bancos",
+  "categorias_personalizadas",
   "metas",
   "transacoes",
   "compromissos",

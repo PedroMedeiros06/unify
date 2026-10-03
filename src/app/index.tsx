@@ -17,6 +17,7 @@ import { MetasConcluidas } from "../pages/MetasConcluidas";
 import { Recorrencias } from "../pages/Recorrencias";
 import { Notificacoes } from "../pages/Notificacoes";
 import { Contas } from "../pages/Contas";
+import { Categorias } from "../pages/Categorias";
 import { useNavigation } from "@/context/NavigationContext";
 import { MenuAcaoRapida, Acao } from "@/components/common/MenuAcaoRapida";
 import { useNovaTransacao } from "@/context/NovaTransacaoContext";
@@ -32,6 +33,7 @@ const Screens = {
   recorrencias: Recorrencias,
   notificacoes: Notificacoes,
   contas: Contas,
+  categorias: Categorias,
 };
 
 export default function AppIndex() {
@@ -102,6 +104,7 @@ export default function AppIndex() {
     "recorrencias",
     "notificacoes",
     "contas",
+    "categorias",
   ];
   const mostrarFooter = !TELAS_SEM_FOOTER.includes(activeScreen);
 

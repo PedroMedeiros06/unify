@@ -101,6 +101,10 @@ async function droparTodasAsTabelas(db: SQLite.SQLiteDatabase): Promise<void> {
   await db.execAsync(`DROP TABLE IF EXISTS perfil_usuario;`);
   // Histórico de notificações que o app deu neste aparelho.
   await db.execAsync(`DROP TABLE IF EXISTS notificacoes_historico;`);
+  // Tabelas da v0.7.0 em diante. Ao criar uma tabela nova numa
+  // migration, ela entra aqui também (e em TABELAS_EM_ORDEM_DE_INSERCAO
+  // do backup.ts, se for dado do usuário).
+  await db.execAsync(`DROP TABLE IF EXISTS categorias_personalizadas;`);
   await db.execAsync(`PRAGMA user_version = 0;`);
 }
 

@@ -584,6 +584,23 @@ const MIGRATIONS: Migration[] = [
       );
     },
   },
+  {
+    versao: 22,
+    descricao:
+      "Cria categorias_personalizadas: categorias criadas pelo usuário, além das fixas de categorias.ts. O id tem prefixo 'u-' (nunca colide com os slugs do sistema) e é o que vai em transacoes.categoria_id, regras_categorizacao, limite_categoria e recorrencias. arquivada=1 esconde dos seletores mas mantém o nome/ícone nas transações antigas.",
+    async executar(db) {
+      await db.execAsync(`
+        CREATE TABLE IF NOT EXISTS categorias_personalizadas (
+          id        TEXT PRIMARY KEY NOT NULL,
+          nome      TEXT NOT NULL,
+          icone     TEXT NOT NULL,
+          cor       TEXT NOT NULL,
+          arquivada INTEGER NOT NULL DEFAULT 0 CHECK (arquivada IN (0, 1)),
+          criado_em TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+      `);
+    },
+  },
 ];
 
 export async function rodarMigrations(db: SQLiteDatabase): Promise<void> {

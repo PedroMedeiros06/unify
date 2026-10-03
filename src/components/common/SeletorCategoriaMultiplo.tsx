@@ -3,7 +3,8 @@ import { moderateScale } from "@/utils/scale";
 import { Ionicons } from "@expo/vector-icons";
 import { View, Text, Pressable, ScrollView } from "react-native";
 import { memo } from "react";
-import { CATEGORIAS, CategoriaId } from "@/database/categorias";
+import { CategoriaId } from "@/database/categorias";
+import { useCategorias } from "@/context/CategoriasContext";
 import { DropdownMenu } from "@/components/common/DropdownMenu";
 
 type Props = {
@@ -31,9 +32,10 @@ function SeletorCategoriaMultiploBase({ categoriasSelecionadas, onAlternar, onLi
   const itemTextSize = moderateScale(13);
   const rodapeTextSize = moderateScale(12);
 
+  const { categorias } = useCategorias();
   const itens: ItemLista[] = [
     { ...ITEM_SEM_CATEGORIA, cor: colors["desactived-text"] },
-    ...CATEGORIAS,
+    ...categorias,
   ];
   const temSelecao = categoriasSelecionadas.length > 0;
 
