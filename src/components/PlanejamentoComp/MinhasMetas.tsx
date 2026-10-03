@@ -7,7 +7,8 @@ import Svg, { Circle } from "react-native-svg";
 import { memo, useCallback, useMemo, useState } from "react";
 import { useMetas } from "@/context/MetasContext";
 import { useNavigation } from "@/context/NavigationContext";
-import { Meta, CamposMeta, calcularPercentualMeta, metaEstaConcluida } from "@/database/metasQueries";
+import { Meta, CamposMeta, calcularPercentualMeta, metaEstaConcluida, calcularAporteSugerido } from "@/database/metasQueries";
+import { dataIsoParaBR } from "@/utils/dateUtils";
 import { obterIconeMeta } from "@/database/iconesMeta";
 import { EditarMetaModal } from "@/components/PlanejamentoComp/EditarMetaModal";
 import { MetasSkeleton } from "@/components/common/MetasSkeleton";
@@ -69,6 +70,7 @@ const MetaCard = memo(function MetaCard({ meta, onLongPress }: { meta: Meta; onL
   const icone = obterIconeMeta(meta.icone);
   const percentual = calcularPercentualMeta(meta);
   const faltam = Math.max(0, meta.valorMeta - meta.progressoAtual);
+  const aporte = calcularAporteSugerido(meta);
 
   return (
     <Pressable
@@ -102,6 +104,19 @@ const MetaCard = memo(function MetaCard({ meta, onLongPress }: { meta: Meta; onL
         <Text style={{ fontSize: faltamSize }} className="text-desactived-text mt-0.5">
           Faltam {FormatToCurrency(faltam)}
         </Text>
+        {/* Aporte sugerido: quanto guardar por mês para bater o prazo. */}
+        {aporte?.tipo === "noPrazo" && (
+          <Text style={{ fontSize: faltamSize, color: icone.cor }} className="font-Inter-Medium mt-0.5" numberOfLines={2}>
+            Guarde {FormatToCurrency(aporte.porMes)}/mês
+            {aporte.meses > 1 ? ` por ${aporte.meses} meses` : " este mês"} para chegar até{" "}
+            {dataIsoParaBR(aporte.dataAlvo)}
+          </Text>
+        )}
+        {aporte?.tipo === "prazoVencido" && (
+          <Text style={{ fontSize: faltamSize, color: colors["warn-color"] }} className="font-Inter-Medium mt-0.5">
+            Prazo passou — ajuste a data ou o valor
+          </Text>
+        )}
       </View>
 
       <Ionicons name="chevron-forward" color={colors["second-text"]} size={18} />

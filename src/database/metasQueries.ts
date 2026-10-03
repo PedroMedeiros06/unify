@@ -188,6 +188,32 @@ export function calcularRitmoNecessario(meta: Meta): { porDia: number; porMes: n
   return { porDia, porMes };
 }
 
+export type AporteSugerido =
+  | { tipo: "noPrazo"; restante: number; meses: number; porMes: number; dataAlvo: string }
+  | { tipo: "prazoVencido"; restante: number }
+  | { tipo: "semPrazo"; restante: number };
+
+/**
+ * Quanto guardar por mês para chegar na meta até a data_alvo, em meses
+ * de calendário restantes (o mês corrente conta se ainda falta algum
+ * dia; mínimo 1). Ex.: faltam R$ 1.750 e o prazo é daqui a 5 meses ->
+ * R$ 350/mês. null se a meta já foi atingida.
+ */
+export function calcularAporteSugerido(meta: Meta, hoje: Date = new Date()): AporteSugerido | null {
+  const restante = meta.valorMeta - meta.progressoAtual;
+  if (restante <= 0) return null;
+  if (!meta.dataAlvo) return { tipo: "semPrazo", restante };
+
+  const [ano, mes, dia] = meta.dataAlvo.split("-").map(Number);
+  const alvo = new Date(ano, mes - 1, dia);
+  const inicioHoje = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate());
+  if (alvo.getTime() < inicioHoje.getTime()) return { tipo: "prazoVencido", restante };
+
+  // Meses de calendário entre este mês e o mês do prazo (inclusive o atual).
+  const meses = Math.max(1, (ano - hoje.getFullYear()) * 12 + (mes - 1 - hoje.getMonth()) + 1);
+  return { tipo: "noPrazo", restante, meses, porMes: restante / meses, dataAlvo: meta.dataAlvo };
+}
+
 /**
  * Percentual de progresso de uma meta (0-100), sempre limitado a 100
  * mesmo que progressoAtual ultrapasse valorMeta — evita barras de

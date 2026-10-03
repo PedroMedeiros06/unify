@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, ReactNode } from "react";
 import { listarMetas, inserirMeta, atualizarMeta, excluirMeta, Meta, CamposMeta } from "@/database/metasQueries";
+import { verificarMetasConcluidas } from "@/database/alertasAutomaticos";
 
 type MetasContextValue = {
   metas: Meta[];
@@ -27,6 +28,8 @@ export function MetasProvider({ children }: { children: ReactNode }) {
       setErro(null);
       const dados = await listarMetas();
       setMetas(dados);
+      // Aviso de meta atingida (uma vez por meta) — em segundo plano.
+      void verificarMetasConcluidas(dados);
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Erro ao carregar metas");
       console.error("[MetasContext] Falha ao carregar metas:", e);

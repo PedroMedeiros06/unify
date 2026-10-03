@@ -83,19 +83,34 @@ export async function verificarAlertasOrcamento(): Promise<void> {
   }
 }
 
-/** Avisa (uma vez) que a meta foi atingida. Chamado depois de mudar o progresso. */
-export async function avisarMetaConcluida(metaId: string, nomeMeta: string, valorMeta: number): Promise<void> {
+/**
+ * Avisa (uma vez por meta) as metas que acabaram de ser atingidas.
+ * Chamado pelo MetasContext a cada carga. Na PRIMEIRA execução depois
+ * de atualizar o app, só registra as metas que já estavam concluídas,
+ * sem notificar — senão quem já tinha metas batidas receberia uma
+ * enxurrada de avisos de coisas antigas.
+ */
+export async function verificarMetasConcluidas(
+  metas: { id: string; nome: string; valorMeta: number; progressoAtual: number }[]
+): Promise<void> {
   try {
-    const chave = `meta:${metaId}`;
-    if (await jaEnviado(chave)) return;
-    await enviarNotificacaoApp({
-      titulo: "Meta atingida! 🎉",
-      corpo: `Você chegou aos ${valorMeta.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} de "${nomeMeta}".`,
-      origem: "meta",
-      refId: metaId,
-    });
-    await marcarEnviado([chave]);
+    const concluidas = metas.filter((m) => m.valorMeta > 0 && m.progressoAtual >= m.valorMeta);
+    if (!(await jaEnviado("meta:linha-de-base"))) {
+      await marcarEnviado(["meta:linha-de-base", ...concluidas.map((m) => `meta:${m.id}`)]);
+      return;
+    }
+    for (const m of concluidas) {
+      const chave = `meta:${m.id}`;
+      if (await jaEnviado(chave)) continue;
+      await enviarNotificacaoApp({
+        titulo: "Meta atingida! 🎉",
+        corpo: `Você chegou aos ${m.valorMeta.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} de “${m.nome}”.`,
+        origem: "meta",
+        refId: m.id,
+      });
+      await marcarEnviado([chave]);
+    }
   } catch (e) {
-    console.warn("[alertasAutomaticos] Falha ao avisar meta concluída:", e);
+    console.warn("[alertasAutomaticos] Falha ao verificar metas concluídas:", e);
   }
 }
