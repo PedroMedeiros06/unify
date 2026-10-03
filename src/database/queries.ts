@@ -801,3 +801,30 @@ export async function garantirBancosSuportados(): Promise<void> {
     await upsertBanco(banco);
   }
 }
+
+export type GastoDestaque = {
+  id: string;
+  nome: string;
+  valor: number;
+  data: string;
+  categoriaId: CategoriaId | null;
+};
+
+/** Maiores saídas do período (sem transferências) — Relatório mensal. */
+export async function listarMaioresGastos(
+  dataInicio: string,
+  dataFim: string,
+  limite = 5
+): Promise<GastoDestaque[]> {
+  return executarNaFila(async () => {
+    const db = await getDatabase();
+    return db.getAllAsync<GastoDestaque>(
+      `SELECT id, nome, valor, data, categoria_id as categoriaId
+       FROM transacoes
+       WHERE tipo = 'saida' AND transferencia_id IS NULL AND data >= ? AND data <= ?
+       ORDER BY valor DESC
+       LIMIT ${Math.floor(limite)};`,
+      [dataInicio, dataFim]
+    );
+  });
+}

@@ -260,6 +260,51 @@ export async function agendarNotificacaoLembrete(
 }
 
 /**
+ * Tela que abre ao tocar numa notificação do app. Serializável (vai em
+ * `content.data`).
+ */
+export type DestinoNotificacao =
+  | { tela: "relatorio"; mesAno: string }
+  | { tela: "planejamento"; aba: "Metas" | "Orçamento" };
+
+/**
+ * Chama `aoTocar` quando o usuário toca numa notificação do app que
+ * tenha `destino` — inclusive a que ABRIU o app (cold start, via
+ * getLastNotificationResponseAsync). Devolve a função de cancelar.
+ * No Expo Go não faz nada.
+ */
+export function ouvirToqueEmNotificacao(aoTocar: (destino: DestinoNotificacao) => void): () => void {
+  if (rodandoNoExpoGo) return () => {};
+  let cancelado = false;
+  let remover: (() => void) | null = null;
+
+  const tratar = (data: unknown) => {
+    const destino = (data as { destino?: DestinoNotificacao } | undefined)?.destino;
+    if (destino && !cancelado) aoTocar(destino);
+  };
+
+  carregarModuloNotifications()
+    .then(async (Notifications) => {
+      if (cancelado) return;
+      const sub = Notifications.addNotificationResponseReceivedListener((r) =>
+        tratar(r.notification.request.content.data)
+      );
+      remover = () => sub.remove();
+      const ultima = await Notifications.getLastNotificationResponseAsync();
+      if (ultima) {
+        tratar(ultima.notification.request.content.data);
+        await Notifications.clearLastNotificationResponseAsync?.();
+      }
+    })
+    .catch((e) => console.warn("[notificacoes] Falha ao ouvir toques:", e));
+
+  return () => {
+    cancelado = true;
+    remover?.();
+  };
+}
+
+/**
  * Notificação avulsa do próprio app (alerta de orçamento, meta
  * concluída, resumo mensal). `quando` ausente = dispara agora.
  *
@@ -277,6 +322,8 @@ export async function enviarNotificacaoApp(opcoes: {
   refId?: string | null;
   quando?: Date | null;
   identificador?: string;
+  // Para onde o toque na notificação leva (ver ouvirToqueEmNotificacao).
+  destino?: DestinoNotificacao;
 }): Promise<string | null> {
   if (rodandoNoExpoGo) {
     avisarLimitacaoExpoGo();
@@ -304,6 +351,7 @@ export async function enviarNotificacaoApp(opcoes: {
         title: opcoes.titulo,
         body: opcoes.corpo,
         sound: Platform.OS === "ios" ? "default" : undefined,
+        data: opcoes.destino ? { destino: opcoes.destino } : undefined,
       },
       trigger: opcoes.quando
         ? { type: Notifications.SchedulableTriggerInputTypes.DATE, date: opcoes.quando }

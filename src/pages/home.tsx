@@ -5,6 +5,7 @@ import { useThemeColors } from "@/theme/useThemeColors";
 import { Ionicons } from "@expo/vector-icons";
 import { Resumo } from "@/components/HomeComp/Resumo";
 import { UltimasTransacoes } from "@/components/HomeComp/UltimasTransacoes";
+import { AtalhoRelatorio } from "@/components/HomeComp/AtalhoRelatorio";
 import { AnaliseGrafica } from "@/components/HomeComp/AnaliseGrafica";
 import { BarraFiltros } from "@/components/common/BarraFiltros";
 import { SeletorPeriodoPersonalizado } from "@/components/common/SeletorPeriodoPersonalizado";
@@ -130,6 +131,7 @@ export function Home() {
         {/* BODY */}
         <View className="flex-col gap-4">
           <Resumo />
+          <AtalhoRelatorio />
           <UltimasTransacoes />
 
           <BarraFiltros

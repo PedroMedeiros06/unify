@@ -68,12 +68,14 @@ export async function verificarAlertasOrcamento(): Promise<void> {
               corpo: `Você gastou ${valor(g)} de ${valor(limite.valorLimite)} este mês.`,
               origem: "orcamento",
               refId: limite.categoriaId,
+              destino: { tela: "planejamento", aba: "Orçamento" },
             }
           : {
               titulo: `${nome}: ${Math.round(pct)}% do limite`,
               corpo: `Já foram ${valor(g)} de ${valor(limite.valorLimite)}. Restam ${valor(limite.valorLimite - g)} no mês.`,
               origem: "orcamento",
               refId: limite.categoriaId,
+              destino: { tela: "planejamento", aba: "Orçamento" },
             }
       );
       await marcarEnviado(nivel === 100 ? [`${base}:80`, `${base}:100`] : [`${base}:80`]);
@@ -107,10 +109,37 @@ export async function verificarMetasConcluidas(
         corpo: `Você chegou aos ${m.valorMeta.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} de “${m.nome}”.`,
         origem: "meta",
         refId: m.id,
+        destino: { tela: "planejamento", aba: "Metas" },
       });
       await marcarEnviado([chave]);
     }
   } catch (e) {
     console.warn("[alertasAutomaticos] Falha ao verificar metas concluídas:", e);
+  }
+}
+
+const NOMES_MES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+
+/**
+ * Agenda (ou reagenda) o aviso "Seu resumo de <mês> está pronto" para o
+ * dia 1 do próximo mês às 9h. Chamado a cada abertura do app: o
+ * identificador fixo faz o novo agendamento substituir o anterior, então
+ * nunca acumula. Tocar abre o Relatório do mês que fechou.
+ */
+export async function agendarAvisoRelatorioMensal(): Promise<void> {
+  try {
+    const agora = new Date();
+    const quando = new Date(agora.getFullYear(), agora.getMonth() + 1, 1, 9, 0, 0);
+    const mesAno = `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, "0")}`;
+    await enviarNotificacaoApp({
+      titulo: `Seu resumo de ${NOMES_MES[agora.getMonth()]} está pronto`,
+      corpo: "Veja quanto entrou, quanto saiu e onde você gastou mais que no mês anterior.",
+      origem: "relatorio",
+      quando,
+      identificador: "relatorio-mensal",
+      destino: { tela: "relatorio", mesAno },
+    });
+  } catch (e) {
+    console.warn("[alertasAutomaticos] Falha ao agendar resumo mensal:", e);
   }
 }

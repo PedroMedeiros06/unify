@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { BackHandler, View } from "react-native";
 
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -18,6 +18,9 @@ import { Recorrencias } from "../pages/Recorrencias";
 import { Notificacoes } from "../pages/Notificacoes";
 import { Contas } from "../pages/Contas";
 import { Categorias } from "../pages/Categorias";
+import { Relatorio } from "../pages/Relatorio";
+import { ouvirToqueEmNotificacao } from "@/database/notificacoes";
+import { agendarAvisoRelatorioMensal } from "@/database/alertasAutomaticos";
 import { useNavigation } from "@/context/NavigationContext";
 import { MenuAcaoRapida, Acao } from "@/components/common/MenuAcaoRapida";
 import { useNovaTransacao } from "@/context/NovaTransacaoContext";
@@ -34,6 +37,7 @@ const Screens = {
   notificacoes: Notificacoes,
   contas: Contas,
   categorias: Categorias,
+  relatorio: Relatorio,
 };
 
 export default function AppIndex() {
@@ -80,6 +84,24 @@ export default function AppIndex() {
   const [aberturaVisivel, setAberturaVisivel] = useState(true);
   const handleFimAbertura = useCallback(() => setAberturaVisivel(false), []);
 
+  // Com o app liberado (fora do onboarding): agenda o aviso do resumo
+  // mensal (substitui o anterior) e passa a ouvir toques em notificações
+  // que levam a uma tela (relatório, orçamento, metas).
+  // `navigate` muda a cada troca de tela — guardado num ref para o
+  // efeito não re-agendar nem re-assinar a cada navegação.
+  const navigateRef = useRef(navigate);
+  useEffect(() => {
+    navigateRef.current = navigate;
+  }, [navigate]);
+  useEffect(() => {
+    if (precisaOnboarding !== false) return;
+    void agendarAvisoRelatorioMensal();
+    return ouvirToqueEmNotificacao((destino) => {
+      if (destino.tela === "relatorio") navigateRef.current("relatorio", { mesRelatorio: destino.mesAno });
+      else navigateRef.current("planejamento", { planejamentoTab: destino.aba });
+    });
+  }, [precisaOnboarding]);
+
   const handleConcluirOnboarding = useCallback(() => {
     void marcarOnboardingConcluido();
     setPrecisaOnboarding(false);
@@ -105,6 +127,7 @@ export default function AppIndex() {
     "notificacoes",
     "contas",
     "categorias",
+    "relatorio",
   ];
   const mostrarFooter = !TELAS_SEM_FOOTER.includes(activeScreen);
 

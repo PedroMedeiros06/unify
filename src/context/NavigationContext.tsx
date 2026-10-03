@@ -14,7 +14,8 @@ export type ScreenType =
   | "recorrencias"
   | "notificacoes"
   | "contas"
-  | "categorias";
+  | "categorias"
+  | "relatorio";
 
 // Parâmetros opcionais que uma tela pode receber ao ser aberta. Cada
 // tela decide se lê algum deles no seu próprio mount. Mantido enxuto de
@@ -26,6 +27,8 @@ export type NavigationParams = {
   // Transações abre já filtrada em "sem categoria" (todo o período) —
   // atalho "Revisar agora" do fim da importação.
   transacoesSemCategoria?: boolean;
+  // Mês ("aaaa-mm") que o Relatório abre — ex: toque no aviso do dia 1.
+  mesRelatorio?: string;
 };
 
 type NavigationContextValue = {
