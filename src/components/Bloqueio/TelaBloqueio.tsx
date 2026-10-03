@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useState } from "react";
 import { View, Text, Pressable, Image, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { moderateScale } from "@/utils/scale";
@@ -14,7 +14,6 @@ type Props = { onDesbloquear: () => void };
  */
 function TelaBloqueioBase({ onDesbloquear }: Props) {
   const [tentando, setTentando] = useState(false);
-  const pedidoInicial = useRef(false);
 
   const tentar = useCallback(async () => {
     setTentando(true);
@@ -24,8 +23,6 @@ function TelaBloqueioBase({ onDesbloquear }: Props) {
   }, [onDesbloquear]);
 
   useEffect(() => {
-    if (pedidoInicial.current) return;
-    pedidoInicial.current = true;
     // Pequeno atraso: o prompt do sistema sobre a transição da splash
     // às vezes é descartado pelo Android.
     const t = setTimeout(async () => {
