@@ -3,12 +3,12 @@ import { FormatToCurrency } from "@/utils/formatNumber";
 import { Ionicons } from "@expo/vector-icons";
 import { useThemeColors } from "@/theme/useThemeColors";
 import { View, Text, Pressable } from "react-native";
-import { memo, useCallback, useRef, useState } from "react";
+import { memo, useCallback, useMemo, useRef, useState } from "react";
 import { useCompromissos } from "@/context/CompromissosContext";
 import { Compromisso, CamposCompromisso } from "@/database/compromissosQueries";
 import { EditarCompromissoModal } from "@/components/PlanejamentoComp/EditarCompromissoModal";
 import { VincularTransacaoCompromissoModal } from "@/components/PlanejamentoComp/VincularTransacaoCompromissoModal";
-import { dataIsoParaBR } from "@/utils/dateUtils";
+import { dataHojeIso, dataIsoParaBR } from "@/utils/dateUtils";
 import { CompromissosSkeleton } from "@/components/common/CompromissosSkeleton";
 import { useDialogo } from "@/context/DialogoContext";
 
@@ -137,6 +137,15 @@ function ProximosCompromissosBase() {
   } = useCompromissos();
   const { confirmar } = useDialogo();
 
+  // "Próximos": todo pendente (inclusive vencido — ainda precisa de
+  // atenção) + os pagos do mês corrente em diante. Pagos de meses
+  // anteriores saem do card; antes a lista crescia para sempre. Eles
+  // continuam no banco e na Agenda.
+  const compromissosVisiveis = useMemo(() => {
+    const inicioMesAtual = `${dataHojeIso().slice(0, 7)}-01`;
+    return compromissos.filter((c) => !c.pago || c.dataVencimento >= inicioMesAtual);
+  }, [compromissos]);
+
   const [modalVisivel, setModalVisivel] = useState(false);
   const [compromissoEditando, setCompromissoEditando] = useState<Compromisso | null>(null);
 
@@ -212,15 +221,15 @@ function ProximosCompromissosBase() {
         </Pressable>
       </View>
 
-      {compromissos.length === 0 ? (
+      {compromissosVisiveis.length === 0 ? (
         <View className="items-center py-6">
           <Ionicons name="calendar-outline" color={colors["desactived-text"]} size={26} />
           <Text style={{ fontSize: moderateScale(12) }} className="text-desactived-text text-center mt-2">
-            Nenhum compromisso cadastrado. Toque no + para adicionar.
+            Nenhum compromisso pendente. Toque no + para adicionar.
           </Text>
         </View>
       ) : (
-        compromissos.map((compromisso) => (
+        compromissosVisiveis.map((compromisso) => (
           <CompromissoItem
             key={compromisso.id}
             compromisso={compromisso}

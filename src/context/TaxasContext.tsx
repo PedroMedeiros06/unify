@@ -13,6 +13,9 @@ type TaxasContextValue = {
   atualizarAgora: () => Promise<void>;
 };
 
+
+// Atraso da atualização online no boot (ver efeito de inicialização).
+const ATRASO_ATUALIZACAO_ONLINE_MS = 2000;
 const TaxasContext = createContext<TaxasContextValue | null>(null);
 
 export function TaxasProvider({ children }: { children: ReactNode }) {
@@ -48,6 +51,7 @@ export function TaxasProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let ativo = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
 
     async function inicializar() {
       setCarregando(true);
@@ -58,13 +62,19 @@ export function TaxasProvider({ children }: { children: ReactNode }) {
         if (ativo) setCarregando(false);
       }
       // 2) Tenta atualizar de fundo a cada abertura do app.
-      if (ativo) void atualizarAgora();
+      // Adiada ~2s: no boot a prioridade é a Home aparecer. Rede + parse
+      // + escrita no banco disputavam a thread JS e a fila do SQLite com
+      // as consultas das telas. Os simuladores já têm os valores do banco.
+      timer = setTimeout(() => {
+        if (ativo) void atualizarAgora();
+      }, ATRASO_ATUALIZACAO_ONLINE_MS);
     }
 
     inicializar();
 
     return () => {
       ativo = false;
+      if (timer) clearTimeout(timer);
     };
   }, [carregarDoBanco, atualizarAgora]);
 

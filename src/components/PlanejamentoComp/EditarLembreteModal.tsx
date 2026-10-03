@@ -5,7 +5,7 @@ import { View, Text, Pressable, TextInput, Platform } from "react-native";
 import { memo, useCallback, useEffect, useState } from "react";
 import DateTimePicker, { DateTimePickerEvent } from "@react-native-community/datetimepicker";
 import { Lembrete, CamposLembrete } from "@/database/lembretesQueries";
-import { dataIsoParaBR } from "@/utils/dateUtils";
+import { dataHoraLocalIso, dataIsoParaBR } from "@/utils/dateUtils";
 import { SeletorData } from "@/components/common/SeletorData";
 import { ModalCentralizado } from "@/components/common/ModalCentralizado";
 import { useDialogo } from "@/context/DialogoContext";
@@ -79,6 +79,18 @@ function EditarLembreteModalBase({ visivel, lembreteEditando, onFechar, onSalvar
   const handleSalvar = useCallback(async () => {
     if (!formularioValido || !dataIso || !hora || salvando) return;
 
+    // Data/hora já passou: o lembrete é salvo, mas nenhuma notificação
+    // vai disparar. Avisa antes, em vez de deixar o usuário achar que
+    // será lembrado.
+    if (`${dataIso}T${hora}` <= dataHoraLocalIso().slice(0, 16)) {
+      const ok = await confirmar({
+        titulo: "Horário já passou",
+        mensagem: "Este lembrete fica salvo, mas não vai gerar notificação porque a data e a hora já passaram.",
+        textoConfirmar: "Salvar mesmo assim",
+      });
+      if (!ok) return;
+    }
+
     setSalvando(true);
     try {
       await onSalvar(lembreteEditando?.id ?? null, {
@@ -93,7 +105,7 @@ function EditarLembreteModalBase({ visivel, lembreteEditando, onFechar, onSalvar
     } finally {
       setSalvando(false);
     }
-  }, [formularioValido, dataIso, hora, salvando, titulo, descricao, lembreteEditando, onSalvar, onFechar, avisar]);
+  }, [formularioValido, dataIso, hora, salvando, titulo, descricao, lembreteEditando, onSalvar, onFechar, avisar, confirmar]);
 
   const handleExcluir = useCallback(async () => {
     if (!lembreteEditando || !onExcluir) return;

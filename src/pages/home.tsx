@@ -47,7 +47,9 @@ export function Home() {
   const [modalPeriodoAberto, setModalPeriodoAberto] = useState(false);
 
   useEffect(() => {
-    listarBancos().then(setBancos);
+    listarBancos()
+      .then(setBancos)
+      .catch((e) => console.warn("[listarBancos] Falha ao carregar bancos:", e));
   }, []);
 
   const handleConfirmarPeriodo = useCallback(

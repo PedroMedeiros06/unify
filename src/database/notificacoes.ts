@@ -3,8 +3,10 @@ import Constants, { ExecutionEnvironment } from "expo-constants";
 import {
   registrarNotificacao,
   removerPorNotificacaoId,
+  removerAgendadasFuturas,
 } from "./notificacoesHistoricoQueries";
 import { obterPerfil } from "./perfilQueries";
+import { dataHoraLocalIso } from "@/utils/dateUtils";
 
 /**
  * Notificações locais agendadas pelo próprio app — diferente de ler
@@ -89,18 +91,6 @@ async function garantirPermissao(Notifications: NotificationsModule): Promise<bo
   return status === "granted";
 }
 
-/** Formata um Date local como "aaaa-mm-ddTHH:MM:SS" (sem timezone) — é
- * assim que o histórico guarda `disparar_em`, comparável como texto com
- * `new Date().toISOString()` só na ordem de grandeza suficiente para o
- * app (o histórico não precisa de precisão de fuso). */
-function isoLocalSemFuso(data: Date): string {
-  const p = (n: number) => String(n).padStart(2, "0");
-  return (
-    `${data.getFullYear()}-${p(data.getMonth() + 1)}-${p(data.getDate())}` +
-    `T${p(data.getHours())}:${p(data.getMinutes())}:${p(data.getSeconds())}`
-  );
-}
-
 /**
  * Agenda uma notificação local para o dia do vencimento de um
  * compromisso, às 9h. Retorna o ID da notificação agendada, ou null
@@ -159,7 +149,7 @@ export async function agendarNotificacaoVencimento(
       await registrarNotificacao({
         titulo,
         corpo,
-        disparaEm: isoLocalSemFuso(dataNotificacao),
+        disparaEm: dataHoraLocalIso(dataNotificacao),
         notificacaoId,
         origem: "compromisso",
         refId,
@@ -231,7 +221,7 @@ export async function agendarNotificacaoLembrete(
       await registrarNotificacao({
         titulo,
         corpo,
-        disparaEm: isoLocalSemFuso(dataNotificacao),
+        disparaEm: dataHoraLocalIso(dataNotificacao),
         notificacaoId,
         origem: "lembrete",
         refId,
@@ -275,6 +265,33 @@ export async function cancelarNotificacao(notificacaoId: string | null): Promise
     await Notifications.cancelScheduledNotificationAsync(notificacaoId);
   } catch (erro) {
     console.warn("[notificacoes] Não foi possível cancelar notificação:", erro);
+  }
+}
+
+/**
+ * Cancela TODAS as notificações que o app tem agendadas no sistema e
+ * remove do histórico as que ainda não dispararam.
+ *
+ * Usado quando os dados de origem deixam de existir de uma vez só
+ * ("Apagar dados do app") ou são substituídos (restaurar backup): sem
+ * isto, os avisos agendados para lembretes/compromissos apagados
+ * continuavam disparando, porque o agendamento vive no sistema
+ * operacional, fora do SQLite. Nunca lança.
+ */
+export async function cancelarTodasNotificacoes(): Promise<void> {
+  try {
+    await removerAgendadasFuturas();
+  } catch (erro) {
+    console.warn("[notificacoes] Falha ao limpar agendadas do histórico:", erro);
+  }
+
+  if (rodandoNoExpoGo) return;
+
+  try {
+    const Notifications = await carregarModuloNotifications();
+    await Notifications.cancelAllScheduledNotificationsAsync();
+  } catch (erro) {
+    console.warn("[notificacoes] Não foi possível cancelar todas as notificações:", erro);
   }
 }
 

@@ -120,16 +120,20 @@ export async function alterarMetaDoVinculo(
 ): Promise<void> {
   return executarNaFila(async () => {
     const db = await getDatabase();
-    await db.runAsync(
-      `DELETE FROM meta_transacoes WHERE meta_id = ? AND transacao_id = ?;`,
-      [metaIdAntiga, transacaoId]
-    );
-    const id = `vinculo-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    await db.runAsync(
-      `INSERT INTO meta_transacoes (id, meta_id, transacao_id, valor_vinculado)
-       VALUES (?, ?, ?, ?);`,
-      [id, metaIdNova, transacaoId, valorVinculado]
-    );
+    // DELETE + INSERT na mesma transação: se o INSERT falhar, o vínculo
+    // antigo volta (rollback) em vez de a transação ficar sem meta.
+    await db.withTransactionAsync(async () => {
+      await db.runAsync(
+        `DELETE FROM meta_transacoes WHERE meta_id = ? AND transacao_id = ?;`,
+        [metaIdAntiga, transacaoId]
+      );
+      const id = `vinculo-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      await db.runAsync(
+        `INSERT INTO meta_transacoes (id, meta_id, transacao_id, valor_vinculado)
+         VALUES (?, ?, ?, ?);`,
+        [id, metaIdNova, transacaoId, valorVinculado]
+      );
+    });
   });
 }
 

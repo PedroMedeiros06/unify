@@ -11,6 +11,7 @@ import { useTransacoes } from "@/context/TransacoesContext";
 import { useMetas } from "@/context/MetasContext";
 import { vincularTransacaoAMeta } from "@/database/metaTransacoesQueries";
 import { dataIsoParaBR } from "@/utils/dateUtils";
+import { corPorBanco, siglaPorBanco } from "@/database/parsers/bancosSuportados";
 
 // Uma transação categorizada automaticamente carrega junto o id da
 // categoria resolvida (ou null, se ficou sem categoria) — o preview
@@ -29,7 +30,7 @@ export type TransacaoComCategoria = TransacaoComStatusDuplicata & {
 // Intenção de vínculo com meta escolhida AINDA no preview, antes da
 // transação existir no banco. Guarda só o necessário para (a) exibir o
 // chip "🎯 <meta>" na linha e (b) criar o vínculo de verdade em
-// confirmarImportacao(), depois que adicionarTransacao() devolver o id.
+// confirmarImportacao(), depois que o lote devolver os ids.
 // valorVinculado usa o valor CHEIO da transação, com sinal aplicado na
 // hora de gravar (entrada soma, saída subtrai) — ajuste parcial fica
 // para a tela de edição da transação já importada.
@@ -81,7 +82,7 @@ async function lerConteudoArquivo(uri: string): Promise<string> {
 
 export function useImportacaoCsv() {
   const [estado, setEstado] = useState<EstadoImportacao>({ fase: "ocioso" });
-  const { adicionarTransacao } = useTransacoes();
+  const { adicionarTransacoesEmLote } = useTransacoes();
   // Recarrega metas depois de importar com vínculos — o progresso é
   // derivado de meta_transacoes e o MetasContext não observa essa
   // tabela sozinho.
@@ -256,26 +257,28 @@ export function useImportacaoCsv() {
   // conta como categorização manual: salva regra aprendida (origem
   // 'usuario') para esse padrão de descrição, valendo para importações
   // futuras — não é preciso esperar editar depois de já importada.
-  const definirCategoriaNoPreview = useCallback(async (index: number, categoriaId: CategoriaId) => {
-    let descricaoAlterada: string | null = null;
+  //
+  // A descrição é lida de `estado` (snapshot do render atual), NÃO
+  // capturada dentro do updater do setEstado: no React 19 o updater pode
+  // rodar só no próximo render, depois desta função seguir — a variável
+  // capturada ainda estava null e a regra aprendida não era gravada.
+  const definirCategoriaNoPreview = useCallback(
+    async (index: number, categoriaId: CategoriaId) => {
+      if (estado.fase !== "preview") return;
+      const descricao = estado.transacoes[index]?.descricao;
+      if (descricao == null) return;
 
-    setEstado((prev) => {
-      if (prev.fase !== "preview") return prev;
-
-      const novasTransacoes = prev.transacoes.map((t, i) => {
-        if (i !== index) return t;
-        descricaoAlterada = t.descricao;
-        return { ...t, categoriaId };
+      setEstado((prev) => {
+        if (prev.fase !== "preview") return prev;
+        const novasTransacoes = prev.transacoes.map((t, i) => (i === index ? { ...t, categoriaId } : t));
+        return { ...prev, transacoes: novasTransacoes };
       });
 
-      return { ...prev, transacoes: novasTransacoes };
-    });
-
-    if (descricaoAlterada) {
-      const padrao = normalizarPadraoDescricao(descricaoAlterada);
+      const padrao = normalizarPadraoDescricao(descricao);
       await salvarRegraCategorizacao(padrao, categoriaId, "usuario");
-    }
-  }, []);
+    },
+    [estado]
+  );
 
   const confirmarImportacao = useCallback(async () => {
     if (estado.fase !== "preview") return;
@@ -305,15 +308,15 @@ export function useImportacaoCsv() {
       let totalSemCategoria = 0;
       let totalVinculadasMeta = 0;
 
-      // A importação grava os campos normais da transação. Um vínculo
-      // com meta só é criado quando o usuário escolheu explicitamente
-      // uma meta para aquela linha no preview (vinculosPendentes) —
-      // `possivelMovimentacaoMeta` sozinho NUNCA cria vínculo nenhum.
-      for (const { transacao, index } of selecionadas) {
+      // Monta todas as linhas e grava num LOTE só (uma transação SQL,
+      // um único sinal de mudança para a UI). Antes era um INSERT + um
+      // re-render por linha — CSVs com centenas de linhas travavam, e
+      // uma falha no meio deixava a importação pela metade. Agora é
+      // tudo ou nada.
+      const entradas = selecionadas.map(({ transacao }) => {
         const categoria = obterCategoriaPorId(transacao.categoriaId);
         if (!categoria) totalSemCategoria += 1;
-
-        const novoId = await adicionarTransacao({
+        return {
           nome: transacao.descricao,
           // subtitulo continua com o texto vindo do banco (ou nome da
           // categoria como fallback legível) — categoria é um campo
@@ -324,21 +327,30 @@ export function useImportacaoCsv() {
           data: dataIsoParaBR(transacao.data),
           banco: { sigla: siglaPorBanco(estado.bancoId), cor: corPorBanco(estado.bancoId) },
           bancoId: estado.bancoId,
-          status: "concluida",
+          status: "concluida" as const,
           categoriaIcone: categoria?.icone,
           categoriaId: transacao.categoriaId,
           identificadorExterno: transacao.extra?.identificadorExterno ?? null,
-        });
+        };
+      });
 
+      const novosIds = await adicionarTransacoesEmLote(entradas);
+
+      // Um vínculo com meta só é criado quando o usuário escolheu
+      // explicitamente uma meta para aquela linha no preview
+      // (vinculosPendentes) — `possivelMovimentacaoMeta` sozinho NUNCA
+      // cria vínculo nenhum. `novosIds` está na mesma ordem de
+      // `selecionadas`.
+      for (let k = 0; k < selecionadas.length; k++) {
+        const { transacao, index } = selecionadas[k];
         const vinculo = estado.vinculosPendentes.get(index);
-        if (vinculo) {
-          // Valor CHEIO da transação, com sinal: entrada soma no
-          // progresso da meta, saída subtrai. Ajuste parcial fica para
-          // a tela de edição da transação já importada.
-          const sinal = transacao.tipo === "entrada" ? 1 : -1;
-          await vincularTransacaoAMeta(vinculo.metaId, novoId, transacao.valor * sinal);
-          totalVinculadasMeta += 1;
-        }
+        if (!vinculo) continue;
+        // Valor CHEIO da transação, com sinal: entrada soma no
+        // progresso da meta, saída subtrai. Ajuste parcial fica para
+        // a tela de edição da transação já importada.
+        const sinal = transacao.tipo === "entrada" ? 1 : -1;
+        await vincularTransacaoAMeta(vinculo.metaId, novosIds[k], transacao.valor * sinal);
+        totalVinculadasMeta += 1;
       }
 
       if (totalVinculadasMeta > 0) {
@@ -357,7 +369,7 @@ export function useImportacaoCsv() {
         mensagem: e instanceof Error ? e.message : "Erro ao salvar as transações importadas.",
       });
     }
-  }, [estado, adicionarTransacao, recarregarMetas]);
+  }, [estado, adicionarTransacoesEmLote, recarregarMetas]);
 
   return {
     estado,
@@ -371,14 +383,4 @@ export function useImportacaoCsv() {
     confirmarImportacao,
     reiniciar,
   };
-}
-
-function siglaPorBanco(idBanco: string): string {
-  const siglas: Record<string, string> = { nubank: "nu", inter: "in", bb: "BB" };
-  return siglas[idBanco] ?? "??";
-}
-
-function corPorBanco(idBanco: string): string {
-  const cores: Record<string, string> = { nubank: "#8D11DA", inter: "#FF7A01", bb: "#FDFC30" };
-  return cores[idBanco] ?? "#6B778C";
 }

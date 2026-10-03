@@ -5,6 +5,7 @@ import { View, Text, Pressable, TextInput } from "react-native";
 import { memo, useCallback, useEffect, useState } from "react";
 import { Transacao, CamposEditaveis, useTransacoes } from "@/context/TransacoesContext";
 import { useMetas } from "@/context/MetasContext";
+import { useCompromissos } from "@/context/CompromissosContext";
 import { dataBRParaIso } from "@/utils/dateUtils";
 import { FormatToCurrency } from "@/utils/formatNumber";
 import { SeletorData } from "@/components/common/SeletorData";
@@ -42,6 +43,7 @@ function EditarTransacaoModalBase({
 
   const { verificarImpactoNoVinculo } = useTransacoes();
   const { recarregar: recarregarMetas } = useMetas();
+  const { recarregar: recarregarCompromissos } = useCompromissos();
   const { confirmar, avisar } = useDialogo();
 
   const [nome, setNome] = useState("");
@@ -196,6 +198,9 @@ function EditarTransacaoModalBase({
       // MetasContext precisa recarregar para refletir isso sem esperar
       // reabrir o app.
       recarregarMetas();
+      // Compromisso pago com esta transação volta a "pendente" no banco
+      // (ON DELETE SET NULL) — o contexto precisa reler para refletir.
+      void recarregarCompromissos();
       onFechar();
     } catch {
       await avisar({
@@ -205,7 +210,7 @@ function EditarTransacaoModalBase({
     } finally {
       setExcluindo(false);
     }
-  }, [transacao, onExcluir, onFechar, recarregarMetas, confirmar, avisar]);
+  }, [transacao, onExcluir, onFechar, recarregarMetas, recarregarCompromissos, confirmar, avisar]);
 
   const handleAbrirVincular = useCallback(() => {
     setModalVincularAberto(true);

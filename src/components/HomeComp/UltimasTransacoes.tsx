@@ -4,7 +4,7 @@ import { FormatToCurrency } from "@/utils/formatNumber";
 import { Ionicons } from "@expo/vector-icons";
 import { Text, View, Pressable, FlatList, ScrollView, TextInput } from "react-native";
 import { memo, useCallback, useEffect, useState } from "react";
-import { useTransacoes, Transacao } from "@/context/TransacoesContext";
+import { useTransacoes, Transacao, mapearParaTransacaoUI } from "@/context/TransacoesContext";
 import { EditarTransacaoModal } from "@/components/TransacoesComp/EditarTransacaoModal";
 import { ListaTransacoesSkeleton } from "@/components/common/ListaTransacoesSkeleton";
 import { SeletorBancoMultiplo } from "@/components/common/SeletorBancoMultiplo";
@@ -14,24 +14,7 @@ import { SeletorPeriodoPersonalizado } from "@/components/common/SeletorPeriodoP
 import { useFiltrosTransacao } from "@/hooks/useFiltrosTransacao";
 import { useNavigation } from "@/context/NavigationContext";
 import { useNovaTransacao } from "@/context/NovaTransacaoContext";
-import { listarBancos, listarTransacoesFiltradas, Banco, TransacaoComBanco } from "@/database/queries";
-import { dataIsoParaBR } from "@/utils/dateUtils";
-
-function mapearParaTransacaoUI(t: TransacaoComBanco): Transacao {
-  return {
-    id: t.id,
-    nome: t.nome,
-    subtitulo: t.subtitulo,
-    valor: t.valor,
-    tipo: t.tipo,
-    data: dataIsoParaBR(t.data),
-    hora: t.hora ?? undefined,
-    banco: { sigla: t.banco.sigla, cor: t.banco.cor },
-    status: t.status,
-    categoriaIcone: t.categoriaIcone ?? undefined,
-    categoriaId: t.categoriaId,
-  };
-}
+import { listarBancos, listarTransacoesFiltradas, Banco } from "@/database/queries";
 
 const TransacaoItem = memo(function TransacaoItem({
   item,
@@ -109,7 +92,7 @@ function UltimasTransacoesBase() {
   const itemTitleSize = moderateScale(14);
   const emptyTitleSize = moderateScale(13);
 
-  const { transacoes: transacoesDoContext, carregando: carregandoContext, editarTransacao, removerTransacao } = useTransacoes();
+  const { versaoDados, editarTransacao, removerTransacao } = useTransacoes();
   const { navigate } = useNavigation();
   const { abrir: abrirNovaTransacao } = useNovaTransacao();
 
@@ -143,7 +126,6 @@ function UltimasTransacoesBase() {
   }, [limparTextoBusca]);
 
   const [transacoesFiltradas, setTransacoesFiltradas] = useState<Transacao[]>([]);
-  const [carregandoFiltro, setCarregandoFiltro] = useState(false);
   // Vira true depois do primeiro resultado de filtro. A partir daí, um
   // refetch (trocar banco/categoria/período) NÃO troca a árvore inteira
   // por skeleton — isso desmontava o dropdown aberto e o fechava a cada
@@ -151,18 +133,18 @@ function UltimasTransacoesBase() {
   const [filtroJaCarregou, setFiltroJaCarregou] = useState(false);
 
   useEffect(() => {
-    listarBancos().then(setBancos);
+    listarBancos()
+      .then(setBancos)
+      .catch((e) => console.warn("[listarBancos] Falha ao carregar bancos:", e));
   }, []);
 
-  // Usa consultaTemRecorte (não possuiFiltrosAtivos): a lista precisa
-  // respeitar a janela que a CASCATA fixou (ex: "7dias") mesmo que o
-  // usuário não tenha tocado em nada — nesse caso possuiFiltrosAtivos é
-  // false, mas ainda há um recorte de período a aplicar.
+  // Sempre consulta o banco com LIMIT 5 — com ou sem filtro (sem
+  // recorte, `filtrosParaQuery` vem vazio = todas). Antes, sem filtro,
+  // usava a lista COMPLETA do TransacoesContext, que deixou de existir
+  // (carregar todas as transações no boot pesava). `versaoDados` refaz
+  // a consulta quando uma transação é criada/editada/excluída.
   useEffect(() => {
-    if (!consultaTemRecorte) return;
-
     let ativo = true;
-    setCarregandoFiltro(true);
 
     listarTransacoesFiltradas(filtrosParaQuery, 5)
       .then((linhas) => {
@@ -170,25 +152,18 @@ function UltimasTransacoesBase() {
         setTransacoesFiltradas(linhas.map(mapearParaTransacaoUI));
         setFiltroJaCarregou(true);
       })
-      .finally(() => {
-        if (ativo) setCarregandoFiltro(false);
-      });
+      .catch((e) => console.warn("[UltimasTransacoes] Falha ao carregar dados:", e));
 
     return () => {
       ativo = false;
     };
-    // transacoesDoContext entra como gatilho: quando uma nova transação
-    // é criada pelo modal global (ou editada/excluída), a lista filtrada
-    // precisa refazer a query para refletir a mudança.
-  }, [consultaTemRecorte, filtrosParaQuery, transacoesDoContext]);
+  }, [filtrosParaQuery, versaoDados]);
 
   // Skeleton só no PRIMEIRO carregamento (sem árvore montada ainda).
   // Refetch de filtro depois disso mantém a lista atual visível para
   // não desmontar dropdowns abertos.
-  const carregandoInicial = consultaTemRecorte
-    ? carregandoFiltro && !filtroJaCarregou
-    : carregandoContext;
-  const transacoesRecentes = consultaTemRecorte ? transacoesFiltradas : transacoesDoContext.slice(0, 5);
+  const carregandoInicial = !filtroJaCarregou;
+  const transacoesRecentes = transacoesFiltradas;
 
   const handleLongPress = useCallback((transacao: Transacao) => {
     setTransacaoSelecionada(transacao);

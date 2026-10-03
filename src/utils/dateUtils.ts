@@ -20,6 +20,22 @@ export function dataBRParaIso(dataBR: string): string {
   return `${ano}-${mes}-${dia}`;
 }
 
+/**
+ * Data+hora LOCAL no formato "aaaa-mm-ddTHH:MM:SS", sem fuso.
+ *
+ * É o formato de `notificacoes_historico.disparar_em`. Toda comparação
+ * com essa coluna precisa usar ESTE formato — nunca
+ * `new Date().toISOString()`, que é UTC: no Brasil (UTC-3) a diferença
+ * fazia a notificação contar como "recebida" ~3h antes de disparar.
+ */
+export function dataHoraLocalIso(data: Date = new Date()): string {
+  const p = (n: number) => String(n).padStart(2, "0");
+  return (
+    `${data.getFullYear()}-${p(data.getMonth() + 1)}-${p(data.getDate())}` +
+    `T${p(data.getHours())}:${p(data.getMinutes())}:${p(data.getSeconds())}`
+  );
+}
+
 /** Data de hoje já em formato ISO, pronta para salvar no banco */
 export function dataHojeIso(): string {
   const hoje = new Date();

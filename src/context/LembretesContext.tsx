@@ -9,6 +9,7 @@ import {
   CamposLembrete,
 } from "@/database/lembretesQueries";
 import { agendarNotificacaoLembrete, cancelarNotificacao } from "@/database/notificacoes";
+import { dataHojeIso } from "@/utils/dateUtils";
 
 type LembretesContextValue = {
   lembretes: Lembrete[];
@@ -133,7 +134,10 @@ export function LembretesProvider({ children }: { children: ReactNode }) {
   const ressincronizarNotificacoes = useCallback(
     async (ativar: boolean) => {
       const agora = new Date();
-      const hojeIso = agora.toISOString().slice(0, 10);
+      // Data LOCAL — `toISOString()` é UTC e, depois das 21h no Brasil,
+      // já devolve o dia seguinte (os lembretes de amanhã antes da hora
+      // atual deixavam de ser reagendados).
+      const hojeIso = dataHojeIso();
       const horaAgora = `${String(agora.getHours()).padStart(2, "0")}:${String(agora.getMinutes()).padStart(2, "0")}`;
       const atualizacoes = new Map<string, string | null>();
 

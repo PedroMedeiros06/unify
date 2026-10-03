@@ -6,6 +6,7 @@ import Svg, { Circle } from "react-native-svg";
 import { memo, useEffect, useMemo, useState } from "react";
 import { listarResumoPorCategoria, FiltrosTransacao } from "@/database/queries";
 import { obterCategoriaPorId } from "@/database/categorias";
+import { useTransacoes } from "@/context/TransacoesContext";
 
 type Props = {
   filtrosParaQuery: FiltrosTransacao;
@@ -42,6 +43,9 @@ function useFatiasComOffset(fatias: FatiaExibicao[]) {
 
 function DistribuicaoOrcamentoBase({ filtrosParaQuery }: Props) {
   const colors = useThemeColors();
+  // Recarrega quando uma transação é criada/editada/excluída sem
+  // trocar de tela (ex: pelo "+" do footer).
+  const { versaoDados } = useTransacoes();
   const cardTitleSize = moderateScale(15);
   const legendTextSize = moderateScale(11);
   const centerValueSize = moderateScale(12);
@@ -90,12 +94,12 @@ function DistribuicaoOrcamentoBase({ filtrosParaQuery }: Props) {
       }
     }
 
-    carregar();
+    carregar().catch((e) => console.warn("[DistribuicaoOrcamento] Falha ao carregar dados:", e));
 
     return () => {
       ativo = false;
     };
-  }, [filtrosParaQuery]);
+  }, [filtrosParaQuery, versaoDados]);
 
   const fatiasComOffset = useFatiasComOffset(fatias);
   const totalFormatado = FormatToCurrency(total);

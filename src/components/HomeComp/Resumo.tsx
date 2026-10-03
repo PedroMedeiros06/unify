@@ -7,6 +7,7 @@ import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { Sparkline } from "@/components/HomeComp/Sparkline";
 import { BancosConectados, BancoComSaldo } from "@/components/HomeComp/BancosConectados";
 import { useNavigation } from "@/context/NavigationContext";
+import { useTransacoes } from "@/context/TransacoesContext";
 import {
   listarResumoPorBanco,
   calcularSaldoAcumuladoAte,
@@ -37,6 +38,9 @@ function ResumoBase() {
 
   const [visible, setVisible] = useState(true);
   const { navigate } = useNavigation();
+  // Sobe a cada transação criada/editada/excluída — refaz saldo e
+  // sparkline sem precisar sair e voltar para a Home.
+  const { versaoDados } = useTransacoes();
 
   const [resumoBancos, setResumoBancos] = useState<ResumoPorBanco[]>([]);
   const [bancosSelecionados, setBancosSelecionados] = useState<string[]>([]);
@@ -64,8 +68,8 @@ function ResumoBase() {
   }, []);
 
   useEffect(() => {
-    carregarResumo();
-  }, [carregarResumo]);
+    carregarResumo().catch((e) => console.warn("[Resumo] Falha ao carregar dados:", e));
+  }, [carregarResumo, versaoDados]);
 
   // Variação % e Sparkline recalculam sempre que o filtro de banco
   // muda — ambos precisam refletir só os bancos selecionados, igual ao
@@ -84,7 +88,7 @@ function ResumoBase() {
       setHistoricoSaldo(serie.map((p) => p.saldoAcumulado));
     }
 
-    carregarSerieETendencia();
+    carregarSerieETendencia().catch((e) => console.warn("[Resumo] Falha ao carregar dados:", e));
 
     return () => {
       ativo = false;
@@ -94,7 +98,7 @@ function ResumoBase() {
     // (nova referência a cada render), então dependemos do conteúdo via
     // join — comparação estável o bastante para uma lista de poucos ids.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bancosSelecionados.join(",")]);
+  }, [bancosSelecionados.join(","), versaoDados]);
 
   const handleToggleVisible = useCallback(() => {
     setVisible((prev) => !prev);

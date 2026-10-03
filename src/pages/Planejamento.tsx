@@ -51,7 +51,9 @@ export function Planejamento() {
   const [modalPeriodoAberto, setModalPeriodoAberto] = useState(false);
 
   useEffect(() => {
-    listarBancos().then(setBancos);
+    listarBancos()
+      .then(setBancos)
+      .catch((e) => console.warn("[listarBancos] Falha ao carregar bancos:", e));
   }, []);
 
   // Todas as abas (inclusive "Orçamento") são renderizadas INLINE aqui,

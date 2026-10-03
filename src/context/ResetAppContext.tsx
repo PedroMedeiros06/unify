@@ -1,6 +1,7 @@
 import { createContext, Fragment, useCallback, useContext, useMemo, useState, ReactNode } from "react";
 import { Directory, Paths } from "expo-file-system";
 import { apagarTodosOsDados } from "@/database/database";
+import { cancelarTodasNotificacoes } from "@/database/notificacoes";
 
 // Remove arquivos que o app guarda FORA do SQLite e que "apagar dados"
 // também deve zerar. Por enquanto: a pasta de fotos de perfil.
@@ -47,6 +48,10 @@ export function ResetAppProvider({ children }: { children: ReactNode }) {
   const apagarDadosDoApp = useCallback(async () => {
     setApagando(true);
     try {
+      // Antes de apagar: os avisos agendados vivem no sistema
+      // operacional, fora do SQLite — sem isto, lembretes/compromissos
+      // apagados continuavam notificando.
+      await cancelarTodasNotificacoes();
       await apagarTodosOsDados();
       limparArquivosDoUsuario();
       // Só remonta depois que o banco vazio já foi recriado, senão os

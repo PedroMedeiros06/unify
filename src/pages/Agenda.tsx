@@ -64,7 +64,9 @@ export function Agenda() {
   }, []);
 
   useEffect(() => {
-    carregarEventosDoMes(anoExibido, mesExibido);
+    carregarEventosDoMes(anoExibido, mesExibido).catch((e) =>
+      console.warn("[Agenda] Falha ao carregar eventos do mês:", e)
+    );
   }, [anoExibido, mesExibido, carregarEventosDoMes]);
 
   useEffect(() => {
@@ -80,7 +82,7 @@ export function Agenda() {
       if (ativo) setEventosFuturos(eventos);
     }
 
-    carregarFuturos();
+    carregarFuturos().catch((e) => console.warn("[Agenda] Falha ao carregar dados:", e));
 
     return () => {
       ativo = false;

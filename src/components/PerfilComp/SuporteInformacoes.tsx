@@ -1,9 +1,10 @@
 import { moderateScale } from "@/utils/scale";
-import { View, Text } from "react-native";
+import { View, Text, Modal } from "react-native";
 import { memo, useCallback, useMemo, useState } from "react";
 import Constants from "expo-constants";
 import { MenuItem } from "./MenuItem";
 import { SobreUnifyModal } from "./SobreUnifyModal";
+import { OnboardingFluxo } from "@/components/Onboarding/OnboardingFluxo";
 import { useResetApp } from "@/context/ResetAppContext";
 import { useCotacoes } from "@/context/CotacoesContext";
 import { useTaxas } from "@/context/TaxasContext";
@@ -34,6 +35,8 @@ function SuporteInformacoesBase() {
   const { apagando, apagarDadosDoApp } = useResetApp();
   const { confirmar, avisar } = useDialogo();
   const [sobreAberto, setSobreAberto] = useState(false);
+  const [tourAberto, setTourAberto] = useState(false);
+  const fecharTour = useCallback(() => setTourAberto(false), []);
 
   const {
     atualizando: atualizandoCotacoes,
@@ -100,6 +103,12 @@ function SuporteInformacoesBase() {
         onPress={handleSincronizar}
       />
       <MenuItem
+        icone="school-outline"
+        titulo="Rever apresentação"
+        subtitulo="Como usar as principais funções do app"
+        onPress={() => setTourAberto(true)}
+      />
+      <MenuItem
         icone="document-text-outline"
         titulo="Sobre a Unify"
         subtitulo={`Versão ${VERSAO_APP} — ver novidades`}
@@ -115,6 +124,11 @@ function SuporteInformacoesBase() {
       />
 
       <SobreUnifyModal visivel={sobreAberto} onFechar={() => setSobreAberto(false)} />
+
+      {/* Mesma apresentação da primeira abertura, sem a etapa de cadastro. */}
+      <Modal visible={tourAberto} animationType="slide" onRequestClose={fecharTour} statusBarTranslucent>
+        <OnboardingFluxo modo="revisao" onConcluir={fecharTour} />
+      </Modal>
     </View>
   );
 }

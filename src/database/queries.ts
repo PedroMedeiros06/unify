@@ -58,6 +58,8 @@ export type FiltrosTransacao = {
   // não vazio) casa por substring, sem diferenciar maiúsculas, tanto no
   // nome quanto no subtítulo da transação. null/undefined/"" = sem busca.
   texto?: string | null;
+  // Só entradas ou só saídas. null/undefined = ambos.
+  tipo?: TipoTransacao | null;
 };
 
 /**
@@ -101,6 +103,11 @@ function montarClausulaFiltros(filtros: FiltrosTransacao): { where: string; para
   if (filtros.dataFim) {
     condicoes.push(`t.data <= ?`);
     params.push(filtros.dataFim);
+  }
+
+  if (filtros.tipo) {
+    condicoes.push(`t.tipo = ?`);
+    params.push(filtros.tipo);
   }
 
   const textoBusca = filtros.texto?.trim();
@@ -162,6 +169,31 @@ export async function inserirTransacao(transacao: Transacao): Promise<void> {
   });
 }
 
+/**
+ * Insere várias transações numa ÚNICA transação SQL (importação de
+ * extrato). Antes cada linha era um INSERT isolado na fila + um
+ * re-render da UI; com centenas de linhas isso travava. Tudo ou nada:
+ * uma falha faz rollback do lote inteiro.
+ */
+export async function inserirTransacoesEmLote(transacoes: Transacao[]): Promise<void> {
+  if (transacoes.length === 0) return;
+  return executarNaFila(async () => {
+    const db = await getDatabase();
+    await db.withTransactionAsync(async () => {
+      for (const t of transacoes) {
+        await db.runAsync(
+          `INSERT INTO transacoes (id, nome, subtitulo, valor, tipo, data, hora, banco_id, status, categoria_icone, categoria_id, identificador_externo)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+          [
+            t.id, t.nome, t.subtitulo, t.valor, t.tipo, t.data, t.hora, t.bancoId,
+            t.status, t.categoriaIcone, t.categoriaId, t.identificadorExterno,
+          ]
+        );
+      }
+    });
+  });
+}
+
 export async function atualizarTransacao(
   id: string,
   campos: CamposEditaveisTransacao
@@ -193,66 +225,6 @@ export async function excluirTransacao(id: string): Promise<void> {
   });
 }
 
-export async function listarTransacoes(limite?: number): Promise<TransacaoComBanco[]> {
-  return executarNaFila(async () => {
-    const db = await getDatabase();
-
-    const query = `
-      SELECT
-        t.id, t.nome, t.subtitulo, t.valor, t.tipo, t.data, t.hora,
-        t.status, t.categoria_icone as categoriaIcone, t.categoria_id as categoriaId,
-        t.criado_em as criadoEm, t.identificador_externo as identificadorExterno,
-        b.id as banco_id, b.nome as banco_nome, b.sigla as banco_sigla, b.cor as banco_cor
-      FROM transacoes t
-      INNER JOIN bancos b ON b.id = t.banco_id
-      ORDER BY t.data DESC, t.criado_em DESC
-      ${limite ? `LIMIT ${limite}` : ""};
-    `;
-
-    type LinhaBruta = {
-      id: string;
-      nome: string;
-      subtitulo: string;
-      valor: number;
-      tipo: TipoTransacao;
-      data: string;
-      hora: string | null;
-      status: StatusTransacao;
-      categoriaIcone: string | null;
-      categoriaId: CategoriaId | null;
-      criadoEm: string;
-      identificadorExterno: string | null;
-      banco_id: string;
-      banco_nome: string;
-      banco_sigla: string;
-      banco_cor: string;
-    };
-
-    const linhas = await db.getAllAsync<LinhaBruta>(query);
-
-    return linhas.map((linha) => ({
-      id: linha.id,
-      nome: linha.nome,
-      subtitulo: linha.subtitulo,
-      valor: linha.valor,
-      tipo: linha.tipo,
-      data: linha.data,
-      hora: linha.hora,
-      status: linha.status,
-      categoriaIcone: linha.categoriaIcone,
-      categoriaId: linha.categoriaId,
-      criadoEm: linha.criadoEm,
-      identificadorExterno: linha.identificadorExterno,
-      banco: {
-        id: linha.banco_id,
-        nome: linha.banco_nome,
-        sigla: linha.banco_sigla,
-        cor: linha.banco_cor,
-      },
-    }));
-  });
-}
-
 export async function listarTransacoesPorPeriodo(
   bancoId: string,
   dataInicioIso: string,
@@ -272,14 +244,29 @@ export async function listarTransacoesPorPeriodo(
   });
 }
 
-export async function existeIdentificadorExterno(identificadorExterno: string): Promise<boolean> {
+/**
+ * Dos identificadores externos informados, devolve os que JÁ existem no
+ * banco — deduplicação de importação em poucas consultas `IN (...)`, em
+ * vez de uma consulta por linha do CSV. Fatiado em blocos de 500 para
+ * ficar bem abaixo do limite de parâmetros do SQLite.
+ */
+export async function listarIdentificadoresExternosExistentes(ids: string[]): Promise<Set<string>> {
+  const unicos = Array.from(new Set(ids.filter(Boolean)));
+  const existentes = new Set<string>();
+  if (unicos.length === 0) return existentes;
+
   return executarNaFila(async () => {
     const db = await getDatabase();
-    const resultado = await db.getFirstAsync<{ total: number }>(
-      `SELECT COUNT(*) as total FROM transacoes WHERE identificador_externo = ?;`,
-      [identificadorExterno]
-    );
-    return (resultado?.total ?? 0) > 0;
+    for (let i = 0; i < unicos.length; i += 500) {
+      const bloco = unicos.slice(i, i + 500);
+      const linhas = await db.getAllAsync<{ id: string }>(
+        `SELECT DISTINCT identificador_externo as id FROM transacoes
+         WHERE identificador_externo IN (${bloco.map(() => "?").join(", ")});`,
+        bloco
+      );
+      for (const l of linhas) existentes.add(l.id);
+    }
+    return existentes;
   });
 }
 
@@ -382,7 +369,12 @@ export async function listarResumoPorBanco(
  */
 export async function listarTransacoesFiltradas(
   filtros: FiltrosTransacao = {},
-  limite?: number
+  limite?: number,
+  // Deslocamento para paginação (scroll infinito). Só tem efeito junto
+  // de `limite`. A ordenação (data DESC, criado_em DESC) é estável o
+  // bastante para páginas consecutivas não repetirem linhas enquanto
+  // nada é inserido no meio — e toda escrita recarrega a lista do zero.
+  offset = 0
 ): Promise<TransacaoComBanco[]> {
   return executarNaFila(async () => {
     const db = await getDatabase();
@@ -417,7 +409,7 @@ export async function listarTransacoesFiltradas(
        INNER JOIN bancos b ON b.id = t.banco_id
        ${where}
        ORDER BY t.data DESC, t.criado_em DESC
-       ${limite ? `LIMIT ${limite}` : ""};`,
+       ${limite ? `LIMIT ${Math.floor(limite)} OFFSET ${Math.max(0, Math.floor(offset))}` : ""};`,
       params
     );
 
@@ -441,6 +433,40 @@ export async function listarTransacoesFiltradas(
         cor: linha.banco_cor,
       },
     }));
+  });
+}
+
+/**
+ * Quantas transações casam com os filtros — usado pelo contador "N
+ * transações encontradas" da lista paginada (que não tem mais todas as
+ * linhas em memória para contar).
+ */
+export async function contarTransacoesFiltradas(filtros: FiltrosTransacao = {}): Promise<number> {
+  return executarNaFila(async () => {
+    const db = await getDatabase();
+    const { where, params } = montarClausulaFiltros(filtros);
+    const r = await db.getFirstAsync<{ total: number }>(
+      `SELECT COUNT(*) as total FROM transacoes t ${where};`,
+      params
+    );
+    return r?.total ?? 0;
+  });
+}
+
+/**
+ * Categoria atualmente salva de uma transação — usada antes de editar,
+ * para saber se o usuário trocou a categoria (e só então gravar a
+ * regra aprendida). Substitui a consulta à lista em memória do
+ * TransacoesContext, que deixou de existir.
+ */
+export async function obterCategoriaDaTransacao(id: string): Promise<CategoriaId | null> {
+  return executarNaFila(async () => {
+    const db = await getDatabase();
+    const r = await db.getFirstAsync<{ categoria_id: CategoriaId | null }>(
+      `SELECT categoria_id FROM transacoes WHERE id = ?;`,
+      [id]
+    );
+    return r?.categoria_id ?? null;
   });
 }
 
@@ -683,24 +709,26 @@ export async function calcularResumoReceitasDespesas(
     const fimMesAnterior = new Date(mesAnteriorData.getFullYear(), mesAnteriorData.getMonth() + 1, 0);
     const fimMesAnteriorIso = `${fimMesAnterior.getFullYear()}-${String(fimMesAnterior.getMonth() + 1).padStart(2, "0")}-${String(fimMesAnterior.getDate()).padStart(2, "0")}`;
 
-    const [atual, anterior] = await Promise.all([
-      db.getFirstAsync<{ entradas: number; saidas: number }>(
-        `SELECT
-           COALESCE(SUM(CASE WHEN t.tipo = 'entrada' THEN t.valor ELSE 0 END), 0) as entradas,
-           COALESCE(SUM(CASE WHEN t.tipo = 'saida' THEN t.valor ELSE 0 END), 0) as saidas
-         FROM transacoes t
-         WHERE t.data >= ? AND t.data <= ?;`,
-        [inicioMesAtual, fimMesAtualIso]
-      ),
-      db.getFirstAsync<{ entradas: number; saidas: number }>(
-        `SELECT
-           COALESCE(SUM(CASE WHEN t.tipo = 'entrada' THEN t.valor ELSE 0 END), 0) as entradas,
-           COALESCE(SUM(CASE WHEN t.tipo = 'saida' THEN t.valor ELSE 0 END), 0) as saidas
-         FROM transacoes t
-         WHERE t.data >= ? AND t.data <= ?;`,
-        [inicioMesAnterior, fimMesAnteriorIso]
-      ),
-    ]);
+    // UMA query só cobrindo os dois meses (antes eram duas consultas em
+    // Promise.all na mesma conexão — justamente o acesso concorrente que
+    // a fila serializada existe para evitar). O CASE separa os meses.
+    const linha = await db.getFirstAsync<{
+      entradasAtual: number;
+      saidasAtual: number;
+      entradasAnterior: number;
+      saidasAnterior: number;
+    }>(
+      `SELECT
+         COALESCE(SUM(CASE WHEN t.data >= ? AND t.tipo = 'entrada' THEN t.valor ELSE 0 END), 0) as entradasAtual,
+         COALESCE(SUM(CASE WHEN t.data >= ? AND t.tipo = 'saida' THEN t.valor ELSE 0 END), 0) as saidasAtual,
+         COALESCE(SUM(CASE WHEN t.data <= ? AND t.tipo = 'entrada' THEN t.valor ELSE 0 END), 0) as entradasAnterior,
+         COALESCE(SUM(CASE WHEN t.data <= ? AND t.tipo = 'saida' THEN t.valor ELSE 0 END), 0) as saidasAnterior
+       FROM transacoes t
+       WHERE t.data >= ? AND t.data <= ?;`,
+      [inicioMesAtual, inicioMesAtual, fimMesAnteriorIso, fimMesAnteriorIso, inicioMesAnterior, fimMesAtualIso]
+    );
+    const atual = { entradas: linha?.entradasAtual ?? 0, saidas: linha?.saidasAtual ?? 0 };
+    const anterior = { entradas: linha?.entradasAnterior ?? 0, saidas: linha?.saidasAnterior ?? 0 };
 
     return {
       receitasMesAtual: atual?.entradas ?? 0,

@@ -36,6 +36,22 @@ export async function listarLembretes(): Promise<Lembrete[]> {
   });
 }
 
+/** Lembretes com data em [inicioIso, fimIso] (inclusive) — Agenda. */
+export async function listarLembretesNoPeriodo(inicioIso: string, fimIso: string): Promise<Lembrete[]> {
+  return executarNaFila(async () => {
+    const db = await getDatabase();
+    return db.getAllAsync<Lembrete>(
+      `SELECT
+         id, titulo, descricao, data, hora,
+         notificacao_id as notificacaoId, criado_em as criadoEm
+       FROM lembretes
+       WHERE data >= ? AND data <= ?
+       ORDER BY data ASC, hora ASC;`,
+      [inicioIso, fimIso]
+    );
+  });
+}
+
 export async function inserirLembrete(
   id: string,
   campos: CamposLembrete,

@@ -7,6 +7,7 @@ import { memo, useEffect, useMemo, useState } from "react";
 import { obterResumoPrevistoDoMes } from "@/database/orcamentoQueries";
 import { calcularResumoReceitasDespesas } from "@/database/queries";
 import { dataHojeIso } from "@/utils/dateUtils";
+import { useTransacoes } from "@/context/TransacoesContext";
 
 type Props = {
   onEditarOrcamento?: () => void;
@@ -14,6 +15,9 @@ type Props = {
 
 function OrcamentoMensalBase({ onEditarOrcamento }: Props) {
   const colors = useThemeColors();
+  // Recarrega quando uma transação é criada/editada/excluída sem
+  // trocar de tela (ex: pelo "+" do footer).
+  const { versaoDados } = useTransacoes();
   const cardTitleSize = moderateScale(15);
   const labelSize = moderateScale(12);
   const percentSize = moderateScale(14);
@@ -51,6 +55,7 @@ function OrcamentoMensalBase({ onEditarOrcamento }: Props) {
           despesaRealizada: realizado.despesasMesAtual,
         });
       })
+      .catch((e) => console.warn("[OrcamentoMensal] Falha ao carregar dados:", e))
       .finally(() => {
         if (ativo) setCarregando(false);
       });
@@ -58,7 +63,7 @@ function OrcamentoMensalBase({ onEditarOrcamento }: Props) {
     return () => {
       ativo = false;
     };
-  }, [mesAno, ano, mesHumano]);
+  }, [mesAno, ano, mesHumano, versaoDados]);
 
   const valorUtilizado = (dados?.despesaPrevista ?? 0) + (dados?.despesaRealizada ?? 0);
   const valorTotal = dados?.receitaPrevista ?? 0;

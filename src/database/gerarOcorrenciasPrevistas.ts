@@ -98,7 +98,14 @@ function ordenar(lista: OcorrenciaDoMes[]): OcorrenciaDoMes[] {
  *                     - + uma ocorrência dinâmica para cada recorrência
  *                       ativa/vigente que ainda NÃO tem linha no mês.
  */
-export async function gerarOcorrenciasDoMes(mesAno: string): Promise<OcorrenciaDoMes[]> {
+export async function gerarOcorrenciasDoMes(
+  mesAno: string,
+  // Otimização opcional: quem gera VÁRIOS meses de uma vez (Agenda) busca
+  // as recorrências uma vez só e repassa aqui, em vez de cada mês
+  // consultar a mesma tabela de novo. Não muda nenhuma regra — é a mesma
+  // lista que `listarRecorrencias()` devolveria.
+  recorrenciasPrecarregadas?: Recorrencia[]
+): Promise<OcorrenciaDoMes[]> {
   const [persistidas, congelado, ancora] = await Promise.all([
     listarOcorrenciasPersistidasDoMes(mesAno),
     mesEstaCongelado(mesAno),
@@ -113,7 +120,7 @@ export async function gerarOcorrenciasDoMes(mesAno: string): Promise<OcorrenciaD
     return ordenar(persistidas.map(daPersistida));
   }
 
-  const recorrencias = await listarRecorrencias();
+  const recorrencias = recorrenciasPrecarregadas ?? (await listarRecorrencias());
 
   // Recorrências que já têm linha no mês não geram dinâmica (garante
   // "no máximo uma por mês" e preserva o snapshot/ajuste).

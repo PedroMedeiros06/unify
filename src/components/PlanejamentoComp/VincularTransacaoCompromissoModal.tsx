@@ -5,7 +5,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { View, Text, Pressable, TextInput, FlatList, Modal, Animated, Easing } from "react-native";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { useDialogo } from "@/context/DialogoContext";
-import { useTransacoes, Transacao } from "@/context/TransacoesContext";
+import { useTransacoes, Transacao, mapearParaTransacaoUI } from "@/context/TransacoesContext";
+import { listarTransacoesFiltradas } from "@/database/queries";
 import { useCompromissos } from "@/context/CompromissosContext";
 import { Compromisso } from "@/database/compromissosQueries";
 import { dataBRParaIso } from "@/utils/dateUtils";
@@ -154,7 +155,25 @@ function VincularTransacaoCompromissoModalBase({ visivel, compromisso, onFechar,
   const inputSize = moderateScale(13);
   const emptySize = moderateScale(12);
 
-  const { transacoes } = useTransacoes();
+  const { versaoDados } = useTransacoes();
+
+  // Saídas carregadas do banco SÓ enquanto o modal está aberto (antes
+  // vinham da lista completa em memória do TransacoesContext, que
+  // deixou de existir). Fechado não consulta nada — `listaCompleta`
+  // abaixo já ignora a lista quando o modal não está visível.
+  const [transacoes, setTransacoes] = useState<Transacao[]>([]);
+  useEffect(() => {
+    if (!visivel) return;
+    let ativo = true;
+    listarTransacoesFiltradas({ tipo: "saida" })
+      .then((linhas) => {
+        if (ativo) setTransacoes(linhas.map(mapearParaTransacaoUI));
+      })
+      .catch((e) => console.warn("[VincularTransacaoCompromisso] Falha ao carregar saídas:", e));
+    return () => {
+      ativo = false;
+    };
+  }, [visivel, versaoDados]);
   const { compromissos } = useCompromissos();
 
   const [busca, setBusca] = useState("");

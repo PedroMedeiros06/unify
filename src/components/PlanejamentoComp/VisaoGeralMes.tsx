@@ -8,6 +8,8 @@ import { calcularResumoReceitasDespesas } from "@/database/queries";
 import { somarCompromissosNaoPagosNoPeriodo } from "@/database/compromissosQueries";
 import { SeletorMesAno } from "@/components/common/SeletorMesAno";
 import { dataHojeIso } from "@/utils/dateUtils";
+import { useTransacoes } from "@/context/TransacoesContext";
+import { useCompromissos } from "@/context/CompromissosContext";
 
 // Abaixo desse limiar (em módulo), a variação de saldo é tratada como
 // "estável" em vez de subiu/caiu — evita mostrar "+0,3%" como se fosse
@@ -35,6 +37,11 @@ function paraIso(ano: number, mes: number, dia: number): string {
 
 function VisaoGeralMesBase() {
   const colors = useThemeColors();
+  // Recarrega quando uma transação é criada/editada/excluída sem
+  // trocar de tela (ex: pelo "+" do footer).
+  const { versaoDados } = useTransacoes();
+  // Compromissos pagos/criados mudam o saldo projetado.
+  const { compromissos } = useCompromissos();
   const cardTitleSize = moderateScale(15);
   const labelSize = moderateScale(11);
   const valueSize = moderateScale(16);
@@ -94,12 +101,12 @@ function VisaoGeralMesBase() {
       }
     }
 
-    carregar();
+    carregar().catch((e) => console.warn("[VisaoGeralMes] Falha ao carregar dados:", e));
 
     return () => {
       ativo = false;
     };
-  }, [anoExibido, mesExibido]);
+  }, [anoExibido, mesExibido, versaoDados, compromissos]);
 
   const handleSelecionarMesAno = useCallback((ano: number, mes: number) => {
     setAnoExibido(ano);

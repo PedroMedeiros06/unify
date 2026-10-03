@@ -11,6 +11,7 @@ import {
   calcularPercentualLimite,
 } from "@/database/limitesCategoriaQueries";
 import { useLimitesOrcamento } from "@/context/LimitesOrcamentoContext";
+import { useTransacoes } from "@/context/TransacoesContext";
 
 type Props = {
   anoExibido: number;
@@ -105,6 +106,9 @@ const ItemLimite = memo(function ItemLimite({
 
 function CategoriasOrcamentoBase({ anoExibido, mesExibido, onAbrirNovoLimite, onEditarLimite }: Props) {
   const colors = useThemeColors();
+  // Recarrega quando uma transação é criada/editada/excluída sem
+  // trocar de tela (ex: pelo "+" do footer).
+  const { versaoDados } = useTransacoes();
   const cardTitleSize = moderateScale(15);
   const actionTextSize = moderateScale(12);
   const emptySize = moderateScale(12);
@@ -142,6 +146,7 @@ function CategoriasOrcamentoBase({ anoExibido, mesExibido, onAbrirNovoLimite, on
         }
         setGastoPorCategoria(mapa);
       })
+      .catch((e) => console.warn("[CategoriasOrcamento] Falha ao carregar dados:", e))
       .finally(() => {
         if (ativo) setCarregandoGasto(false);
       });
@@ -149,7 +154,7 @@ function CategoriasOrcamentoBase({ anoExibido, mesExibido, onAbrirNovoLimite, on
     return () => {
       ativo = false;
     };
-  }, [anoExibido, mesExibido]);
+  }, [anoExibido, mesExibido, versaoDados]);
 
   const ocupado = carregando || carregandoGasto;
 

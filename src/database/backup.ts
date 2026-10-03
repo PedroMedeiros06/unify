@@ -195,6 +195,12 @@ export async function restaurarDados(arquivo: ArquivoBackup): Promise<void> {
             await db.runAsync(sql, valores as never[]);
           }
         }
+
+        // Os ids de notificação do arquivo são do agendamento de outro
+        // aparelho/momento e não existem aqui. Zerados, quem restaura
+        // reagenda tudo (ver reagendarNotificacoesDoBanco).
+        await db.execAsync(`UPDATE compromissos SET notificacao_id = NULL;`);
+        await db.execAsync(`UPDATE lembretes SET notificacao_id = NULL;`);
       });
     } finally {
       await db.execAsync(`PRAGMA foreign_keys = ON;`);

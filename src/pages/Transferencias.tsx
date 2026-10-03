@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
-import { ScrollView, Text, View, Pressable, FlatList } from "react-native";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Text, View, Pressable, FlatList, ActivityIndicator } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useThemeColors } from "@/theme/useThemeColors";
 import { moderateScale } from "@/utils/scale";
@@ -11,27 +11,14 @@ import { EditarTransacaoModal } from "@/components/TransacoesComp/EditarTransaca
 import { useNovaTransacao } from "@/context/NovaTransacaoContext";
 import { ListaTransacoesSkeleton } from "@/components/common/ListaTransacoesSkeleton";
 import { useFiltrosTransacao } from "@/hooks/useFiltrosTransacao";
-import { useTransacoes, Transacao } from "@/context/TransacoesContext";
-import { listarBancos, listarTransacoesFiltradas, Banco, TransacaoComBanco } from "@/database/queries";
-import { dataIsoParaBR } from "@/utils/dateUtils";
+import { useTransacoes, Transacao, mapearParaTransacaoUI } from "@/context/TransacoesContext";
+import { listarBancos, listarTransacoesFiltradas, contarTransacoesFiltradas, Banco } from "@/database/queries";
 
-function mapearParaTransacaoUI(t: TransacaoComBanco): Transacao {
-  return {
-    id: t.id,
-    nome: t.nome,
-    subtitulo: t.subtitulo,
-    valor: t.valor,
-    tipo: t.tipo,
-    data: dataIsoParaBR(t.data),
-    hora: t.hora ?? undefined,
-    banco: { sigla: t.banco.sigla, cor: t.banco.cor },
-    status: t.status,
-    categoriaIcone: t.categoriaIcone ?? undefined,
-    categoriaId: t.categoriaId,
-  };
-}
+// Linhas por página do scroll infinito. ~4 telas de altura: a primeira
+// carga é rápida e o usuário raramente chega à 2ª página sem filtrar.
+const TAMANHO_PAGINA = 50;
 
-const TransacaoItem = ({
+const TransacaoItem = memo(function TransacaoItem({
   item,
   isLast,
   onLongPress,
@@ -39,7 +26,7 @@ const TransacaoItem = ({
   item: Transacao;
   isLast: boolean;
   onLongPress: (transacao: Transacao) => void;
-}) => {
+}) {
   const colors = useThemeColors();
   const nomeSize = moderateScale(13);
   const subtituloSize = moderateScale(11);
@@ -93,8 +80,23 @@ const TransacaoItem = ({
       </View>
     </Pressable>
   );
-};
+});
 
+/**
+ * Lista completa de transações (rota `transations`, aba do footer).
+ *
+ * Performance:
+ *  - a tela inteira é UM FlatList raiz (header/filtros/contador em
+ *    ListHeaderComponent). Antes era ScrollView + FlatList com
+ *    scrollEnabled={false}, que anula a virtualização e montava TODAS
+ *    as linhas de uma vez;
+ *  - paginação no SQL (LIMIT/OFFSET de TAMANHO_PAGINA) com scroll
+ *    infinito em onEndReached — nunca traz o histórico inteiro;
+ *  - o total do contador vem de um COUNT(*) separado.
+ *
+ * Recarrega do zero quando os filtros mudam ou quando qualquer
+ * transação é escrita (versaoDados do TransacoesContext).
+ */
 export function Transferencias() {
   const colors = useThemeColors();
   const titleSize = moderateScale(22);
@@ -103,7 +105,7 @@ export function Transferencias() {
   const countTextSize = moderateScale(11);
   const buttonTextSize = moderateScale(13);
 
-  const { transacoes: transacoesContext, editarTransacao, removerTransacao } = useTransacoes();
+  const { editarTransacao, removerTransacao, versaoDados } = useTransacoes();
   const { abrir: abrirNovaTransacao } = useNovaTransacao();
 
   const {
@@ -123,30 +125,56 @@ export function Transferencias() {
   const [bancos, setBancos] = useState<Banco[]>([]);
   const [modalPeriodoAberto, setModalPeriodoAberto] = useState(false);
   const [transacoes, setTransacoes] = useState<Transacao[]>([]);
+  const [total, setTotal] = useState(0);
   const [carregando, setCarregando] = useState(true);
+  const [carregandoMais, setCarregandoMais] = useState(false);
   const [transacaoSelecionada, setTransacaoSelecionada] = useState<Transacao | null>(null);
 
+  // Geração da consulta atual: cada recarga do zero incrementa. Uma
+  // página que chegar de uma geração antiga (filtro trocado no meio) é
+  // descartada em vez de se misturar à lista nova.
+  const geracao = useRef(0);
+
   useEffect(() => {
-    listarBancos().then(setBancos);
+    listarBancos()
+      .then(setBancos)
+      .catch((e) => console.warn("[listarBancos] Falha ao carregar bancos:", e));
   }, []);
 
-  const carregarTransacoes = useCallback(async () => {
-    setCarregando(true);
-    try {
-      const linhas = await listarTransacoesFiltradas(filtrosParaQuery);
-      setTransacoes(linhas.map(mapearParaTransacaoUI));
-    } finally {
-      setCarregando(false);
-    }
-  }, [filtrosParaQuery]);
-
-  // Recarrega quando os filtros mudam OU quando a lista global de
-  // transações muda (nova transação criada pelo modal global, edição,
-  // exclusão) — antes o refresh era disparado no onFechar do modal
-  // local, que não existe mais.
   useEffect(() => {
-    carregarTransacoes();
-  }, [carregarTransacoes, transacoesContext]);
+    const minhaGeracao = ++geracao.current;
+    setCarregando(true);
+
+    Promise.all([
+      listarTransacoesFiltradas(filtrosParaQuery, TAMANHO_PAGINA, 0),
+      contarTransacoesFiltradas(filtrosParaQuery),
+    ])
+      .then(([linhas, contagem]) => {
+        if (geracao.current !== minhaGeracao) return;
+        setTransacoes(linhas.map(mapearParaTransacaoUI));
+        setTotal(contagem);
+      })
+      .catch((e) => console.warn("[Transferencias] Falha ao carregar transações:", e))
+      .finally(() => {
+        if (geracao.current === minhaGeracao) setCarregando(false);
+      });
+  }, [filtrosParaQuery, versaoDados]);
+
+  const temMais = transacoes.length < total;
+
+  const carregarMais = useCallback(() => {
+    if (carregando || carregandoMais || !temMais) return;
+    const minhaGeracao = geracao.current;
+    setCarregandoMais(true);
+
+    listarTransacoesFiltradas(filtrosParaQuery, TAMANHO_PAGINA, transacoes.length)
+      .then((linhas) => {
+        if (geracao.current !== minhaGeracao) return;
+        setTransacoes((prev) => [...prev, ...linhas.map(mapearParaTransacaoUI)]);
+      })
+      .catch((e) => console.warn("[Transferencias] Falha ao carregar mais transações:", e))
+      .finally(() => setCarregandoMais(false));
+  }, [carregando, carregandoMais, temMais, filtrosParaQuery, transacoes.length]);
 
   const handleConfirmarPeriodo = useCallback(
     (inicioIso: string, fimIso: string) => {
@@ -164,30 +192,19 @@ export function Transferencias() {
     setTransacaoSelecionada(null);
   }, []);
 
+  // Edição/exclusão passam pelo TransacoesContext (porta única de
+  // escrita); o versaoDados que ele incrementa já dispara a recarga
+  // desta lista — não precisa recarregar à mão aqui.
   const handleSalvarEdicao = useCallback(
-    async (id: string, campos: Parameters<typeof editarTransacao>[1]) => {
-      await editarTransacao(id, campos);
-      await carregarTransacoes();
-    },
-    [editarTransacao, carregarTransacoes]
+    (id: string, campos: Parameters<typeof editarTransacao>[1]) => editarTransacao(id, campos),
+    [editarTransacao]
   );
 
-  const handleExcluir = useCallback(
-    async (id: string) => {
-      await removerTransacao(id);
-      await carregarTransacoes();
-    },
-    [removerTransacao, carregarTransacoes]
-  );
+  const handleExcluir = useCallback((id: string) => removerTransacao(id), [removerTransacao]);
 
-  return (
-    <ScrollView
-      className="flex-1"
-      showsVerticalScrollIndicator={false}
-      contentContainerStyle={{ paddingBottom: 100 }}
-      removeClippedSubviews
-    >
-      <View className="flex-col gap-4">
+  const Cabecalho = useMemo(
+    () => (
+      <View className="flex-col gap-4 mb-4">
         {/* HEADER */}
         <View className="w-full flex-row justify-between items-start">
           <View className="flex-1 pr-3">
@@ -227,43 +244,93 @@ export function Transferencias() {
           onAbrirPeriodoPersonalizado={() => setModalPeriodoAberto(true)}
           onLimparTodos={limparTodosFiltros}
         />
+      </View>
+    ),
+    [
+      titleSize,
+      subtitleSize,
+      buttonTextSize,
+      abrirNovaTransacao,
+      bancos,
+      filtros,
+      possuiFiltrosAtivos,
+      alternarBanco,
+      limparFiltroBanco,
+      alternarCategoria,
+      limparFiltroCategoria,
+      definirPeriodoPreset,
+      limparTodosFiltros,
+    ]
+  );
 
-        {carregando ? (
-          <ListaTransacoesSkeleton linhas={8} titulo={false} />
-        ) : (
-          <View className="bg-card-background border border-lines-divisions rounded-xl px-4 py-2">
-            <View className="flex-row justify-between items-center py-2 border-b border-lines-divisions">
-              <Text style={{ fontSize: countTextSize }} className="text-second-text">
-                {transacoes.length} {transacoes.length === 1 ? "transação encontrada" : "transações encontradas"}
-              </Text>
-            </View>
+  // Topo do "card" da lista (contador). Fica fora do Cabecalho para o
+  // header (filtros) não remontar a cada página nova que muda o total.
+  const TopoCard =
+    !carregando && transacoes.length > 0 ? (
+      <View className="bg-card-background border-x border-t border-lines-divisions rounded-t-xl px-4">
+        <View className="flex-row justify-between items-center py-2 border-b border-lines-divisions">
+          <Text style={{ fontSize: countTextSize }} className="text-second-text">
+            {total} {total === 1 ? "transação encontrada" : "transações encontradas"}
+          </Text>
+        </View>
+      </View>
+    ) : null;
 
-            {transacoes.length === 0 ? (
-              <View className="items-center py-10">
-                <Ionicons name="receipt-outline" color={colors["desactived-text"]} size={30} />
-                <Text style={{ fontSize: emptyTitleSize }} className="text-desactived-text text-center mt-2">
-                  {consultaTemRecorte
-                    ? "Nenhuma transação encontrada para os filtros atuais."
-                    : "Nenhuma transação ainda.\nImporte um extrato ou toque em \"Nova\" para começar."}
-                </Text>
-              </View>
-            ) : (
-              <FlatList
-                data={transacoes}
-                keyExtractor={(item) => item.id}
-                scrollEnabled={false}
-                renderItem={({ item, index }) => (
-                  <TransacaoItem
-                    item={item}
-                    isLast={index === transacoes.length - 1}
-                    onLongPress={handleLongPress}
-                  />
-                )}
-              />
-            )}
+  return (
+    <View className="flex-1">
+      <FlatList
+        data={carregando ? [] : transacoes}
+        keyExtractor={(item) => item.id}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 100 }}
+        ListHeaderComponent={
+          <>
+            {Cabecalho}
+            {TopoCard}
+          </>
+        }
+        renderItem={({ item, index }) => (
+          <View className="bg-card-background border-x border-lines-divisions px-4">
+            <TransacaoItem
+              item={item}
+              isLast={index === transacoes.length - 1 && !temMais}
+              onLongPress={handleLongPress}
+            />
           </View>
         )}
-      </View>
+        ListFooterComponent={
+          !carregando && transacoes.length > 0 ? (
+            <View className="bg-card-background border-x border-b border-lines-divisions rounded-b-xl pb-2">
+              {carregandoMais && (
+                <View className="py-3 items-center">
+                  <ActivityIndicator color={colors["active-icon"]} />
+                </View>
+              )}
+            </View>
+          ) : null
+        }
+        ListEmptyComponent={
+          carregando ? (
+            <ListaTransacoesSkeleton linhas={8} titulo={false} />
+          ) : (
+            <View className="bg-card-background border border-lines-divisions rounded-xl items-center py-10">
+              <Ionicons name="receipt-outline" color={colors["desactived-text"]} size={30} />
+              <Text style={{ fontSize: emptyTitleSize }} className="text-desactived-text text-center mt-2">
+                {consultaTemRecorte
+                  ? "Nenhuma transação encontrada para os filtros atuais."
+                  : "Nenhuma transação ainda.\nImporte um extrato ou toque em \"Nova\" para começar."}
+              </Text>
+            </View>
+          )
+        }
+        onEndReached={carregarMais}
+        onEndReachedThreshold={0.5}
+        // Reciclagem de linhas: mantém só ~2 telas montadas.
+        initialNumToRender={12}
+        maxToRenderPerBatch={12}
+        windowSize={7}
+        removeClippedSubviews
+      />
 
       <SeletorPeriodoPersonalizado
         visivel={modalPeriodoAberto}
@@ -273,14 +340,12 @@ export function Transferencias() {
         onFechar={() => setModalPeriodoAberto(false)}
       />
 
-      {/* NovaTransacaoModal agora vive no NovaTransacaoProvider */}
-
       <EditarTransacaoModal
         transacao={transacaoSelecionada}
         onFechar={handleFecharModal}
         onSalvar={handleSalvarEdicao}
         onExcluir={handleExcluir}
       />
-    </ScrollView>
+    </View>
   );
 }

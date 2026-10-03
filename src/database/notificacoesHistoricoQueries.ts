@@ -1,4 +1,5 @@
 import { getDatabase, executarNaFila } from "./database";
+import { dataHoraLocalIso } from "@/utils/dateUtils";
 
 /**
  * Histórico das notificações locais que o app AGENDOU (ver migration
@@ -89,8 +90,20 @@ export async function removerPorNotificacaoId(notificacaoId: string | null): Pro
     await db.runAsync(
       `DELETE FROM notificacoes_historico
        WHERE notificacao_id = ? AND disparar_em > ?;`,
-      [notificacaoId, new Date().toISOString()]
+      [notificacaoId, dataHoraLocalIso()]
     );
+  });
+}
+
+/**
+ * Remove do histórico TODAS as linhas que ainda não dispararam. Usado
+ * junto do cancelamento em massa das notificações agendadas (apagar
+ * dados / restaurar backup) — as já recebidas continuam no histórico.
+ */
+export async function removerAgendadasFuturas(): Promise<void> {
+  return executarNaFila(async () => {
+    const db = await getDatabase();
+    await db.runAsync(`DELETE FROM notificacoes_historico WHERE disparar_em > ?;`, [dataHoraLocalIso()]);
   });
 }
 
@@ -128,7 +141,7 @@ export async function contarNaoLidas(): Promise<number> {
       `SELECT COUNT(*) as total
        FROM notificacoes_historico
        WHERE lida = 0 AND disparar_em <= ?;`,
-      [new Date().toISOString()]
+      [dataHoraLocalIso()]
     );
     return linha?.total ?? 0;
   });
@@ -146,7 +159,7 @@ export async function marcarTodasComoLidas(): Promise<void> {
       `UPDATE notificacoes_historico
        SET lida = 1
        WHERE lida = 0 AND disparar_em <= ?;`,
-      [new Date().toISOString()]
+      [dataHoraLocalIso()]
     );
   });
 }

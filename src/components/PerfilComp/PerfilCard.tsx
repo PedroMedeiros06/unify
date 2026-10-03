@@ -79,7 +79,9 @@ function PerfilCardBase() {
   const handleRemoverFoto = useCallback(() => {
     const uri = perfil.avatarUri;
     if (!uri) return;
-    void atualizarPerfil({ avatarUri: null }).then(() => apagarFotoPerfil(uri));
+    void atualizarPerfil({ avatarUri: null })
+      .then(() => apagarFotoPerfil(uri))
+      .catch((e) => console.warn("[PerfilCard] Falha ao remover foto:", e));
   }, [perfil.avatarUri, atualizarPerfil]);
 
   const nomeExibido = perfil.nome || "Toque para se cadastrar";

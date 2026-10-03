@@ -11,6 +11,7 @@ import {
   CamposCompromisso,
 } from "@/database/compromissosQueries";
 import { agendarNotificacaoVencimento, cancelarNotificacao } from "@/database/notificacoes";
+import { dataHojeIso } from "@/utils/dateUtils";
 
 type CompromissosContextValue = {
   compromissos: Compromisso[];
@@ -30,6 +31,10 @@ type CompromissosContextValue = {
   // notificações em Preferencias.tsx (a preferência em si é gravada
   // lá).
   ressincronizarNotificacoes: (ativar: boolean) => Promise<void>;
+  // Relê do banco. Necessário quando um compromisso muda por FORA deste
+  // contexto — ex: a transação vinculada é excluída e o ON DELETE SET
+  // NULL devolve o compromisso a "não pago" direto no SQLite.
+  recarregar: () => Promise<void>;
 };
 
 const CompromissosContext = createContext<CompromissosContextValue | null>(null);
@@ -99,12 +104,12 @@ export function CompromissosProvider({ children }: { children: ReactNode }) {
 
       try {
         await cancelarNotificacao(compromissoAtual?.notificacaoId ?? null);
-        const novaNotificacaoId = await agendarNotificacaoVencimento(
-          campos.nome,
-          campos.valor,
-          campos.dataVencimento,
-          id
-        );
+        // Compromisso já pago (tem transação vinculada) não recebe aviso
+        // de vencimento — editar nome/valor/data dele não pode reagendar
+        // um "Compromisso vence hoje" para uma conta já quitada.
+        const novaNotificacaoId = compromissoAtual?.pago
+          ? null
+          : await agendarNotificacaoVencimento(campos.nome, campos.valor, campos.dataVencimento, id);
 
         await atualizarCompromisso(id, campos, novaNotificacaoId);
         setCompromissos((prev) =>
@@ -143,17 +148,34 @@ export function CompromissosProvider({ children }: { children: ReactNode }) {
     [compromissos]
   );
 
-  const desmarcarPagoCompromisso = useCallback(async (id: string) => {
-    try {
-      await desvincularCompromissoDaTransacao(id);
-      setCompromissos((prev) =>
-        prev.map((c) => (c.id === id ? { ...c, transacaoId: null, pago: false } : c))
-      );
-    } catch (e) {
-      setErro(e instanceof Error ? e.message : "Erro ao remover pagamento do compromisso");
-      throw e;
-    }
-  }, []);
+  const desmarcarPagoCompromisso = useCallback(
+    async (id: string) => {
+      const compromisso = compromissos.find((c) => c.id === id);
+
+      try {
+        await desvincularCompromissoDaTransacao(id);
+
+        // Voltou a ficar pendente: o aviso de vencimento (cancelado ao
+        // pagar) volta a fazer sentido. `agendarNotificacaoVencimento` já
+        // devolve null se a data passou ou se o usuário desligou as
+        // notificações.
+        const notificacaoId = compromisso
+          ? await agendarNotificacaoVencimento(compromisso.nome, compromisso.valor, compromisso.dataVencimento, id)
+          : null;
+        if (notificacaoId) await atualizarNotificacaoIdCompromisso(id, notificacaoId);
+
+        setCompromissos((prev) =>
+          prev.map((c) =>
+            c.id === id ? { ...c, transacaoId: null, pago: false, notificacaoId: notificacaoId ?? c.notificacaoId } : c
+          )
+        );
+      } catch (e) {
+        setErro(e instanceof Error ? e.message : "Erro ao remover pagamento do compromisso");
+        throw e;
+      }
+    },
+    [compromissos]
+  );
 
   const removerCompromisso = useCallback(
     async (id: string) => {
@@ -173,7 +195,9 @@ export function CompromissosProvider({ children }: { children: ReactNode }) {
 
   const ressincronizarNotificacoes = useCallback(
     async (ativar: boolean) => {
-      const hojeIso = new Date().toISOString().slice(0, 10);
+      // Data LOCAL — `toISOString()` é UTC e vira o dia seguinte depois
+      // das 21h no Brasil.
+      const hojeIso = dataHojeIso();
       const atualizacoes = new Map<string, string | null>();
 
       for (const c of compromissos) {
@@ -215,6 +239,7 @@ export function CompromissosProvider({ children }: { children: ReactNode }) {
       desmarcarPagoCompromisso,
       removerCompromisso,
       ressincronizarNotificacoes,
+      recarregar: carregar,
     }),
     [
       compromissos,
@@ -226,6 +251,7 @@ export function CompromissosProvider({ children }: { children: ReactNode }) {
       desmarcarPagoCompromisso,
       removerCompromisso,
       ressincronizarNotificacoes,
+      carregar,
     ]
   );
 

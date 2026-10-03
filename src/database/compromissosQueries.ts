@@ -45,6 +45,23 @@ export async function listarCompromissos(): Promise<Compromisso[]> {
   });
 }
 
+/** Compromissos com vencimento em [inicioIso, fimIso] (inclusive) — Agenda. */
+export async function listarCompromissosNoPeriodo(inicioIso: string, fimIso: string): Promise<Compromisso[]> {
+  return executarNaFila(async () => {
+    const db = await getDatabase();
+    const linhas = await db.getAllAsync<LinhaBrutaCompromisso>(
+      `SELECT
+         id, nome, valor, data_vencimento as dataVencimento, icone, cor,
+         transacao_id as transacaoId, notificacao_id as notificacaoId, criado_em as criadoEm
+       FROM compromissos
+       WHERE data_vencimento >= ? AND data_vencimento <= ?
+       ORDER BY data_vencimento ASC;`,
+      [inicioIso, fimIso]
+    );
+    return linhas.map(mapearLinha);
+  });
+}
+
 export async function inserirCompromisso(
   id: string,
   campos: CamposCompromisso,

@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import { View } from "react-native";
+import { BackHandler, View } from "react-native";
 
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Footer } from "../components/Footer";
 import { OnboardingFluxo } from "../components/Onboarding/OnboardingFluxo";
+import { AberturaAnimada } from "../components/common/AberturaAnimada";
 import { onboardingConcluido, marcarOnboardingConcluido } from "@/utils/onboardingFlag";
 
 import { Home } from "../pages/home";
@@ -33,7 +34,7 @@ const Screens = {
 
 export default function AppIndex() {
   const insets = useSafeAreaInsets();
-  const { activeScreen, navigate } = useNavigation();
+  const { activeScreen, navigate, goBack } = useNavigation();
 
   const [menuAcaoAberto, setMenuAcaoAberto] = useState(false);
   const { abrir: abrirNovaTransacao } = useNovaTransacao();
@@ -52,6 +53,28 @@ export default function AppIndex() {
       ativo = false;
     };
   }, []);
+
+  // Botão/gesto "voltar" do Android. Sem isto, como a navegação é
+  // própria (não usa a pilha do expo-router), o voltar do sistema
+  // fechava o app em QUALQUER tela — inclusive no meio da importação de
+  // extrato. Agora: fora da Home, volta uma tela no histórico; na Home
+  // (ou durante o onboarding), deixa o sistema tratar (sair do app).
+  // Modais abertos não chegam aqui: o `onRequestClose` deles consome o
+  // evento antes.
+  useEffect(() => {
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      if (precisaOnboarding !== false || activeScreen === "home") return false;
+      goBack();
+      return true;
+    });
+    return () => sub.remove();
+  }, [activeScreen, goBack, precisaOnboarding]);
+
+  // Overlay de abertura (ver AberturaAnimada): ele mesmo libera a splash
+  // nativa ao montar e anima a saída quando já sabemos o que mostrar
+  // (onboarding ou app). A rede de segurança (timeout) fica no _layout.
+  const [aberturaVisivel, setAberturaVisivel] = useState(true);
+  const handleFimAbertura = useCallback(() => setAberturaVisivel(false), []);
 
   const handleConcluirOnboarding = useCallback(() => {
     void marcarOnboardingConcluido();
@@ -107,41 +130,49 @@ export default function AppIndex() {
     [navigate, abrirNovaTransacao]
   );
 
-  // Ainda checando a flag: tela vazia com o fundo do app (evita flash).
+  let conteudo;
   if (precisaOnboarding === null) {
-    return <View style={{ flex: 1 }} className="bg-main-background" />;
-  }
+    // Ainda checando a flag: só o fundo (o overlay de abertura cobre).
+    conteudo = <View style={{ flex: 1 }} className="bg-main-background" />;
+  } else if (precisaOnboarding) {
+    conteudo = <OnboardingFluxo onConcluir={handleConcluirOnboarding} />;
+  } else {
+    conteudo = (
+      <View
+        style={{ flex: 1, paddingTop: insets.top }}
+        className="bg-main-background"
+      >
+        <View style={{ flex: 1 }} className="p-6">
+          <ActiveScreen />
+        </View>
 
-  if (precisaOnboarding) {
-    return <OnboardingFluxo onConcluir={handleConcluirOnboarding} />;
+        {mostrarFooter && (
+          <View className="absolute bottom-0 left-0 right-0">
+            <Footer
+              activeScreen={activeScreen}
+              onChangeScreen={navigate}
+              onPressAdicionar={handlePressAdicionar}
+              menuAcaoAberto={menuAcaoAberto}
+            />
+          </View>
+        )}
+
+        <MenuAcaoRapida
+          visivel={menuAcaoAberto}
+          onFechar={() => setMenuAcaoAberto(false)}
+          onSelecionar={handleSelecionarAcao}
+        />
+        {/* NovaTransacaoModal agora é renderizado pelo NovaTransacaoProvider */}
+      </View>
+    );
   }
 
   return (
-    <View
-      style={{ flex: 1, paddingTop: insets.top }}
-      className="bg-main-background"
-    >
-      <View style={{ flex: 1 }} className="p-6">
-        <ActiveScreen />
-      </View>
-
-      {mostrarFooter && (
-        <View className="absolute bottom-0 left-0 right-0">
-          <Footer
-            activeScreen={activeScreen}
-            onChangeScreen={navigate}
-            onPressAdicionar={handlePressAdicionar}
-            menuAcaoAberto={menuAcaoAberto}
-          />
-        </View>
+    <View style={{ flex: 1 }}>
+      {conteudo}
+      {aberturaVisivel && (
+        <AberturaAnimada pronto={precisaOnboarding !== null} onFim={handleFimAbertura} />
       )}
-
-      <MenuAcaoRapida
-        visivel={menuAcaoAberto}
-        onFechar={() => setMenuAcaoAberto(false)}
-        onSelecionar={handleSelecionarAcao}
-      />
-      {/* NovaTransacaoModal agora é renderizado pelo NovaTransacaoProvider */}
     </View>
   );
 }

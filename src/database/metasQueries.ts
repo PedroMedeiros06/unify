@@ -1,5 +1,5 @@
 import { getDatabase, executarNaFila } from "./database";
-import { calcularProgressoDeTodasAsMetas, calcularProgressoMeta } from "./metaTransacoesQueries";
+import { calcularProgressoDeTodasAsMetas } from "./metaTransacoesQueries";
 
 export type Meta = {
   id: string;
@@ -145,17 +145,16 @@ export async function listarMetasComPrazoNoPeriodo(
     );
   });
 
-  // Poucas metas tendem a cair num período específico, então uma
-  // query de progresso por item aqui é aceitável (diferente de
-  // listarMetas(), que carrega TODAS as metas de uma vez).
-  const comProgresso = await Promise.all(
-    linhas.map(async (linha) => ({
-      ...linha,
-      progressoAtual: await calcularProgressoMeta(linha.id),
-    }))
-  );
+  if (linhas.length === 0) return [];
 
-  return comProgresso;
+  // Uma única query agregada (GROUP BY) para o progresso — antes era
+  // uma consulta por meta (N+1), e a Agenda chama esta função duas
+  // vezes por abertura (mês exibido + próximos 90 dias).
+  const progressoPorMeta = await calcularProgressoDeTodasAsMetas();
+  return linhas.map((linha) => ({
+    ...linha,
+    progressoAtual: progressoPorMeta.get(linha.id) ?? 0,
+  }));
 }
 
 /**
