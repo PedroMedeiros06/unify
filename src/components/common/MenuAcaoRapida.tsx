@@ -1,4 +1,5 @@
-import { colors } from "@/theme/colors";
+import { colors as coresIdentidade } from "@/theme/colors";
+import { useThemeColors } from "@/theme/useThemeColors";
 import { moderateScale } from "@/utils/scale";
 import { Ionicons } from "@expo/vector-icons";
 import { View, Text, Pressable, Modal, Animated, Easing, useWindowDimensions } from "react-native";
@@ -14,10 +15,10 @@ type Props = {
 };
 
 const OPCOES: { acao: Acao; titulo: string; icone: keyof typeof Ionicons.glyphMap; cor: string }[] = [
-  { acao: "novaTransacao", titulo: "Nova transação", icone: "add-circle-outline", cor: colors["active-icon"] },
+  { acao: "novaTransacao", titulo: "Nova transação", icone: "add-circle-outline", cor: coresIdentidade["active-icon"] },
   { acao: "transferencia", titulo: "Transferência", icone: "swap-horizontal-outline", cor: "#3B9CBD" },
-  { acao: "importarExtrato", titulo: "Importar extrato", icone: "document-attach-outline", cor: colors["sucess-color"] },
-  { acao: "novaMeta", titulo: "Nova meta", icone: "flag-outline", cor: colors["warn-color"] },
+  { acao: "importarExtrato", titulo: "Importar extrato", icone: "document-attach-outline", cor: coresIdentidade["sucess-color"] },
+  { acao: "novaMeta", titulo: "Nova meta", icone: "flag-outline", cor: coresIdentidade["warn-color"] },
   { acao: "novoCompromisso", titulo: "Novo compromisso", icone: "calendar-outline", cor: "#378ADD" },
 ];
 
@@ -27,6 +28,7 @@ const OPCOES: { acao: Acao; titulo: string; icone: keyof typeof Ionicons.glyphMa
 const ALTURA_FOOTER_BASE = 64;
 
 function MenuAcaoRapidaBase({ visivel, onFechar, onSelecionar }: Props) {
+  const colors = useThemeColors();
   const itemTitleSize = moderateScale(13);
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();

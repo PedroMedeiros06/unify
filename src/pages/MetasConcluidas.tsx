@@ -1,7 +1,7 @@
 import { moderateScale } from "@/utils/scale";
 import { FormatToCurrency } from "@/utils/formatNumber";
 import { Ionicons } from "@expo/vector-icons";
-import { colors } from "@/theme/colors";
+import { useThemeColors } from "@/theme/useThemeColors";
 import { ScrollView, View, Text, Pressable } from "react-native";
 import { memo, useMemo } from "react";
 import { useNavigation } from "@/context/NavigationContext";
@@ -17,6 +17,7 @@ import { MetasSkeleton } from "@/components/common/MetasSkeleton";
  * banco.
  */
 const MetaConcluidaItem = memo(function MetaConcluidaItem({ meta }: { meta: Meta }) {
+  const colors = useThemeColors();
   const tituloSize = moderateScale(13);
   const subtituloSize = moderateScale(10);
   const valorSize = moderateScale(12);
@@ -50,6 +51,7 @@ const MetaConcluidaItem = memo(function MetaConcluidaItem({ meta }: { meta: Meta
 });
 
 export function MetasConcluidas() {
+  const colors = useThemeColors();
   const { goBack } = useNavigation();
   const { metas, carregando } = useMetas();
 

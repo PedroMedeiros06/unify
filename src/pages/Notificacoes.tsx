@@ -1,6 +1,6 @@
 import { moderateScale } from "@/utils/scale";
 import { Ionicons } from "@expo/vector-icons";
-import { colors } from "@/theme/colors";
+import { useThemeColors } from "@/theme/useThemeColors";
 import { View, Text, Pressable, FlatList } from "react-native";
 import { memo, useEffect, useState } from "react";
 import { useNavigation } from "@/context/NavigationContext";
@@ -84,6 +84,7 @@ const NotificacaoItem = memo(function NotificacaoItem({
   // cada linha (proibido pelo React Compiler / regra de pureza).
   agora: number;
 }) {
+  const colors = useThemeColors();
   const tituloSize = moderateScale(13);
   const corpoSize = moderateScale(11);
   const metaSize = moderateScale(10);
@@ -130,6 +131,7 @@ const NotificacaoItem = memo(function NotificacaoItem({
 });
 
 export function Notificacoes() {
+  const colors = useThemeColors();
   const { goBack } = useNavigation();
   const { historico, carregando, marcarTodasLidas } = useNotificacoes();
 

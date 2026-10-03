@@ -1,4 +1,4 @@
-import { colors } from "@/theme/colors";
+import { useThemeColors } from "@/theme/useThemeColors";
 import { SeletorConta } from "@/components/ContasComp/SeletorConta";
 import { moderateScale } from "@/utils/scale";
 import { FormatToCurrency } from "@/utils/formatNumber";
@@ -39,6 +39,7 @@ const ItemPreview = memo(function ItemPreview({
   onRemoverVinculo: (index: number) => void;
   isLast: boolean;
 }) {
+  const colors = useThemeColors();
   const nomeSize = moderateScale(12);
   const valorSize = moderateScale(12);
   const avisoSize = moderateScale(10);
@@ -283,6 +284,7 @@ function PreviewImportacaoBase({
   onCancelar,
   salvando,
 }: Props) {
+  const colors = useThemeColors();
   const titleSize = moderateScale(15);
   const subtitleSize = moderateScale(11);
   const countLabelSize = moderateScale(11);

@@ -1,4 +1,4 @@
-import { colors } from "@/theme/colors";
+import { useThemeColors } from "@/theme/useThemeColors";
 import { moderateScale } from "@/utils/scale";
 import { FormatToCurrency } from "@/utils/formatNumber";
 import { Ionicons } from "@expo/vector-icons";
@@ -19,6 +19,7 @@ const RecorrenciaItem = memo(function RecorrenciaItem({
   onEditar: (r: Recorrencia) => void;
   onAlternarAtiva: (r: Recorrencia) => void;
 }) {
+  const colors = useThemeColors();
   const tituloSize = moderateScale(13);
   const subtituloSize = moderateScale(10);
   const valorSize = moderateScale(13);
@@ -114,6 +115,7 @@ function Secao({
 }
 
 function ListaRecorrenciasBase() {
+  const colors = useThemeColors();
   const textoSize = moderateScale(12);
   const {
     recorrencias,

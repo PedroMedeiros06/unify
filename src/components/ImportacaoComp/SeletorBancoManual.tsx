@@ -1,4 +1,4 @@
-import { colors } from "@/theme/colors";
+import { useThemeColors } from "@/theme/useThemeColors";
 import { moderateScale } from "@/utils/scale";
 import { Ionicons } from "@expo/vector-icons";
 import { View, Text, Pressable } from "react-native";
@@ -18,6 +18,7 @@ type Props = {
 };
 
 function SeletorBancoManualBase({ parsers, onSelecionar, onCancelar }: Props) {
+  const colors = useThemeColors();
   const titleSize = moderateScale(15);
   const subtitleSize = moderateScale(12);
   const bancoNomeSize = moderateScale(14);

@@ -1,6 +1,8 @@
 import { createContext, useContext, useMemo, ReactNode } from "react";
 import { useColorScheme } from "react-native";
 import { VariableContextProvider } from "nativewind";
+import { StatusBar } from "expo-status-bar";
+import { NavigationBar } from "expo-navigation-bar";
 import { usePerfil } from "@/context/PerfilContext";
 import type { TemaPreferido } from "@/database/perfilQueries";
 
@@ -111,6 +113,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   return (
     <ThemeContext.Provider value={value}>
+      {/* Ícones da barra de status e da navegação do sistema seguem o
+          tema: escuros sobre o fundo claro, claros sobre o escuro. Sem
+          isto, no tema claro os ícones brancos sumiam no fundo. */}
+      <StatusBar style={temaEfetivo === "claro" ? "dark" : "light"} />
+      <NavigationBar style={temaEfetivo === "claro" ? "dark" : "light"} />
       <VariableContextProvider value={vars}>{children}</VariableContextProvider>
     </ThemeContext.Provider>
   );

@@ -1,4 +1,4 @@
-import { colors } from "@/theme/colors";
+import { useThemeColors } from "@/theme/useThemeColors";
 import { moderateScale } from "@/utils/scale";
 import { Ionicons } from "@expo/vector-icons";
 import { View, Text, Pressable, TextInput } from "react-native";
@@ -51,6 +51,7 @@ const DIA_PADRAO: Record<TipoVencimento, number | null> = {
 };
 
 function SeletorRegraVencimentoBase({ tipoVencimento, diaVencimento, onChange }: Props) {
+  const colors = useThemeColors();
   const labelSize = moderateScale(11);
   const tituloSize = moderateScale(13);
   const descricaoSize = moderateScale(10);

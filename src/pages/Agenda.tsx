@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ScrollView, Text, View, Pressable } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { colors } from "@/theme/colors";
+import { useThemeColors } from "@/theme/useThemeColors";
 import { moderateScale } from "@/utils/scale";
 import { useNavigation } from "@/context/NavigationContext";
 import { CalendarioMensal } from "@/components/AgendaComp/CalendarioMensal";
@@ -32,6 +32,7 @@ function moverDiaSelecionadoParaMes(dataSelecionadaIso: string, anoAlvo: number,
 }
 
 export function Agenda() {
+  const colors = useThemeColors();
   const { goBack } = useNavigation();
 
   const titleSize = moderateScale(22);
