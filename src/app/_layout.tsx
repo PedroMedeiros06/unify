@@ -6,6 +6,7 @@ import * as SplashScreen from "expo-splash-screen";
 import { ThemeProvider } from "../components/theme.provider"
 import { useAppFonts } from "@/theme/fonts";
 import { TransacoesProvider } from "@/context/TransacoesContext";
+import { ContasProvider } from "@/context/ContasContext";
 import { NavigationProvider } from "@/context/NavigationContext";
 import { MetasProvider } from "@/context/MetasContext";
 import { CompromissosProvider } from "@/context/CompromissosContext";
@@ -60,6 +61,7 @@ export default function RootLayout() {
           <PerfilProvider>
            <ThemeProvider>
             <TransacoesProvider>
+             <ContasProvider>
               <MetasProvider>
                 <CompromissosProvider>
                   <LembretesProvider>
@@ -81,6 +83,7 @@ export default function RootLayout() {
                   </LembretesProvider>
                 </CompromissosProvider>
               </MetasProvider>
+             </ContasProvider>
             </TransacoesProvider>
            </ThemeProvider>
           </PerfilProvider>

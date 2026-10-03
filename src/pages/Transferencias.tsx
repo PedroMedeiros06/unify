@@ -12,7 +12,8 @@ import { useNovaTransacao } from "@/context/NovaTransacaoContext";
 import { ListaTransacoesSkeleton } from "@/components/common/ListaTransacoesSkeleton";
 import { useFiltrosTransacao } from "@/hooks/useFiltrosTransacao";
 import { useTransacoes, Transacao, mapearParaTransacaoUI } from "@/context/TransacoesContext";
-import { listarBancos, listarTransacoesFiltradas, contarTransacoesFiltradas, Banco } from "@/database/queries";
+import { listarTransacoesFiltradas, contarTransacoesFiltradas } from "@/database/queries";
+import { useContas } from "@/context/ContasContext";
 
 // Linhas por página do scroll infinito. ~4 telas de altura: a primeira
 // carga é rápida e o usuário raramente chega à 2ª página sem filtrar.
@@ -122,7 +123,9 @@ export function Transferencias() {
     filtrosParaQuery,
   } = useFiltrosTransacao({ presetInicial: "esteMes" });
 
-  const [bancos, setBancos] = useState<Banco[]>([]);
+  // Contas para o filtro de banco — do ContasContext, então uma conta
+  // criada em Minhas contas já aparece aqui sem recarregar a tela.
+  const { contas: bancos } = useContas();
   const [modalPeriodoAberto, setModalPeriodoAberto] = useState(false);
   const [transacoes, setTransacoes] = useState<Transacao[]>([]);
   const [total, setTotal] = useState(0);
@@ -134,12 +137,6 @@ export function Transferencias() {
   // página que chegar de uma geração antiga (filtro trocado no meio) é
   // descartada em vez de se misturar à lista nova.
   const geracao = useRef(0);
-
-  useEffect(() => {
-    listarBancos()
-      .then(setBancos)
-      .catch((e) => console.warn("[listarBancos] Falha ao carregar bancos:", e));
-  }, []);
 
   useEffect(() => {
     const minhaGeracao = ++geracao.current;

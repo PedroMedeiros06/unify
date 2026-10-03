@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { ScrollView, Text, View, Pressable } from "react-native";
 import { moderateScale, scale } from "@/utils/scale";
 import { useThemeColors } from "@/theme/useThemeColors";
@@ -9,7 +9,7 @@ import { AnaliseGrafica } from "@/components/HomeComp/AnaliseGrafica";
 import { BarraFiltros } from "@/components/common/BarraFiltros";
 import { SeletorPeriodoPersonalizado } from "@/components/common/SeletorPeriodoPersonalizado";
 import { useFiltrosTransacao } from "@/hooks/useFiltrosTransacao";
-import { listarBancos, Banco } from "@/database/queries";
+import { useContas } from "@/context/ContasContext";
 import { usePerfil } from "@/context/PerfilContext";
 import { useNavigation } from "@/context/NavigationContext";
 import { useNotificacoes } from "@/context/NotificacoesContext";
@@ -43,14 +43,10 @@ export function Home() {
     filtrosParaQuery,
   } = useFiltrosTransacao({ presetInicial: "esteMes" });
 
-  const [bancos, setBancos] = useState<Banco[]>([]);
+  // Contas para o filtro de banco — do ContasContext, então uma conta
+  // criada em Minhas contas já aparece aqui sem recarregar a tela.
+  const { contas: bancos } = useContas();
   const [modalPeriodoAberto, setModalPeriodoAberto] = useState(false);
-
-  useEffect(() => {
-    listarBancos()
-      .then(setBancos)
-      .catch((e) => console.warn("[listarBancos] Falha ao carregar bancos:", e));
-  }, []);
 
   const handleConfirmarPeriodo = useCallback(
     (inicioIso: string, fimIso: string) => {

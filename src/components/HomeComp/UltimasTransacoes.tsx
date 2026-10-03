@@ -14,7 +14,8 @@ import { SeletorPeriodoPersonalizado } from "@/components/common/SeletorPeriodoP
 import { useFiltrosTransacao } from "@/hooks/useFiltrosTransacao";
 import { useNavigation } from "@/context/NavigationContext";
 import { useNovaTransacao } from "@/context/NovaTransacaoContext";
-import { listarBancos, listarTransacoesFiltradas, Banco } from "@/database/queries";
+import { listarTransacoesFiltradas } from "@/database/queries";
+import { useContas } from "@/context/ContasContext";
 
 const TransacaoItem = memo(function TransacaoItem({
   item,
@@ -110,7 +111,9 @@ function UltimasTransacoesBase() {
     filtrosParaQuery,
   } = useFiltrosTransacao({ presetInicial: "tudo" });
 
-  const [bancos, setBancos] = useState<Banco[]>([]);
+  // Contas para o filtro de banco — do ContasContext, então uma conta
+  // criada em Minhas contas já aparece aqui sem recarregar a tela.
+  const { contas: bancos } = useContas();
   const [modalPeriodoAberto, setModalPeriodoAberto] = useState(false);
   const [transacaoSelecionada, setTransacaoSelecionada] = useState<Transacao | null>(null);
   // A lupa alterna entre a barra de filtros (default) e o campo de
@@ -131,12 +134,6 @@ function UltimasTransacoesBase() {
   // por skeleton — isso desmontava o dropdown aberto e o fechava a cada
   // seleção. O conteúdo antigo fica visível até o novo chegar.
   const [filtroJaCarregou, setFiltroJaCarregou] = useState(false);
-
-  useEffect(() => {
-    listarBancos()
-      .then(setBancos)
-      .catch((e) => console.warn("[listarBancos] Falha ao carregar bancos:", e));
-  }, []);
 
   // Sempre consulta o banco com LIMIT 5 — com ou sem filtro (sem
   // recorte, `filtrosParaQuery` vem vazio = todas). Antes, sem filtro,

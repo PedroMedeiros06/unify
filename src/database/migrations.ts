@@ -550,6 +550,40 @@ const MIGRATIONS: Migration[] = [
       );
     },
   },
+  {
+    versao: 21,
+    descricao:
+      "Contas e transferências: bancos ganham tipo ('conta' | 'cartao'), saldo_inicial, dias de fechamento/vencimento (cartão), personalizada (criada pelo usuário — 'Outro banco') e arquivada. transacoes ganha transferencia_id: as duas pernas de uma transferência entre contas do próprio usuário (saída na origem + entrada no destino) compartilham o mesmo id e ficam FORA dos totais de entradas/saídas, orçamento e gráficos — só mexem no saldo de cada conta.",
+    async executar(db) {
+      // Uma transferência continua sendo DUAS linhas normais em
+      // `transacoes` (o CHECK de `tipo` em ('entrada','saida') não
+      // precisa mudar — o SQLite não altera CHECK sem recriar a tabela).
+      // O saldo por conta sai certo sem caso especial; as agregações de
+      // receitas/despesas filtram `transferencia_id IS NULL`.
+      //
+      // Cartão de crédito é uma conta tipo 'cartao': compras são saídas
+      // nele (contam no orçamento), o pagamento da fatura é uma
+      // transferência conta -> cartão (não conta de novo). O saldo do
+      // cartão negativo = valor devido.
+      //
+      // saldo_inicial: quanto a conta tinha antes da primeira transação
+      // registrada no app. "Ajustar saldo" recalcula este valor para o
+      // saldo exibido bater com o do banco, sem criar transação fictícia.
+      await db.execAsync(
+        `ALTER TABLE bancos ADD COLUMN tipo TEXT NOT NULL DEFAULT 'conta' CHECK (tipo IN ('conta', 'cartao'));`
+      );
+      await db.execAsync(`ALTER TABLE bancos ADD COLUMN saldo_inicial REAL NOT NULL DEFAULT 0;`);
+      await db.execAsync(`ALTER TABLE bancos ADD COLUMN dia_fechamento INTEGER;`);
+      await db.execAsync(`ALTER TABLE bancos ADD COLUMN dia_vencimento INTEGER;`);
+      await db.execAsync(`ALTER TABLE bancos ADD COLUMN personalizada INTEGER NOT NULL DEFAULT 0;`);
+      await db.execAsync(`ALTER TABLE bancos ADD COLUMN arquivada INTEGER NOT NULL DEFAULT 0;`);
+
+      await db.execAsync(`ALTER TABLE transacoes ADD COLUMN transferencia_id TEXT;`);
+      await db.execAsync(
+        `CREATE INDEX IF NOT EXISTS idx_transacoes_transferencia ON transacoes (transferencia_id);`
+      );
+    },
+  },
 ];
 
 export async function rodarMigrations(db: SQLiteDatabase): Promise<void> {

@@ -16,6 +16,7 @@ import { Agenda } from "../pages/Agenda";
 import { MetasConcluidas } from "../pages/MetasConcluidas";
 import { Recorrencias } from "../pages/Recorrencias";
 import { Notificacoes } from "../pages/Notificacoes";
+import { Contas } from "../pages/Contas";
 import { useNavigation } from "@/context/NavigationContext";
 import { MenuAcaoRapida, Acao } from "@/components/common/MenuAcaoRapida";
 import { useNovaTransacao } from "@/context/NovaTransacaoContext";
@@ -30,6 +31,7 @@ const Screens = {
   metasConcluidas: MetasConcluidas,
   recorrencias: Recorrencias,
   notificacoes: Notificacoes,
+  contas: Contas,
 };
 
 export default function AppIndex() {
@@ -37,7 +39,7 @@ export default function AppIndex() {
   const { activeScreen, navigate, goBack } = useNavigation();
 
   const [menuAcaoAberto, setMenuAcaoAberto] = useState(false);
-  const { abrir: abrirNovaTransacao } = useNovaTransacao();
+  const { abrir: abrirNovaTransacao, abrirTransferencia } = useNovaTransacao();
 
   // Gate de primeira abertura: enquanto `null`, ainda estamos checando a
   // flag (não renderiza nada); `true` mostra o onboarding; `false` segue
@@ -99,6 +101,7 @@ export default function AppIndex() {
     "metasConcluidas",
     "recorrencias",
     "notificacoes",
+    "contas",
   ];
   const mostrarFooter = !TELAS_SEM_FOOTER.includes(activeScreen);
 
@@ -118,6 +121,9 @@ export default function AppIndex() {
         case "novaTransacao":
           abrirNovaTransacao();
           break;
+        case "transferencia":
+          abrirTransferencia();
+          break;
         case "importarExtrato":
           navigate("importarExtrato");
           break;
@@ -127,7 +133,7 @@ export default function AppIndex() {
           break;
       }
     },
-    [navigate, abrirNovaTransacao]
+    [navigate, abrirNovaTransacao, abrirTransferencia]
   );
 
   let conteudo;

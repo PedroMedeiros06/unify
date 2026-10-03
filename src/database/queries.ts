@@ -25,6 +25,9 @@ export type Transacao = {
   categoriaId: CategoriaId | null;
   criadoEm: string;
   identificadorExterno: string | null;
+  // Mesmo valor nas duas pernas de uma transferência entre contas do
+  // usuário (ver migration 21). null = transação comum.
+  transferenciaId?: string | null;
 };
 
 export type TransacaoComBanco = Omit<Transacao, "bancoId"> & {
@@ -60,6 +63,11 @@ export type FiltrosTransacao = {
   texto?: string | null;
   // Só entradas ou só saídas. null/undefined = ambos.
   tipo?: TipoTransacao | null;
+  // Deixa de fora as pernas de transferências entre contas do usuário.
+  // As AGREGAÇÕES (receitas/despesas, por categoria, evolução) sempre
+  // ligam isto — transferência não é receita nem despesa. Listas de
+  // transações não ligam: a transferência aparece no extrato.
+  excluirTransferencias?: boolean;
 };
 
 /**
@@ -110,6 +118,10 @@ function montarClausulaFiltros(filtros: FiltrosTransacao): { where: string; para
     params.push(filtros.tipo);
   }
 
+  if (filtros.excluirTransferencias) {
+    condicoes.push(`t.transferencia_id IS NULL`);
+  }
+
   const textoBusca = filtros.texto?.trim();
   if (textoBusca) {
     // `LIKE` do SQLite já é case-insensitive para ASCII; escapamos os
@@ -149,8 +161,8 @@ export async function inserirTransacao(transacao: Transacao): Promise<void> {
   return executarNaFila(async () => {
     const db = await getDatabase();
     await db.runAsync(
-      `INSERT INTO transacoes (id, nome, subtitulo, valor, tipo, data, hora, banco_id, status, categoria_icone, categoria_id, identificador_externo)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+      `INSERT INTO transacoes (id, nome, subtitulo, valor, tipo, data, hora, banco_id, status, categoria_icone, categoria_id, identificador_externo, transferencia_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
       [
         transacao.id,
         transacao.nome,
@@ -164,6 +176,7 @@ export async function inserirTransacao(transacao: Transacao): Promise<void> {
         transacao.categoriaIcone,
         transacao.categoriaId,
         transacao.identificadorExterno,
+        transacao.transferenciaId ?? null,
       ]
     );
   });
@@ -182,11 +195,12 @@ export async function inserirTransacoesEmLote(transacoes: Transacao[]): Promise<
     await db.withTransactionAsync(async () => {
       for (const t of transacoes) {
         await db.runAsync(
-          `INSERT INTO transacoes (id, nome, subtitulo, valor, tipo, data, hora, banco_id, status, categoria_icone, categoria_id, identificador_externo)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+          `INSERT INTO transacoes (id, nome, subtitulo, valor, tipo, data, hora, banco_id, status, categoria_icone, categoria_id, identificador_externo, transferencia_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
           [
             t.id, t.nome, t.subtitulo, t.valor, t.tipo, t.data, t.hora, t.bancoId,
             t.status, t.categoriaIcone, t.categoriaId, t.identificadorExterno,
+            t.transferenciaId ?? null,
           ]
         );
       }
@@ -236,7 +250,8 @@ export async function listarTransacoesPorPeriodo(
       `SELECT
          id, nome, subtitulo, valor, tipo, data, hora, banco_id as bancoId,
          status, categoria_icone as categoriaIcone, categoria_id as categoriaId,
-         criado_em as criadoEm, identificador_externo as identificadorExterno
+         criado_em as criadoEm, identificador_externo as identificadorExterno,
+         transferencia_id as transferenciaId
        FROM transacoes
        WHERE banco_id = ? AND data >= ? AND data <= ?;`,
       [bancoId, dataInicioIso, dataFimIso]
@@ -307,7 +322,7 @@ export async function listarResumoPorCategoria(
 ): Promise<ResumoPorCategoria[]> {
   return executarNaFila(async () => {
     const db = await getDatabase();
-    const { where, params } = montarClausulaFiltros(filtros);
+    const { where, params } = montarClausulaFiltros({ ...filtros, excluirTransferencias: true });
 
     return db.getAllAsync<ResumoPorCategoria>(
       `SELECT
@@ -344,7 +359,7 @@ export async function listarResumoPorBanco(
 ): Promise<ResumoPorBanco[]> {
   return executarNaFila(async () => {
     const db = await getDatabase();
-    const { where, params } = montarClausulaFiltros(filtros);
+    const { where, params } = montarClausulaFiltros({ ...filtros, excluirTransferencias: true });
 
     return db.getAllAsync<ResumoPorBanco>(
       `SELECT
@@ -393,6 +408,7 @@ export async function listarTransacoesFiltradas(
       categoriaId: CategoriaId | null;
       criadoEm: string;
       identificadorExterno: string | null;
+      transferenciaId: string | null;
       banco_id: string;
       banco_nome: string;
       banco_sigla: string;
@@ -404,6 +420,7 @@ export async function listarTransacoesFiltradas(
          t.id, t.nome, t.subtitulo, t.valor, t.tipo, t.data, t.hora,
          t.status, t.categoria_icone as categoriaIcone, t.categoria_id as categoriaId,
          t.criado_em as criadoEm, t.identificador_externo as identificadorExterno,
+         t.transferencia_id as transferenciaId,
          b.id as banco_id, b.nome as banco_nome, b.sigla as banco_sigla, b.cor as banco_cor
        FROM transacoes t
        INNER JOIN bancos b ON b.id = t.banco_id
@@ -426,6 +443,7 @@ export async function listarTransacoesFiltradas(
       categoriaId: linha.categoriaId,
       criadoEm: linha.criadoEm,
       identificadorExterno: linha.identificadorExterno,
+      transferenciaId: linha.transferenciaId,
       banco: {
         id: linha.banco_id,
         nome: linha.banco_nome,
@@ -505,8 +523,30 @@ export async function calcularSaldoAcumuladoAte(
       params
     );
 
-    return resultado?.saldo ?? 0;
+    const saldoInicial = await somarSaldosIniciais(db, bancosIds);
+    return (resultado?.saldo ?? 0) + saldoInicial;
   });
+}
+
+/**
+ * Soma de `bancos.saldo_inicial` (ver migration 21) das contas
+ * informadas — ou de todas, sem filtro. Entra como base em todo cálculo
+ * de saldo acumulado: o saldo de uma conta é saldo_inicial + entradas -
+ * saídas (transferências incluídas, que é o que move dinheiro entre
+ * contas). Recebe a conexão porque é chamada DENTRO de uma operação já
+ * enfileirada (chamar executarNaFila aqui travaria a fila).
+ */
+async function somarSaldosIniciais(
+  db: Awaited<ReturnType<typeof getDatabase>>,
+  bancosIds?: string[] | null
+): Promise<number> {
+  const filtra = bancosIds && bancosIds.length > 0;
+  const r = await db.getFirstAsync<{ total: number }>(
+    `SELECT COALESCE(SUM(saldo_inicial), 0) as total FROM bancos
+     ${filtra ? `WHERE id IN (${bancosIds!.map(() => "?").join(", ")})` : ""};`,
+    filtra ? bancosIds! : []
+  );
+  return r?.total ?? 0;
 }
 
 export type PontoSaldoDiario = { data: string; saldoAcumulado: number };
@@ -561,7 +601,7 @@ export async function listarSerieSaldoDiario(
        WHERE t.data <= ? ${bancoCondicao};`,
       [dataAnteriorIso, ...bancoParams]
     );
-    const saldoBase = baseResultado?.saldo ?? 0;
+    const saldoBase = (baseResultado?.saldo ?? 0) + (await somarSaldosIniciais(db, bancosIds));
 
     // Delta líquido por dia dentro da janela — um único GROUP BY, não
     // uma query por dia.
@@ -649,7 +689,7 @@ export async function listarEvolucaoMensal(
          strftime('%Y-%m', t.data) as mesAno,
          COALESCE(SUM(CASE WHEN t.tipo = 'saida' THEN t.valor ELSE 0 END), 0) as totalSaidas
        FROM transacoes t
-       WHERE t.data >= ? AND t.data < ?
+       WHERE t.data >= ? AND t.data < ? AND t.transferencia_id IS NULL
        GROUP BY mesAno;`,
       [dataInicioIso, dataFimIso]
     );
@@ -724,7 +764,7 @@ export async function calcularResumoReceitasDespesas(
          COALESCE(SUM(CASE WHEN t.data <= ? AND t.tipo = 'entrada' THEN t.valor ELSE 0 END), 0) as entradasAnterior,
          COALESCE(SUM(CASE WHEN t.data <= ? AND t.tipo = 'saida' THEN t.valor ELSE 0 END), 0) as saidasAnterior
        FROM transacoes t
-       WHERE t.data >= ? AND t.data <= ?;`,
+       WHERE t.data >= ? AND t.data <= ? AND t.transferencia_id IS NULL;`,
       [inicioMesAtual, inicioMesAtual, fimMesAnteriorIso, fimMesAnteriorIso, inicioMesAnterior, fimMesAtualIso]
     );
     const atual = { entradas: linha?.entradasAtual ?? 0, saidas: linha?.saidasAtual ?? 0 };

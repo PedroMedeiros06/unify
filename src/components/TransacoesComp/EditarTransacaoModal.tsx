@@ -21,6 +21,8 @@ import {
 } from "@/database/metaTransacoesQueries";
 import { obterIconeMeta } from "@/database/iconesMeta";
 import { useDialogo } from "@/context/DialogoContext";
+import { useContas } from "@/context/ContasContext";
+import { InfoTransferencia, ConverterEmTransferencia } from "@/components/TransacoesComp/SecaoTransferencia";
 
 type Props = {
   transacao: Transacao | null;
@@ -45,6 +47,10 @@ function EditarTransacaoModalBase({
   const { recarregar: recarregarMetas } = useMetas();
   const { recarregar: recarregarCompromissos } = useCompromissos();
   const { confirmar, avisar } = useDialogo();
+  const { editarTransferencia, excluirTransferencia } = useContas();
+  // Perna de transferência entre contas: edita valor/data/nome das duas
+  // pontas juntas; tipo, categoria e meta não se aplicam.
+  const transferenciaId = transacao?.transferenciaId ?? null;
 
   const [nome, setNome] = useState("");
   const [subtitulo, setSubtitulo] = useState("");
@@ -111,6 +117,11 @@ function EditarTransacaoModalBase({
 
     setSalvando(true);
     try {
+      if (transferenciaId) {
+        await editarTransferencia(transferenciaId, { valor: valorNumerico, data: dataIso, nome: nome.trim() });
+        onFechar();
+        return;
+      }
       const categoria = obterCategoriaPorId(categoriaId);
       await onSalvar(transacao.id, {
         nome: nome.trim(),
@@ -137,7 +148,7 @@ function EditarTransacaoModalBase({
     } finally {
       setSalvando(false);
     }
-  }, [transacao, dataIso, categoriaId, nome, subtitulo, valorNumerico, tipo, onSalvar, onFechar, recarregarMetas, avisar]);
+  }, [transacao, dataIso, transferenciaId, editarTransferencia, categoriaId, nome, subtitulo, valorNumerico, tipo, onSalvar, onFechar, recarregarMetas, avisar]);
 
   const handleSalvar = useCallback(async () => {
     if (!transacao || !formularioValido || !dataIso || ocupado) return;
@@ -181,8 +192,10 @@ function EditarTransacaoModalBase({
     if (!transacao) return;
 
     const ok = await confirmar({
-      titulo: "Excluir transação",
-      mensagem: `Tem certeza que deseja excluir "${transacao.nome}"? Esta ação não pode ser desfeita.`,
+      titulo: transferenciaId ? "Excluir transferência" : "Excluir transação",
+      mensagem: transferenciaId
+        ? "As duas pontas da transferência (saída e entrada) serão excluídas. Esta ação não pode ser desfeita."
+        : `Tem certeza que deseja excluir "${transacao.nome}"? Esta ação não pode ser desfeita.`,
       textoConfirmar: "Excluir",
       destrutivo: true,
     });
@@ -190,6 +203,12 @@ function EditarTransacaoModalBase({
 
     setExcluindo(true);
     try {
+      if (transferenciaId) {
+        await excluirTransferencia(transferenciaId);
+        void recarregarCompromissos();
+        onFechar();
+        return;
+      }
       // Não precisa desvincular explicitamente antes — ON DELETE CASCADE
       // em meta_transacoes cuida disso quando a transação é removida
       // (ver migrations.ts + database.ts).
@@ -210,7 +229,7 @@ function EditarTransacaoModalBase({
     } finally {
       setExcluindo(false);
     }
-  }, [transacao, onExcluir, onFechar, recarregarMetas, recarregarCompromissos, confirmar, avisar]);
+  }, [transacao, transferenciaId, excluirTransferencia, onExcluir, onFechar, recarregarMetas, recarregarCompromissos, confirmar, avisar]);
 
   const handleAbrirVincular = useCallback(() => {
     setModalVincularAberto(true);
@@ -271,6 +290,10 @@ function EditarTransacaoModalBase({
         </Pressable>
       </View>
 
+      {transferenciaId && (
+        <InfoTransferencia transferenciaId={transferenciaId} desabilitado={ocupado} onDesfeita={onFechar} />
+      )}
+
       <Text
         style={{ fontSize: labelSize }}
         className="text-second-text mb-1.5"
@@ -310,6 +333,8 @@ function EditarTransacaoModalBase({
         />
       </View>
 
+      {!transferenciaId && (
+        <>
       <Text
         style={{ fontSize: labelSize }}
         className="text-second-text mb-1.5"
@@ -375,6 +400,16 @@ function EditarTransacaoModalBase({
           </Text>
         </Pressable>
       </View>
+
+      {transacao && (
+        <ConverterEmTransferencia
+          transacaoId={transacao.id}
+          bancoId={transacao.bancoId}
+          tipo={tipo}
+          desabilitado={ocupado}
+          onConvertida={onFechar}
+        />
+      )}
 
       {/* VÍNCULO COM META — sempre manual, nunca sugerido automaticamente. */}
       <Text style={{ fontSize: labelSize }} className="text-second-text mb-1.5">
@@ -448,6 +483,9 @@ function EditarTransacaoModalBase({
         </Pressable>
       )}
 
+        </>
+      )}
+
       <Pressable
         onPress={handleSalvar}
         disabled={!formularioValido || ocupado}
@@ -474,7 +512,7 @@ function EditarTransacaoModalBase({
           style={{ fontSize: buttonTextSize }}
           className="text-error-color font-Inter-Medium"
         >
-          {excluindo ? "Excluindo..." : "Excluir transação"}
+          {excluindo ? "Excluindo..." : transferenciaId ? "Excluir transferência" : "Excluir transação"}
         </Text>
       </Pressable>
 

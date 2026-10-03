@@ -5,7 +5,7 @@ import { View, Text, Pressable, Modal, Animated, Easing, useWindowDimensions } f
 import { memo, useEffect, useRef, useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-type Acao = "novaTransacao" | "importarExtrato" | "novaMeta" | "novoCompromisso";
+type Acao = "novaTransacao" | "transferencia" | "importarExtrato" | "novaMeta" | "novoCompromisso";
 
 type Props = {
   visivel: boolean;
@@ -15,6 +15,7 @@ type Props = {
 
 const OPCOES: { acao: Acao; titulo: string; icone: keyof typeof Ionicons.glyphMap; cor: string }[] = [
   { acao: "novaTransacao", titulo: "Nova transação", icone: "add-circle-outline", cor: colors["active-icon"] },
+  { acao: "transferencia", titulo: "Transferência", icone: "swap-horizontal-outline", cor: "#3B9CBD" },
   { acao: "importarExtrato", titulo: "Importar extrato", icone: "document-attach-outline", cor: colors["sucess-color"] },
   { acao: "novaMeta", titulo: "Nova meta", icone: "flag-outline", cor: colors["warn-color"] },
   { acao: "novoCompromisso", titulo: "Novo compromisso", icone: "calendar-outline", cor: "#378ADD" },

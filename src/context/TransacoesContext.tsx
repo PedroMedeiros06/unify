@@ -30,6 +30,10 @@ export type Transacao = {
   status?: "concluida" | "pendente" | "agendada";
   categoriaIcone?: string;
   categoriaId: CategoriaId | null;
+  // Só nas transações lidas do banco (mapearParaTransacaoUI): conta da
+  // transação e, se for uma perna de transferência, o id que liga as duas.
+  bancoId?: string;
+  transferenciaId?: string | null;
 };
 
 export type NovaTransacaoInput = Omit<Transacao, "id"> & {
@@ -117,6 +121,8 @@ export function mapearParaTransacaoUI(t: TransacaoComBanco): Transacao {
     status: t.status,
     categoriaIcone: t.categoriaIcone ?? undefined,
     categoriaId: t.categoriaId,
+    bancoId: t.banco.id,
+    transferenciaId: t.transferenciaId ?? null,
   };
 }
 
