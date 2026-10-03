@@ -112,6 +112,7 @@ function IlustracaoBotaoMais({ c }: { c: PaletaCores }) {
   // Mesmas opções/ícones/cores do MenuAcaoRapida.
   const opcoes: { icone: keyof typeof Ionicons.glyphMap; titulo: string; cor: string }[] = [
     { icone: "add-circle-outline", titulo: "Nova transação", cor: c["active-icon"] },
+    { icone: "swap-horizontal-outline", titulo: "Transferência", cor: "#3B9CBD" },
     { icone: "document-attach-outline", titulo: "Importar extrato", cor: c["sucess-color"] },
     { icone: "flag-outline", titulo: "Nova meta", cor: c["warn-color"] },
     { icone: "calendar-outline", titulo: "Novo compromisso", cor: "#378ADD" },
@@ -150,7 +151,7 @@ function IlustracaoImportar({ c }: { c: PaletaCores }) {
         <Ionicons name="document-text-outline" size={20} color={c["sucess-color"]} />
         <View className="ml-2 flex-1">
           <TextoP c={c} cor={c["main-text"]} peso="semi" tam={11}>extrato_nubank.csv</TextoP>
-          <TextoP c={c} tam={9}>Nubank • Inter • Banco do Brasil</TextoP>
+          <TextoP c={c} tam={9}>CSV: Nubank • Inter • BB — ou OFX de qualquer banco</TextoP>
         </View>
       </Cartao>
       <Ionicons name="arrow-down" size={18} color={c["desactived-text"]} style={{ marginVertical: 6 }} />
@@ -169,6 +170,38 @@ function IlustracaoImportar({ c }: { c: PaletaCores }) {
         ))}
       </Cartao>
     </View>
+  );
+}
+
+function IlustracaoContas({ c }: { c: PaletaCores }) {
+  const contas = [
+    { sigla: "nu", cor: "#8D11DA", nome: "Nubank", valor: "R$ 2.180,00", sub: "saldo" },
+    { sigla: "CX", cor: "#0A5EB0", nome: "Caixa", valor: "R$ 1.940,00", sub: "saldo" },
+    { sigla: "CI", cor: "#EC0000", nome: "Cartão Itaú", valor: "R$ 860,00", sub: "fatura fecha dia 3" },
+  ];
+  return (
+    <Cartao c={c} className="w-64">
+      {contas.map((ct, i) => (
+        <View key={ct.nome} className={`flex-row items-center py-1.5 ${i > 0 ? "mt-0.5" : ""}`}>
+          <View style={{ backgroundColor: ct.cor }} className="w-7 h-7 rounded-lg items-center justify-center">
+            <Text style={{ fontSize: 10 }} className="text-white font-Inter-Bold">
+              {ct.sigla}
+            </Text>
+          </View>
+          <View className="ml-2 flex-1">
+            <TextoP c={c} cor={c["main-text"]} tam={11}>{ct.nome}</TextoP>
+            <TextoP c={c} tam={8}>{ct.sub}</TextoP>
+          </View>
+          <TextoP c={c} cor={i === 2 ? c["error-color"] : c["main-text"]} peso="semi" tam={11}>{ct.valor}</TextoP>
+        </View>
+      ))}
+      <View style={{ borderColor: c["lines-divisions"] }} className="border-t mt-1.5 pt-1.5 flex-row items-center">
+        <Ionicons name="swap-horizontal" size={12} color={c["active-icon"]} />
+        <View className="ml-1.5">
+          <TextoP c={c} tam={9}>Nubank → Caixa · transferência, não é gasto</TextoP>
+        </View>
+      </View>
+    </Cartao>
   );
 }
 
@@ -328,9 +361,20 @@ const SLIDES: Slide[] = [
     Ilustracao: IlustracaoBotaoMais,
   },
   {
+    id: "contas",
+    titulo: "Todas as suas contas",
+    texto: "Crie contas de qualquer banco, carteira e cartão de crédito. O saldo de cada uma bate com o do banco.",
+    dicas: [
+      { icone: "swap-horizontal-outline", texto: "Dinheiro entre suas contas é transferência: não conta como gasto." },
+      { icone: "card-outline", texto: "Cartão: veja a fatura aberta e use “Pagar fatura”." },
+      { icone: "wallet-outline", texto: "Minhas contas fica na carteira do card de saldo da Início." },
+    ],
+    Ilustracao: IlustracaoContas,
+  },
+  {
     id: "importar",
     titulo: "Importe seu extrato",
-    texto: "Em vez de digitar tudo, importe o CSV do Nubank, Inter ou Banco do Brasil.",
+    texto: "Em vez de digitar tudo, importe o CSV do Nubank, Inter ou BB — ou o OFX de qualquer banco.",
     dicas: [
       { icone: "sparkles-outline", texto: "As transações já chegam categorizadas." },
       { icone: "school-outline", texto: "Corrigiu uma categoria? O app aprende para as próximas." },
@@ -345,7 +389,7 @@ const SLIDES: Slide[] = [
     dicas: [
       { icone: "funnel-outline", texto: "Filtre por período, banco ou categoria." },
       { icone: "hand-left-outline", texto: "Segure uma transação para editar ou excluir." },
-      { icone: "swap-horizontal-outline", texto: "A aba Transações tem o histórico completo." },
+      { icone: "bar-chart-outline", texto: "O Relatório do mês compara seus gastos com o mês anterior." },
     ],
     Ilustracao: IlustracaoInicio,
   },
@@ -354,7 +398,7 @@ const SLIDES: Slide[] = [
     titulo: "Planeje e guarde",
     texto: "No Planejamento você define limites por categoria, acompanha metas e simula decisões.",
     dicas: [
-      { icone: "pie-chart-outline", texto: "Orçamento: limite mensal por categoria — fica vermelho ao passar do limite." },
+      { icone: "pie-chart-outline", texto: "Orçamento: limite por categoria, com aviso aos 80% e ao estourar." },
       { icone: "flag-outline", texto: "Metas: vincule transações para ver o progresso." },
       { icone: "calculator-outline", texto: "Simulações: financiamento, empréstimo, investimento e câmbio." },
     ],
@@ -377,7 +421,7 @@ const SLIDES: Slide[] = [
     texto: "Nada vai para a nuvem: tudo fica salvo só neste aparelho.",
     dicas: [
       { icone: "cloud-upload-outline", texto: "Faça backup em Perfil antes de trocar de celular." },
-      { icone: "color-palette-outline", texto: "Tema e notificações também ficam no Perfil." },
+      { icone: "finger-print-outline", texto: "Ative o bloqueio com biometria em Perfil › Preferências." },
       { icone: "refresh-outline", texto: "Quer ver esta apresentação de novo? Perfil › Rever apresentação." },
     ],
     Ilustracao: IlustracaoDados,
