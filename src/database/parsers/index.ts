@@ -2,6 +2,7 @@ import { ParserBanco, ResultadoParse } from "@/database/parsers/TransacaoImporta
 import { NubankParser } from "@/database/parsers/NubankParser";
 import { InterParser } from "@/database/parsers/InterParser";
 import { BancoDoBrasilParser } from "@/database/parsers/BancoDoBrasilParser";
+import { OfxParser } from "@/database/parsers/OfxParser";
 
 /**
  * Todos os parsers de banco disponíveis. Para adicionar suporte a um
@@ -15,14 +16,18 @@ export const PARSERS_DISPONIVEIS: ParserBanco[] = [
 ];
 
 /**
- * Tenta identificar automaticamente qual banco gerou o CSV, testando
- * cada parser cadastrado. Retorna o primeiro que reconhecer o formato,
- * ou null se nenhum reconhecer (nesse caso a UI deve pedir seleção manual).
+ * Tenta identificar automaticamente o formato do arquivo: OFX primeiro
+ * (formato genérico, vale para qualquer banco — ver OfxParser), depois
+ * cada parser de CSV. Retorna o primeiro que reconhecer, ou null se
+ * nenhum reconhecer (nesse caso a UI deve pedir seleção manual).
+ *
+ * O OFX fica FORA de PARSERS_DISPONIVEIS de propósito: essa lista é a
+ * dos bancos com CSV (seletor manual, cores/siglas do catálogo).
  */
 export function detectarParser(conteudoCsv: string): ParserBanco | null {
   const primeirasLinhas = conteudoCsv.split(/\r?\n/).slice(0, 10);
 
-  for (const parser of PARSERS_DISPONIVEIS) {
+  for (const parser of [OfxParser, ...PARSERS_DISPONIVEIS]) {
     if (parser.identificar(primeirasLinhas)) {
       return parser;
     }
@@ -36,6 +41,7 @@ export function detectarParser(conteudoCsv: string): ParserBanco | null {
  * seleciona manualmente o banco (fallback quando a detecção automática falha).
  */
 export function obterParserPorId(idBanco: string): ParserBanco | null {
+  if (idBanco === OfxParser.idBanco) return OfxParser;
   return PARSERS_DISPONIVEIS.find((p) => p.idBanco === idBanco) ?? null;
 }
 

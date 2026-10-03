@@ -20,10 +20,13 @@ export type EstadoFiltros = {
 // ponto de partida passam `presetInicial` para o hook.
 const PRESET_PADRAO: PeriodoPreset = "esteMes";
 
-function montarEstadoInicial(presetInicial: PeriodoPreset): EstadoFiltros {
+function montarEstadoInicial(
+  presetInicial: PeriodoPreset,
+  categoriasIniciais: (CategoriaId | null)[] = []
+): EstadoFiltros {
   return {
     bancosSelecionados: [],
-    categoriasSelecionadas: [],
+    categoriasSelecionadas: categoriasIniciais,
     periodoPreset: presetInicial,
     periodoInicioPersonalizado: null,
     periodoFimPersonalizado: null,
@@ -81,11 +84,15 @@ type OpcoesHook = {
   // o ponto de partida que faz sentido pra ela (a Home de transações
   // abre em "tudo", os cards de análise em "esteMes").
   presetInicial?: PeriodoPreset;
+  // Categorias já selecionadas ao montar (ex: [null] = "sem categoria").
+  categoriasIniciais?: (CategoriaId | null)[];
 };
 
 export function useFiltrosTransacao(opcoes: OpcoesHook = {}) {
   const presetInicial = opcoes.presetInicial ?? PRESET_PADRAO;
-  const [filtros, setFiltros] = useState<EstadoFiltros>(() => montarEstadoInicial(presetInicial));
+  const [filtros, setFiltros] = useState<EstadoFiltros>(() =>
+    montarEstadoInicial(presetInicial, opcoes.categoriasIniciais)
+  );
 
   // Preset considerado NEUTRO para esta instância — o ponto de partida
   // que NÃO conta como "filtro ativo" e para o qual "Limpar tudo"

@@ -4,6 +4,7 @@ import { colors } from "@/theme/colors";
 import { moderateScale } from "@/utils/scale";
 import { useNavigation } from "@/context/NavigationContext";
 import { ListaRecorrencias } from "@/components/RecorrenciasComp/ListaRecorrencias";
+import { SugestoesRecorrencia } from "@/components/RecorrenciasComp/SugestoesRecorrencia";
 
 /**
  * Tela de Recorrências — regras de planejamento (receitas/despesas que
@@ -49,6 +50,7 @@ export function Recorrencias() {
           </View>
         </View>
 
+        <SugestoesRecorrencia />
         <ListaRecorrencias />
       </View>
     </ScrollView>

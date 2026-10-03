@@ -23,6 +23,9 @@ export type NavigationParams = {
   // Aba inicial do Planejamento (ex: botão "Ver relatórios" da Home
   // abre direto na aba de análise de Orçamento).
   planejamentoTab?: "Resumo" | "Metas" | "Orçamento" | "Simulações";
+  // Transações abre já filtrada em "sem categoria" (todo o período) —
+  // atalho "Revisar agora" do fim da importação.
+  transacoesSemCategoria?: boolean;
 };
 
 type NavigationContextValue = {

@@ -14,6 +14,7 @@ import { useFiltrosTransacao } from "@/hooks/useFiltrosTransacao";
 import { useTransacoes, Transacao, mapearParaTransacaoUI } from "@/context/TransacoesContext";
 import { listarTransacoesFiltradas, contarTransacoesFiltradas } from "@/database/queries";
 import { useContas } from "@/context/ContasContext";
+import { useNavigation } from "@/context/NavigationContext";
 
 // Linhas por página do scroll infinito. ~4 telas de altura: a primeira
 // carga é rápida e o usuário raramente chega à 2ª página sem filtrar.
@@ -108,6 +109,10 @@ export function Transferencias() {
 
   const { editarTransacao, removerTransacao, versaoDados } = useTransacoes();
   const { abrir: abrirNovaTransacao } = useNovaTransacao();
+  // "Revisar agora" do fim da importação abre já em "sem categoria",
+  // todo o período (as importadas podem ser de meses anteriores).
+  const { params } = useNavigation();
+  const veioDeRevisao = params.transacoesSemCategoria === true;
 
   const {
     filtros,
@@ -121,7 +126,9 @@ export function Transferencias() {
     possuiFiltrosAtivos,
     consultaTemRecorte,
     filtrosParaQuery,
-  } = useFiltrosTransacao({ presetInicial: "esteMes" });
+  } = useFiltrosTransacao(
+    veioDeRevisao ? { presetInicial: "tudo", categoriasIniciais: [null] } : { presetInicial: "esteMes" }
+  );
 
   // Contas para o filtro de banco — do ContasContext, então uma conta
   // criada em Minhas contas já aparece aqui sem recarregar a tela.

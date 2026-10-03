@@ -11,7 +11,11 @@ import { useTransacoes } from "@/context/TransacoesContext";
 import { useMetas } from "@/context/MetasContext";
 import { vincularTransacaoAMeta } from "@/database/metaTransacoesQueries";
 import { dataIsoParaBR } from "@/utils/dateUtils";
-import { corPorBanco, siglaPorBanco } from "@/database/parsers/bancosSuportados";
+import { decodificarTextoExtrato } from "@/utils/decodificarTexto";
+import { ID_OFX_SEM_CONTA } from "@/database/parsers/OfxParser";
+import { ResultadoParse } from "@/database/parsers/TransacaoImportada";
+import { useContas } from "@/context/ContasContext";
+import { sugerirTransferencias, SugestaoTransferencia } from "@/database/contasQueries";
 
 // Uma transação categorizada automaticamente carrega junto o id da
 // categoria resolvida (ou null, se ficou sem categoria) — o preview
@@ -45,10 +49,18 @@ export type EstadoImportacao =
   | { fase: "ocioso" }
   | { fase: "lendo_arquivo" }
   | { fase: "banco_nao_identificado"; conteudoCsv: string; nomeArquivo: string }
+  // OFX de um banco sem conta no catálogo: o usuário escolhe em qual
+  // conta (ex: uma personalizada "Itaú") as transações vão entrar.
+  | { fase: "conta_nao_identificada"; resultadoParse: ResultadoParse; nomeArquivo: string }
   | { fase: "verificando_duplicatas" }
   | {
       fase: "preview";
+      // Conta de DESTINO das transações (começa na conta do banco
+      // detectado; o usuário pode trocar — ex: CSV do cartão Nubank
+      // para a conta-cartão personalizada).
       bancoId: string;
+      // Parser que leu o arquivo (nome exibido no topo do preview).
+      parserId: string;
       nomeArquivo: string;
       transacoes: TransacaoComCategoria[];
       linhasComErro: { numeroLinha: number; conteudoOriginal: string; motivo: string }[];
@@ -61,17 +73,29 @@ export type EstadoImportacao =
       vinculosPendentes: Map<number, VinculoMetaPendente>;
     }
   | { fase: "salvando" }
-  | { fase: "concluido"; totalImportado: number; totalSemCategoria: number; totalVinculadasMeta: number }
+  | {
+      fase: "concluido";
+      totalImportado: number;
+      totalSemCategoria: number;
+      totalVinculadasMeta: number;
+      totalDuplicadasIgnoradas: number;
+      // Pares saída/entrada de mesmo valor entre contas diferentes que
+      // envolvem as transações recém-importadas — o usuário decide ligar.
+      sugestoesTransferencia: SugestaoTransferencia[];
+    }
   | { fase: "erro"; mensagem: string };
 
+// Lê os BYTES e decodifica (UTF-8, ou Windows-1252 se não for UTF-8
+// válido) — `file.text()` assumia UTF-8 e estragava os acentos dos
+// extratos do BB e de muitos OFX.
 async function lerConteudoArquivo(uri: string): Promise<string> {
   try {
     const file = new File(uri);
-    return await file.text();
+    return decodificarTextoExtrato(await file.bytes());
   } catch {
     try {
       const resposta = await fetch(uri);
-      return await resposta.text();
+      return decodificarTextoExtrato(new Uint8Array(await resposta.arrayBuffer()));
     } catch {
       throw new Error(
         "Não foi possível ler o arquivo selecionado. Tente selecionar o arquivo novamente ou verifique se ele não foi movido/excluído."
@@ -87,12 +111,13 @@ export function useImportacaoCsv() {
   // derivado de meta_transacoes e o MetasContext não observa essa
   // tabela sozinho.
   const { recarregar: recarregarMetas } = useMetas();
+  const { obterConta } = useContas();
 
   const reiniciar = useCallback(() => {
     setEstado({ fase: "ocioso" });
   }, []);
 
-  const prepararPreview = useCallback(async (bancoId: string, nomeArquivo: string, resultadoParse: ReturnType<typeof importarCsv>) => {
+  const prepararPreview = useCallback(async (bancoId: string, nomeArquivo: string, resultadoParse: ResultadoParse, parserId: string = bancoId) => {
     setEstado({ fase: "verificando_duplicatas" });
 
     try {
@@ -130,6 +155,7 @@ export function useImportacaoCsv() {
       setEstado({
         fase: "preview",
         bancoId,
+        parserId,
         nomeArquivo,
         transacoes: transacoesComCategoria,
         linhasComErro: resultadoParse.linhasComErro,
@@ -149,7 +175,7 @@ export function useImportacaoCsv() {
 
     try {
       const resultado = await DocumentPicker.getDocumentAsync({
-        type: ["text/csv", "text/comma-separated-values", "application/csv", "*/*"],
+        type: ["text/csv", "text/comma-separated-values", "application/csv", "application/x-ofx", "application/ofx", "*/*"],
         copyToCacheDirectory: true,
       });
 
@@ -179,6 +205,15 @@ export function useImportacaoCsv() {
         return;
       }
 
+      if (resultadoParse.bancoDetectado === ID_OFX_SEM_CONTA) {
+        if (resultadoParse.transacoes.length === 0) {
+          setEstado({ fase: "erro", mensagem: "Nenhuma transação encontrada no arquivo OFX." });
+          return;
+        }
+        setEstado({ fase: "conta_nao_identificada", resultadoParse, nomeArquivo: arquivo.name });
+        return;
+      }
+
       await prepararPreview(resultadoParse.bancoDetectado, arquivo.name, resultadoParse);
     } catch (e) {
       setEstado({
@@ -200,6 +235,41 @@ export function useImportacaoCsv() {
       await prepararPreview(idBanco, nomeArquivo, resultadoParse);
     },
     [prepararPreview]
+  );
+
+  // OFX sem banco conhecido: o usuário escolheu a conta de destino.
+  const selecionarContaDoOfx = useCallback(
+    async (contaId: string) => {
+      if (estado.fase !== "conta_nao_identificada") return;
+      await prepararPreview(contaId, estado.nomeArquivo, estado.resultadoParse, ID_OFX_SEM_CONTA);
+    },
+    [estado, prepararPreview]
+  );
+
+  // Troca a conta de destino no preview. A detecção de duplicatas
+  // depende da conta (compara com o que já existe nela), então é
+  // refeita; categorias e metas escolhidas são mantidas. As linhas
+  // marcadas como duplicata voltam a vir desmarcadas.
+  const trocarContaDestino = useCallback(
+    async (contaId: string) => {
+      if (estado.fase !== "preview" || contaId === estado.bancoId) return;
+      const atual = estado;
+      const comStatus = await marcarPossiveisDuplicatas(atual.transacoes, contaId);
+      setEstado((prev) => {
+        if (prev.fase !== "preview") return prev;
+        const transacoes = prev.transacoes.map((t, i) => ({
+          ...t,
+          possivelDuplicata: comStatus[i]?.possivelDuplicata ?? false,
+          motivoDuplicata: comStatus[i]?.motivoDuplicata ?? null,
+        }));
+        const transacoesExcluidas = new Set<number>();
+        transacoes.forEach((t, i) => {
+          if (t.possivelDuplicata) transacoesExcluidas.add(i);
+        });
+        return { ...prev, bancoId: contaId, transacoes, transacoesExcluidas };
+      });
+    },
+    [estado]
   );
 
   // Alterna se uma transação específica (pelo índice na lista de preview)
@@ -295,14 +365,16 @@ export function useImportacaoCsv() {
       return;
     }
 
-    setEstado({ fase: "salvando" });
-
-    const parser = obterParserPorId(estado.bancoId);
-
-    if (!parser) {
-      setEstado({ fase: "erro", mensagem: "Banco de destino inválido para salvar as transações." });
+    const conta = obterConta(estado.bancoId);
+    if (!conta) {
+      setEstado({ fase: "erro", mensagem: "Conta de destino inválida para salvar as transações." });
       return;
     }
+
+    setEstado({ fase: "salvando" });
+    const totalDuplicadasIgnoradas = estado.transacoes.filter(
+      (t, i) => t.possivelDuplicata && estado.transacoesExcluidas.has(i)
+    ).length;
 
     try {
       let totalSemCategoria = 0;
@@ -325,7 +397,7 @@ export function useImportacaoCsv() {
           valor: transacao.valor,
           tipo: transacao.tipo,
           data: dataIsoParaBR(transacao.data),
-          banco: { sigla: siglaPorBanco(estado.bancoId), cor: corPorBanco(estado.bancoId) },
+          banco: { sigla: conta.sigla, cor: conta.cor },
           bancoId: estado.bancoId,
           status: "concluida" as const,
           categoriaIcone: categoria?.icone,
@@ -357,11 +429,22 @@ export function useImportacaoCsv() {
         await recarregarMetas();
       }
 
+      // Sugestões de transferência envolvendo o que acabou de entrar —
+      // acessório: se falhar, a importação já está salva.
+      let sugestoesTransferencia: SugestaoTransferencia[] = [];
+      try {
+        sugestoesTransferencia = await sugerirTransferencias(novosIds);
+      } catch (e) {
+        console.warn("[useImportacaoCsv] Falha ao sugerir transferências:", e);
+      }
+
       setEstado({
         fase: "concluido",
         totalImportado: selecionadas.length,
         totalSemCategoria,
         totalVinculadasMeta,
+        totalDuplicadasIgnoradas,
+        sugestoesTransferencia,
       });
     } catch (e) {
       setEstado({
@@ -369,13 +452,15 @@ export function useImportacaoCsv() {
         mensagem: e instanceof Error ? e.message : "Erro ao salvar as transações importadas.",
       });
     }
-  }, [estado, adicionarTransacoesEmLote, recarregarMetas]);
+  }, [estado, obterConta, adicionarTransacoesEmLote, recarregarMetas]);
 
   return {
     estado,
     parsersDisponiveis: PARSERS_DISPONIVEIS,
     selecionarArquivo,
     selecionarBancoManualmente,
+    selecionarContaDoOfx,
+    trocarContaDestino,
     alternarTransacao,
     definirCategoriaNoPreview,
     definirVinculoMeta,
