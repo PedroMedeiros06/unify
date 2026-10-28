@@ -18,7 +18,8 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.pedro_medeiros08.Unify"
+      "allowBackup": false,
+      "package": "com.unify.finance"
     },
     "web": {
       "bundler": "metro",
