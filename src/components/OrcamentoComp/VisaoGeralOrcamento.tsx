@@ -1,4 +1,4 @@
-import { colors } from "@/theme/colors";
+import { useThemeColors } from "@/theme/useThemeColors";
 import { moderateScale } from "@/utils/scale";
 import { FormatToCurrency } from "@/utils/formatNumber";
 import { Ionicons } from "@expo/vector-icons";
@@ -8,6 +8,7 @@ import { memo, useEffect, useMemo, useState } from "react";
 import { SeletorMesAno } from "@/components/common/SeletorMesAno";
 import { obterResumoPrevistoDoMes } from "@/database/orcamentoQueries";
 import { calcularResumoReceitasDespesas } from "@/database/queries";
+import { useTransacoes } from "@/context/TransacoesContext";
 
 const RADIUS = 60;
 const STROKE_WIDTH = 18;
@@ -42,6 +43,10 @@ function useFatiasComOffset(fatias: FatiaResumo[]) {
 }
 
 function VisaoGeralOrcamentoBase({ anoExibido, mesExibido, onSelecionarMesAno, onDefinirLimite }: Props) {
+  const colors = useThemeColors();
+  // Recarrega quando uma transação é criada/editada/excluída sem
+  // trocar de tela (ex: pelo "+" do footer).
+  const { versaoDados } = useTransacoes();
   const cardTitleSize = moderateScale(15);
   const centerValueSize = moderateScale(19);
   const centerLabelSize = moderateScale(11);
@@ -91,12 +96,12 @@ function VisaoGeralOrcamentoBase({ anoExibido, mesExibido, onSelecionarMesAno, o
       }
     }
 
-    carregar();
+    carregar().catch((e) => console.warn("[VisaoGeralOrcamento] Falha ao carregar dados:", e));
 
     return () => {
       ativo = false;
     };
-  }, [anoExibido, mesExibido]);
+  }, [anoExibido, mesExibido, versaoDados]);
 
   const receitaPrevista = dados?.receitasPrevistas ?? 0;
   const despesaPrevista = dados?.despesasPrevistas ?? 0;

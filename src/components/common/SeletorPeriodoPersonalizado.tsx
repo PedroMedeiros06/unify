@@ -1,4 +1,4 @@
-import { colors } from "@/theme/colors";
+import { useThemeColors } from "@/theme/useThemeColors";
 import { moderateScale } from "@/utils/scale";
 import { Ionicons } from "@expo/vector-icons";
 import { View, Text, Pressable, Modal } from "react-native";
@@ -14,6 +14,7 @@ type Props = {
 };
 
 function SeletorPeriodoPersonalizadoBase({ visivel, inicioIso, fimIso, onConfirmar, onFechar }: Props) {
+  const colors = useThemeColors();
   const titleSize = moderateScale(16);
   const buttonTextSize = moderateScale(14);
   const avisoSize = moderateScale(11);

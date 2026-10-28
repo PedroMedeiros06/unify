@@ -3,6 +3,7 @@ import {
   listarLimitesCategoria,
   definirLimiteCategoria,
   removerLimiteCategoria,
+  copiarLimitesDoMes,
   LimiteCategoria,
 } from "@/database/limitesCategoriaQueries";
 import { CategoriaId } from "@/database/categorias";
@@ -26,6 +27,8 @@ type LimitesOrcamentoContextValue = {
   adicionarLimite: (categoriaId: CategoriaId, valorLimite: number) => Promise<void>;
   editarLimite: (categoriaId: CategoriaId, valorLimite: number) => Promise<void>;
   removerLimite: (categoriaId: CategoriaId) => Promise<void>;
+  // Copia para o mês exibido os limites de `mesOrigem`; devolve quantos criou.
+  copiarLimitesDe: (mesOrigem: string) => Promise<number>;
   recarregar: () => Promise<void>;
 };
 
@@ -139,6 +142,15 @@ export function LimitesOrcamentoProvider({ children }: { children: ReactNode }) 
     [mesAno]
   );
 
+  const copiarLimitesDe = useCallback(
+    async (mesOrigem: string) => {
+      const criados = await copiarLimitesDoMes(mesOrigem, mesAno);
+      await carregar();
+      return criados;
+    },
+    [mesAno, carregar]
+  );
+
   const value = useMemo(
     () => ({
       mesAno,
@@ -149,9 +161,10 @@ export function LimitesOrcamentoProvider({ children }: { children: ReactNode }) 
       adicionarLimite,
       editarLimite,
       removerLimite,
+      copiarLimitesDe,
       recarregar: carregar,
     }),
-    [mesAno, limites, carregando, erro, definirMesExibido, adicionarLimite, editarLimite, removerLimite, carregar]
+    [mesAno, limites, carregando, erro, definirMesExibido, adicionarLimite, editarLimite, removerLimite, copiarLimitesDe, carregar]
   );
 
   return (

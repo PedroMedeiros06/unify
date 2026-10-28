@@ -1,4 +1,5 @@
-import { colors } from "@/theme/colors";
+import { useThemeColors } from "@/theme/useThemeColors";
+import { SeletorConta } from "@/components/ContasComp/SeletorConta";
 import { moderateScale } from "@/utils/scale";
 import { FormatToCurrency } from "@/utils/formatNumber";
 import { Ionicons } from "@expo/vector-icons";
@@ -38,6 +39,7 @@ const ItemPreview = memo(function ItemPreview({
   onRemoverVinculo: (index: number) => void;
   isLast: boolean;
 }) {
+  const colors = useThemeColors();
   const nomeSize = moderateScale(12);
   const valorSize = moderateScale(12);
   const avisoSize = moderateScale(10);
@@ -254,6 +256,8 @@ type Props = {
   linhasComErro: { numeroLinha: number; conteudoOriginal: string; motivo: string }[];
   nomeBanco: string;
   nomeArquivo: string;
+  contaDestinoId: string;
+  onTrocarContaDestino: (contaId: string) => void;
   onToggleTransacao: (index: number) => void;
   onDefinirCategoria: (index: number, categoriaId: CategoriaId) => void;
   onDefinirVinculoMeta: (index: number, vinculo: VinculoMetaPendente) => void;
@@ -270,6 +274,8 @@ function PreviewImportacaoBase({
   linhasComErro,
   nomeBanco,
   nomeArquivo,
+  contaDestinoId,
+  onTrocarContaDestino,
   onToggleTransacao,
   onDefinirCategoria,
   onDefinirVinculoMeta,
@@ -278,6 +284,7 @@ function PreviewImportacaoBase({
   onCancelar,
   salvando,
 }: Props) {
+  const colors = useThemeColors();
   const titleSize = moderateScale(15);
   const subtitleSize = moderateScale(11);
   const countLabelSize = moderateScale(11);
@@ -328,9 +335,19 @@ function PreviewImportacaoBase({
           {nomeBanco} identificado
         </Text>
       </View>
-      <Text style={{ fontSize: subtitleSize }} className="text-desactived-text mb-4" numberOfLines={1}>
+      <Text style={{ fontSize: subtitleSize }} className="text-desactived-text mb-3" numberOfLines={1}>
         {nomeArquivo}
       </Text>
+
+      {/* Conta de destino — trocável (ex: CSV do cartão para a conta-cartão). */}
+      <View className="mb-4">
+        <SeletorConta
+          label="Importar para a conta"
+          contaId={contaDestinoId}
+          onSelecionar={(c) => onTrocarContaDestino(c.id)}
+          desabilitado={salvando}
+        />
+      </View>
 
       <View className="flex-row gap-2.5 mb-3">
         <View className="flex-1 bg-sucess-color/10 border border-sucess-color/30 rounded-xl p-3 items-center">

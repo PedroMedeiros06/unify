@@ -1,9 +1,9 @@
 {
-  "hash": "668348ec5ded7f05740cbc30156b156af9605393",
-  "hashCurto": "668348e",
-  "data": "2026-09-03T22:46:54-03:00",
+  "hash": "e97c1519143495e2eb7f7121e5f9b81efdb3d128",
+  "hashCurto": "e97c151",
+  "data": "2026-10-03T19:18:10-03:00",
   "autor": "PedroMedeiros06",
-  "assunto": "v0.5.1: diálogos in-app, foto de perfil e onboarding",
-  "corpo": "- Substitui todos os Alert.alert nativos por um DialogoContext global\n  (confirmar/avisar) renderizado num único ModalCentralizado, com fila\n  para não empilhar dois diálogos. Share.share (bandeja nativa) mantido.\n- Adiciona foto de perfil: expo-image-picker, utils/fotoPerfil.ts,\n  coluna avatar_uri (migration 17) e PerfilContext aceitando patch\n  parcial. Limpeza da pasta de avatares no \"apagar dados\".\n- Primeiro acesso: fluxo de onboarding em slides + cadastro (nome/email),\n  controlado por arquivo-flag onboarding.done.\n- Migration 16: remove moedas não cobertas pela Frankfurter (ex.: ARS),\n  que ficavam presas na data de seed.\n- Bump de versão 0.5.0 -> 0.5.1.\n\nCo-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>",
-  "geradoEm": "2026-09-04T01:54:09.787Z"
+  "assunto": "v0.7.0: contas e cartões, transferências, categorias personalizadas, relatório mensal e bloqueio",
+  "corpo": "Contas\n- Minhas contas: contas de qualquer banco (\"Outro banco\"), carteira e\n  cartão de crédito; saldo inicial e \"Ajustar saldo\" para bater com o\n  banco; patrimônio líquido.\n- Transferências entre contas (não contam como receita/despesa nem no\n  orçamento); marcar uma transação existente como transferência.\n- Cartão: fatura aberta pelo dia de fechamento e \"Pagar fatura\".\n\nOrganização\n- Categorias personalizadas (criar, editar, arquivar, excluir).\n- Compromissos com categoria (a vencer por categoria no orçamento).\n- Lembretes que se repetem (semanal, mensal, anual).\n\nOrçamento e metas\n- Aviso ao chegar a 80% e ao estourar o limite de uma categoria.\n- Copiar limites do mês anterior.\n- Aporte mensal sugerido nas metas e aviso de meta atingida.\n\nImportação\n- OFX de qualquer banco; escolha da conta de destino.\n- Acentos corrigidos em arquivos Windows-1252 (BB, OFX).\n- Resumo final com duplicadas ignoradas, revisar sem categoria,\n  sugestões de transferência e de recorrência.\n\nNovos\n- Relatório do mês comparado ao anterior + aviso no dia 1.\n- Exportar transações em CSV ou PDF.\n- Bloqueio do app com biometria ou senha do aparelho.\n- Tema claro em todas as telas; barras do sistema seguem o tema.\n- Tour de primeiros passos atualizado com as novidades.\n\nMigrations 21 a 25. Exige novo build nativo (expo-print,\nexpo-local-authentication).\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>",
+  "geradoEm": "2026-10-03T22:18:11.111Z"
 }

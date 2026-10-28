@@ -1,12 +1,13 @@
 import { moderateScale } from "@/utils/scale";
 import { Ionicons } from "@expo/vector-icons";
-import { colors } from "@/theme/colors";
+import { useThemeColors } from "@/theme/useThemeColors";
 import { View, Text, Pressable } from "react-native";
 import { memo, useCallback, useState } from "react";
 import { useLembretes } from "@/context/LembretesContext";
 import { Lembrete, CamposLembrete } from "@/database/lembretesQueries";
 import { EditarLembreteModal } from "@/components/PlanejamentoComp/EditarLembreteModal";
 import { dataIsoParaBR } from "@/utils/dateUtils";
+import { ROTULO_REPETICAO } from "@/utils/repeticaoLembrete";
 import { CompromissosSkeleton } from "@/components/common/CompromissosSkeleton";
 
 function calcularDiasRestantes(dataIso: string): number {
@@ -24,6 +25,7 @@ const LembreteItem = memo(function LembreteItem({
   lembrete: Lembrete;
   onLongPress: (l: Lembrete) => void;
 }) {
+  const colors = useThemeColors();
   const itemTitleSize = moderateScale(13);
   const itemSubtitleSize = moderateScale(10);
   const badgeSize = moderateScale(9);
@@ -66,6 +68,7 @@ const LembreteItem = memo(function LembreteItem({
         </Text>
         <Text style={{ fontSize: itemSubtitleSize }} className="text-desactived-text" numberOfLines={1}>
           {dataIsoParaBR(lembrete.data)} às {lembrete.hora}
+          {lembrete.repeticao !== "nenhuma" ? ` · ${ROTULO_REPETICAO[lembrete.repeticao].toLowerCase()}` : ""}
         </Text>
       </View>
 
@@ -81,6 +84,7 @@ const LembreteItem = memo(function LembreteItem({
 });
 
 function ProximosLembretesBase() {
+  const colors = useThemeColors();
   const cardTitleSize = moderateScale(15);
   const { lembretes, carregando, adicionarLembrete, editarLembrete, removerLembrete } = useLembretes();
 

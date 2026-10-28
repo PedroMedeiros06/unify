@@ -1,5 +1,5 @@
 import { ScreenType } from "@/context/NavigationContext";
-import { colors } from "@/theme/colors";
+import { useThemeColors, useIsTemaClaro } from "@/theme/useThemeColors";
 import { Ionicons } from "@expo/vector-icons";
 import { Pressable, Text, View, Animated, Easing, useWindowDimensions } from "react-native";
 import { useEffect, useRef } from "react";
@@ -31,6 +31,8 @@ type FooterProps = {
 
 export function Footer({ activeScreen, onChangeScreen, onPressAdicionar, menuAcaoAberto = false }: FooterProps) {
   const insets = useSafeAreaInsets();
+  const colors = useThemeColors();
+  const temaClaro = useIsTemaClaro();
   const { width } = useWindowDimensions();
   const isSmallDevice = width < 375;
 
@@ -55,12 +57,17 @@ export function Footer({ activeScreen, onChangeScreen, onPressAdicionar, menuAca
   });
 
   return (
-    <View 
-      style={{ 
-        paddingBottom: insets.bottom > 0 ? insets.bottom + 8 : 14, 
+    <View
+      style={{
+        paddingBottom: insets.bottom > 0 ? insets.bottom + 8 : 14,
         paddingTop: 6,
       }}
-      className="bg-input-background flex-row justify-around items-center px-2 border-t border-lines-divisions w-full overflow-visible relative"
+      // No tema claro o footer usa a cor de card (branco) para se
+      // destacar do fundo cinza-claro da tela; no escuro mantém o
+      // input-background (mais fundo que o card), padrão original.
+      className={`${
+        temaClaro ? "bg-card-background" : "bg-input-background"
+      } flex-row justify-around items-center px-2 border-t border-lines-divisions w-full overflow-visible relative`}
     >
       {tabs.map((tab) => {
         const isActive = activeScreen === tab.name;
@@ -103,8 +110,13 @@ export function Footer({ activeScreen, onChangeScreen, onPressAdicionar, menuAca
                     width: whiteBgSize,
                     height: whiteBgSize,
                     borderRadius: whiteBgSize / 2,
+                    // Miolo claro atrás da cruz roxa — precisa ser sempre
+                    // uma cor clara para dar contraste ao ícone. No dark
+                    // `main-text` já é clara; no claro seria quase preta,
+                    // então fixamos branco.
+                    backgroundColor: temaClaro ? "#FFFFFF" : colors["main-text"],
                   }}
-                  className="bg-main-text  absolute"
+                  className="absolute"
                 />
 
                 <Animated.View style={{ transform: [{ rotate: rotacaoMais }] }}>

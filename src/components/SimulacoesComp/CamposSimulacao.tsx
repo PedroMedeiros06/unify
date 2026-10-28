@@ -1,4 +1,4 @@
-import { colors } from "@/theme/colors";
+import { useThemeColors } from "@/theme/useThemeColors";
 import { moderateScale } from "@/utils/scale";
 import { Ionicons } from "@expo/vector-icons";
 import { View, Text, TextInput, Pressable, ScrollView } from "react-native";
@@ -31,6 +31,7 @@ export const CampoMoeda = memo(function CampoMoeda({
   // "valor a financiar", que no anexo aparece realçado.
   destaque?: boolean;
 }) {
+  const colors = useThemeColors();
   const handleChange = useCallback(
     (texto: string) => {
       const digitos = texto.replace(/[^0-9]/g, "");
@@ -106,6 +107,7 @@ export const CampoNumero = memo(function CampoNumero({
   sufixo?: string;
   decimais?: number;
 }) {
+  const colors = useThemeColors();
   const handleChange = useCallback(
     (texto: string) => {
       const limpo = texto.replace(",", ".").replace(/[^0-9.]/g, "");
@@ -158,6 +160,7 @@ export const CampoEntradaFinanciamento = memo(function CampoEntradaFinanciamento
   entrada: number; // sempre em R$
   onChange: (entradaEmReais: number) => void;
 }) {
+  const colors = useThemeColors();
   const [modo, setModo] = useState<ModoEntrada>("valor");
 
   // Rascunho só para o modo percentual — digitar "1", "12," etc. sem
@@ -287,6 +290,7 @@ export const CampoTaxa = memo(function CampoTaxa({
   minimo?: number;
   maximo?: number;
 }) {
+  const colors = useThemeColors();
   // Enquanto digita, o texto pode ter estados intermediários ("", "9,")
   // que não convertem pra número — o rascunho manda no que aparece.
   // `null` = não está editando: mostra o valor formatado.
@@ -355,6 +359,7 @@ function CampoDropdownInner<T extends string | number>({
   onChange: (valor: T) => void;
   alturaMaxima?: number;
 }) {
+  const colors = useThemeColors();
   const selecionada = opcoes.find((o) => o.valor === valor);
 
   return (

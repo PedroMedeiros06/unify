@@ -2,7 +2,7 @@ import { memo, useCallback, useMemo, useState } from "react";
 import { View, Text, Pressable } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
-import { colors } from "@/theme/colors";
+import { useThemeColors } from "@/theme/useThemeColors";
 import { moderateScale } from "@/utils/scale";
 import { dataHojeIso } from "@/utils/dateUtils";
 import { useNavigation } from "@/context/NavigationContext";
@@ -32,6 +32,7 @@ import { DefinirLimiteCategoriaModal } from "@/components/OrcamentoComp/DefinirL
  * é de uma fase seguinte.
  */
 function OrcamentoResumoBase() {
+  const colors = useThemeColors();
   // Mês/ano exibido no card de Visão geral — começa no mês corrente e é
   // navegável via SeletorMesAno (mesmo padrão de VisaoGeralMes).
   const hojeIso = useMemo(() => dataHojeIso(), []);

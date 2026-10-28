@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { Animated, Easing, ViewStyle } from "react-native";
-import { colors } from "@/theme/colors";
+import { useThemeColors } from "@/theme/useThemeColors";
 
 type Props = {
   width: number | `${number}%`;
@@ -10,6 +10,7 @@ type Props = {
 };
 
 export function Skeleton({ width, height, borderRadius = 8, style }: Props) {
+  const colors = useThemeColors();
   const opacidade = useRef(new Animated.Value(0.4)).current;
 
   useEffect(() => {

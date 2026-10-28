@@ -1,4 +1,4 @@
-import { colors } from "@/theme/colors";
+import { useThemeColors } from "@/theme/useThemeColors";
 import { moderateScale } from "@/utils/scale";
 import { Ionicons } from "@expo/vector-icons";
 import { View, Text, Pressable, Switch } from "react-native";
@@ -14,6 +14,11 @@ type MenuItemProps = {
   // Se informado, o item vira um toggle em vez de navegação por seta
   toggleValue?: boolean;
   onToggleChange?: (value: boolean) => void;
+  // Item puramente informativo: sem seta ">", sem Pressable, sem
+  // accessibilityRole="button". Para linhas que só EXIBEM um valor fixo
+  // (ex.: "Aparência: Tema escuro", "Idioma: Português") e não abrem
+  // nada ao toque. Ignorado se for toggle ou se houver onPress.
+  somenteLeitura?: boolean;
 };
 
 function MenuItemBase({
@@ -25,11 +30,14 @@ function MenuItemBase({
   onPress,
   toggleValue,
   onToggleChange,
+  somenteLeitura = false,
 }: MenuItemProps) {
+  const colors = useThemeColors();
   const tituloSize = moderateScale(14);
   const subtituloSize = moderateScale(11);
 
   const isToggle = toggleValue !== undefined;
+  const isSomenteLeitura = somenteLeitura && !isToggle && !onPress;
   const iconColor = destructive ? colors["error-color"] : colors["active-icon"];
   const iconBg = destructive ? `${colors["error-color"]}22` : `${colors["active-icon"]}22`;
 
@@ -64,15 +72,16 @@ function MenuItemBase({
           trackColor={{ false: colors["lines-divisions"], true: colors["active-icon"] }}
           thumbColor="#fff"
         />
-      ) : (
+      ) : isSomenteLeitura ? null : (
         <Ionicons name="chevron-forward" color={colors["second-text"]} size={16} />
       )}
     </View>
   );
 
-  if (isToggle) {
-    // Item de toggle não precisa de Pressable no corpo inteiro —
-    // o próprio Switch já é a área de toque.
+  if (isToggle || isSomenteLeitura) {
+    // Toggle: o próprio Switch já é a área de toque.
+    // Somente leitura: não há ação nenhuma — não embrulha em Pressable
+    // nem anuncia como botão para leitores de tela.
     return content;
   }
 

@@ -1,4 +1,4 @@
-import { colors } from "@/theme/colors";
+import { useThemeColors } from "@/theme/useThemeColors";
 import { moderateScale } from "@/utils/scale";
 import { Ionicons } from "@expo/vector-icons";
 import { View, Text, Pressable } from "react-native";
@@ -7,12 +7,9 @@ import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { Sparkline } from "@/components/HomeComp/Sparkline";
 import { BancosConectados, BancoComSaldo } from "@/components/HomeComp/BancosConectados";
 import { useNavigation } from "@/context/NavigationContext";
-import {
-  listarResumoPorBanco,
-  calcularSaldoAcumuladoAte,
-  listarSerieSaldoDiario,
-  ResumoPorBanco,
-} from "@/database/queries";
+import { useTransacoes } from "@/context/TransacoesContext";
+import { useContas } from "@/context/ContasContext";
+import { calcularSaldoAcumuladoAte, listarSerieSaldoDiario } from "@/database/queries";
 
 const DIAS_SPARKLINE = 30;
 
@@ -31,15 +28,21 @@ function dataMesAnteriorIso(): string {
 }
 
 function ResumoBase() {
+  const colors = useThemeColors();
   const title = moderateScale(28);
   const subtilte = moderateScale(12);
 
   const [visible, setVisible] = useState(true);
   const { navigate } = useNavigation();
+  // Sobe a cada transação criada/editada/excluída — refaz saldo e
+  // sparkline sem precisar sair e voltar para a Home.
+  const { versaoDados } = useTransacoes();
 
-  const [resumoBancos, setResumoBancos] = useState<ResumoPorBanco[]>([]);
+  // Saldo de cada conta (saldo inicial + entradas - saídas, com
+  // transferências) vem do ContasContext, que já recarrega a cada
+  // mudança de transação.
+  const { contas, carregando } = useContas();
   const [bancosSelecionados, setBancosSelecionados] = useState<string[]>([]);
-  const [carregando, setCarregando] = useState(true);
 
   const [saldoMesAnterior, setSaldoMesAnterior] = useState<number | null>(null);
   const [historicoSaldo, setHistoricoSaldo] = useState<number[]>([]);
@@ -47,24 +50,6 @@ function ResumoBase() {
   // undefined = "sem filtro" para as queries (todos os bancos); só
   // manda a lista quando há seleção ativa.
   const filtroBancos = bancosSelecionados.length > 0 ? bancosSelecionados : undefined;
-
-  const carregarResumo = useCallback(async () => {
-    setCarregando(true);
-    try {
-      // listarResumoPorBanco faz INNER JOIN a partir de transacoes, então
-      // só retorna bancos que têm ao menos uma transação real — é assim
-      // que "Banco do Brasil sem dados não aparece" é garantido, sem
-      // precisar de nenhuma query nova ou tabela de controle de bancos.
-      const resumo = await listarResumoPorBanco();
-      setResumoBancos(resumo);
-    } finally {
-      setCarregando(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    carregarResumo();
-  }, [carregarResumo]);
 
   // Variação % e Sparkline recalculam sempre que o filtro de banco
   // muda — ambos precisam refletir só os bancos selecionados, igual ao
@@ -83,7 +68,7 @@ function ResumoBase() {
       setHistoricoSaldo(serie.map((p) => p.saldoAcumulado));
     }
 
-    carregarSerieETendencia();
+    carregarSerieETendencia().catch((e) => console.warn("[Resumo] Falha ao carregar dados:", e));
 
     return () => {
       ativo = false;
@@ -93,7 +78,7 @@ function ResumoBase() {
     // (nova referência a cada render), então dependemos do conteúdo via
     // join — comparação estável o bastante para uma lista de poucos ids.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bancosSelecionados.join(",")]);
+  }, [bancosSelecionados.join(","), versaoDados]);
 
   const handleToggleVisible = useCallback(() => {
     setVisible((prev) => !prev);
@@ -109,22 +94,22 @@ function ResumoBase() {
     );
   }, []);
 
-  // Nenhum banco selecionado = considera todos (regra explícita: sem
-  // filtro ativo, o resumo mostra a soma de todos os bancos com dados).
-  const resumoConsiderado = useMemo(
-    () =>
-      bancosSelecionados.length === 0
-        ? resumoBancos
-        : resumoBancos.filter((r) => bancosSelecionados.includes(r.bancoId)),
-    [resumoBancos, bancosSelecionados]
+  // Contas que aparecem no card: não arquivadas e com algum movimento
+  // ou saldo (conta do catálogo nunca usada não polui os chips).
+  const contasVisiveis = useMemo(
+    () => contas.filter((c) => !c.arquivada && (c.quantidadeTransacoes > 0 || Math.abs(c.saldo) >= 0.01)),
+    [contas]
   );
 
-  // Saldo = soma de (entradas - saídas) de cada banco considerado. Não é
-  // filtro visual: o valor exibido é de fato recalculado a partir dos
-  // bancos atualmente selecionados.
-  const saldoAtual = resumoConsiderado.reduce(
-    (acc, r) => acc + (r.totalEntradas - r.totalSaidas),
-    0
+  // Nenhuma selecionada = considera todas (regra explícita: sem filtro
+  // ativo, o resumo mostra a soma de todas as contas). O saldo é
+  // recalculado a partir das contas selecionadas — não é filtro visual.
+  const saldoAtual = useMemo(
+    () =>
+      contasVisiveis
+        .filter((c) => bancosSelecionados.length === 0 || bancosSelecionados.includes(c.id))
+        .reduce((acc, c) => acc + c.saldo, 0),
+    [contasVisiveis, bancosSelecionados]
   );
 
   // Variação: saldo acumulado até hoje vs saldo acumulado até o mesmo
@@ -136,11 +121,11 @@ function ResumoBase() {
       ? Math.round(((saldoAtual - saldoMesAnterior) / Math.abs(saldoMesAnterior)) * 100)
       : null;
 
-  const bancosParaChips: BancoComSaldo[] = resumoBancos.map((r) => ({
-    id: r.bancoId,
-    nome: r.bancoNome,
-    sigla: r.bancoSigla,
-    cor: r.bancoCor,
+  const bancosParaChips: BancoComSaldo[] = contasVisiveis.map((c) => ({
+    id: c.id,
+    nome: c.nome,
+    sigla: c.sigla,
+    cor: c.cor,
   }));
 
   const saldoFormatado = FormatToCurrency(saldoAtual);
@@ -163,6 +148,16 @@ function ResumoBase() {
             <Ionicons name={visible ? "eye-off" : "eye"} color={colors["main-text"]} size={10} />
           </Pressable>
         </View>
+        <View className="flex-row items-center">
+        <Pressable
+          onPress={() => navigate("contas")}
+          className="p-2 active:opacity-60"
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Minhas contas"
+        >
+          <Ionicons name="wallet-outline" color={colors["second-text"]} size={20} />
+        </Pressable>
         <Pressable
           onPress={handleImportarExtrato}
           className="p-2 active:opacity-60"
@@ -172,6 +167,7 @@ function ResumoBase() {
         >
           <Ionicons name="document-attach-outline" color={colors["second-text"]} size={20} />
         </Pressable>
+        </View>
       </View>
 
       {/* Body */}

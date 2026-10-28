@@ -1,4 +1,4 @@
-import { colors } from "@/theme/colors";
+import { useThemeColors } from "@/theme/useThemeColors";
 import { moderateScale } from "@/utils/scale";
 import { Ionicons } from "@expo/vector-icons";
 import { View, Text, Pressable, ScrollView } from "react-native";
@@ -17,6 +17,7 @@ type Props = {
 const MAX_ALTURA_LISTA = 240;
 
 function SeletorBancoMultiploBase({ bancos, bancosSelecionados, onAlternar, onLimpar }: Props) {
+  const colors = useThemeColors();
   const triggerTextSize = moderateScale(12);
   const itemTextSize = moderateScale(13);
   const rodapeTextSize = moderateScale(12);

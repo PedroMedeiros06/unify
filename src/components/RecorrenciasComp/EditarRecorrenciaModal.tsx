@@ -1,4 +1,4 @@
-import { colors } from "@/theme/colors";
+import { useThemeColors } from "@/theme/useThemeColors";
 import { moderateScale } from "@/utils/scale";
 import { Ionicons } from "@expo/vector-icons";
 import { View, Text, Pressable, TextInput } from "react-native";
@@ -30,6 +30,7 @@ const TIPOS: { valor: TipoRecorrencia; label: string; icone: keyof typeof Ionico
 ];
 
 function EditarRecorrenciaModalBase({ visivel, recorrenciaEditando, onFechar, onSalvar, onExcluir }: Props) {
+  const colors = useThemeColors();
   const { confirmar, avisar } = useDialogo();
   const titleSize = moderateScale(17);
   const labelSize = moderateScale(11);

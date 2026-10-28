@@ -1,4 +1,3 @@
-import { colors } from "@/theme/colors";
 import { moderateScale } from "@/utils/scale";
 import { Ionicons } from "@expo/vector-icons";
 import { View, Text } from "react-native";
@@ -52,10 +51,6 @@ function StatTilesSimulacaoBase({ tiles }: { tiles: StatTile[] }) {
 
 export const StatTilesSimulacao = memo(StatTilesSimulacaoBase);
 
-/** Cores padrão dos tiles, na ordem em que aparecem no anexo. */
-export const CORES_TILE = [
-  colors["active-icon"],
-  colors["sucess-color"],
-  colors["warn-color"],
-  "#378ADD",
-] as const;
+/** Cores padrão dos tiles, na ordem em que aparecem no anexo. Fixas
+ * (identidade visual do resultado, não tokens do tema). */
+export const CORES_TILE = ["#7C3AED", "#10B981", "#F59E0B", "#378ADD"] as const;

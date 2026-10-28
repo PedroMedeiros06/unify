@@ -1,4 +1,5 @@
-import { colors } from "@/theme/colors";
+import { colors as coresIdentidade } from "@/theme/colors";
+import { useThemeColors } from "@/theme/useThemeColors";
 import { moderateScale } from "@/utils/scale";
 import { Ionicons } from "@expo/vector-icons";
 import { View, Text, Pressable } from "react-native";
@@ -10,11 +11,11 @@ const DIAS_SEMANA = ["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SÁB"];
 
 // Cor do pontinho por tipo de evento — mesma paleta da legenda.
 const COR_POR_TIPO: Record<TipoEventoAgenda, string> = {
-  compromisso: colors["active-icon"],
-  meta: colors["sucess-color"],
-  investimento: colors["warn-color"],
-  lembrete: colors["error-color"],
-  recorrencia: colors["desactived-text"],
+  compromisso: coresIdentidade["active-icon"],
+  meta: coresIdentidade["sucess-color"],
+  investimento: coresIdentidade["warn-color"],
+  lembrete: coresIdentidade["error-color"],
+  recorrencia: coresIdentidade["desactived-text"],
 };
 
 type DiaCelula = {
@@ -79,6 +80,7 @@ function CalendarioMensalBase({
   onSelecionarMesAno,
   onIrParaHoje,
 }: Props) {
+  const colors = useThemeColors();
   const diaSemanaSize = moderateScale(10);
   const diaNumeroSize = moderateScale(15);
   const hojeButtonSize = moderateScale(12);

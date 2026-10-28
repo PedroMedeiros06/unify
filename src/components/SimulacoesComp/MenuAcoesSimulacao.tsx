@@ -1,6 +1,6 @@
 import { moderateScale } from "@/utils/scale";
 import { Ionicons } from "@expo/vector-icons";
-import { colors } from "@/theme/colors";
+import { useThemeColors } from "@/theme/useThemeColors";
 import { View, Text, Pressable, Share } from "react-native";
 import { memo, useEffect, useState } from "react";
 import { SimulacaoSalva } from "@/database/simulacoesQueries";
@@ -33,6 +33,7 @@ function LinhaAcao({
   primeira?: boolean;
   onPress: () => void;
 }) {
+  const colors = useThemeColors();
   const textoSize = moderateScale(14);
   return (
     <Pressable
@@ -55,6 +56,7 @@ function LinhaAcao({
 }
 
 function MenuAcoesSimulacaoBase({ simulacao, onFechar, onRestaurar, onExcluir, textoCompartilhar }: Props) {
+  const colors = useThemeColors();
   const { avisar } = useDialogo();
   const tituloSize = moderateScale(15);
   const subSize = moderateScale(11);

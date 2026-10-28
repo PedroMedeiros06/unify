@@ -1,4 +1,4 @@
-import { colors } from "@/theme/colors";
+import { useThemeColors } from "@/theme/useThemeColors";
 import { moderateScale } from "@/utils/scale";
 import { Ionicons } from "@expo/vector-icons";
 import { View, Text, Pressable, TextInput, ScrollView } from "react-native";
@@ -23,6 +23,7 @@ type Props = {
 const TOTAL_PASSOS = 2;
 
 function EditarMetaModalBase({ visivel, metaEditando, onFechar, onSalvar, onExcluir }: Props) {
+  const colors = useThemeColors();
   const { confirmar, avisar } = useDialogo();
   const titleSize = moderateScale(17);
   const labelSize = moderateScale(11);

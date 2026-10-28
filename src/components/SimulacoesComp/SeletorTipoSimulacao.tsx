@@ -1,4 +1,4 @@
-import { colors } from "@/theme/colors";
+import { useThemeColors } from "@/theme/useThemeColors";
 import { moderateScale } from "@/utils/scale";
 import { Ionicons } from "@expo/vector-icons";
 import { View, Text, Pressable } from "react-native";
@@ -6,6 +6,8 @@ import { memo } from "react";
 import { TipoSimulacao } from "@/database/simulacoesQueries";
 import { DropdownMenu } from "@/components/common/DropdownMenu";
 
+// Cor de identidade de cada simulador — fixa, não muda com o tema
+// (mesma ideia das cores das categorias). Roxo/âmbar/verde/azul.
 export const TIPOS_SIMULACAO: {
   tipo: TipoSimulacao;
   titulo: string;
@@ -18,21 +20,21 @@ export const TIPOS_SIMULACAO: {
     titulo: "Financiamento",
     descricao: "Parcelas e custos de um financiamento, com entrada opcional",
     icone: "business-outline",
-    cor: colors["active-icon"],
+    cor: "#7C3AED",
   },
   {
     tipo: "emprestimo",
     titulo: "Empréstimo",
     descricao: "Parcelas de um empréstimo pessoal, sem entrada",
     icone: "cash-outline",
-    cor: colors["warn-color"],
+    cor: "#F59E0B",
   },
   {
     tipo: "investimento",
     titulo: "Investimentos",
     descricao: "Veja quanto seu investimento pode render",
     icone: "trending-up-outline",
-    cor: colors["sucess-color"],
+    cor: "#10B981",
   },
   {
     tipo: "cambio",
@@ -49,6 +51,7 @@ type Props = {
 };
 
 function SeletorTipoSimulacaoBase({ selecionado, onSelecionar }: Props) {
+  const colors = useThemeColors();
   const labelSize = moderateScale(11);
   const valorSize = moderateScale(14);
   const descSize = moderateScale(10);

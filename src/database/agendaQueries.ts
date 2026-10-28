@@ -1,5 +1,7 @@
-import { listarCompromissos, Compromisso } from "@/database/compromissosQueries";
-import { listarLembretes, Lembrete } from "@/database/lembretesQueries";
+import { listarCompromissosNoPeriodo, Compromisso } from "@/database/compromissosQueries";
+import { listarLembretesNoPeriodo, Lembrete } from "@/database/lembretesQueries";
+import { ocorrenciasNoPeriodo as datasDoLembreteNoPeriodo, ROTULO_REPETICAO } from "@/utils/repeticaoLembrete";
+import { listarRecorrencias } from "@/database/recorrenciasQueries";
 import { listarMetasComPrazoNoPeriodo, Meta } from "@/database/metasQueries";
 import { gerarOcorrenciasDoMes, OcorrenciaDoMes } from "@/database/gerarOcorrenciasPrevistas";
 import { obterCategoriaPorId } from "@/database/categorias";
@@ -51,13 +53,17 @@ function compromissoParaEvento(c: Compromisso): EventoAgenda {
   };
 }
 
-function lembreteParaEvento(l: Lembrete): EventoAgenda {
+function lembreteParaEvento(l: Lembrete, data: string = l.data): EventoAgenda {
+  const repetido = l.repeticao !== "nenhuma";
   return {
-    id: `lembrete-${l.id}`,
+    // Repetido: uma entrada por ocorrência (id único por data), todas na
+    // mesma série.
+    id: repetido ? `lembrete-${l.id}-${data}` : `lembrete-${l.id}`,
+    serieId: repetido ? `lembrete-${l.id}` : undefined,
     tipo: "lembrete",
     titulo: l.titulo,
-    subtitulo: `Lembrete · ${l.hora}`,
-    data: l.data,
+    subtitulo: repetido ? `Lembrete · ${l.hora} · ${ROTULO_REPETICAO[l.repeticao].toLowerCase()}` : `Lembrete · ${l.hora}`,
+    data,
     valor: null,
     positivo: true,
     icone: "alarm-outline",
@@ -132,29 +138,23 @@ function metaParaEvento(m: Meta): EventoAgenda {
  * de uma vez (marca quais dias têm evento) e para "eventos do dia"
  * quando o intervalo é um único dia.
  *
- * Compromissos não têm uma query por período ainda — como a lista total
- * tende a ser pequena (poucas dezenas), filtramos em memória em vez de
- * criar uma nova query só para isso; se o volume crescer muito, vale
- * revisar para filtrar direto no SQL como já é feito em metasQueries.
+ * Compromissos e lembretes são filtrados por período direto no SQL
+ * (listar*NoPeriodo), como as metas.
  */
 export async function listarEventosAgenda(
   inicioIso: string,
   fimIso: string
 ): Promise<EventoAgenda[]> {
-  const [todosCompromissos, todosLembretes, metasComPrazo, ocorrenciasPorMes] = await Promise.all([
-    listarCompromissos(),
-    listarLembretes(),
+  // Recorrências buscadas UMA vez e repassadas a cada mês (antes cada
+  // mês do intervalo — até 4 nos "próximos 90 dias" — relia a tabela).
+  // Compromissos e lembretes já vêm filtrados pelo período no SQL.
+  const recorrencias = await listarRecorrencias();
+  const [compromissosNoPeriodo, lembretesNoPeriodo, metasComPrazo, ocorrenciasPorMes] = await Promise.all([
+    listarCompromissosNoPeriodo(inicioIso, fimIso),
+    listarLembretesNoPeriodo(inicioIso, fimIso),
     listarMetasComPrazoNoPeriodo(inicioIso, fimIso),
-    Promise.all(mesesNoIntervalo(inicioIso, fimIso).map(gerarOcorrenciasDoMes)),
+    Promise.all(mesesNoIntervalo(inicioIso, fimIso).map((mes) => gerarOcorrenciasDoMes(mes, recorrencias))),
   ]);
-
-  const compromissosNoPeriodo = todosCompromissos.filter(
-    (c) => c.dataVencimento >= inicioIso && c.dataVencimento <= fimIso
-  );
-
-  const lembretesNoPeriodo = todosLembretes.filter(
-    (l) => l.data >= inicioIso && l.data <= fimIso
-  );
 
   // Ocorrências puladas não vão para a Agenda; filtra também pela data
   // exata (o mês pode extrapolar o intervalo pedido nas pontas).
@@ -164,7 +164,11 @@ export async function listarEventosAgenda(
 
   const eventos = [
     ...compromissosNoPeriodo.map(compromissoParaEvento),
-    ...lembretesNoPeriodo.map(lembreteParaEvento),
+    // Repetidos: expande as ocorrências dentro do período (a partir da
+    // próxima — ocorrências passadas não são reconstruídas).
+    ...lembretesNoPeriodo.flatMap((l) =>
+      datasDoLembreteNoPeriodo(l.data, l.repeticao, l.diaBase, inicioIso, fimIso).map((d) => lembreteParaEvento(l, d))
+    ),
     ...metasComPrazo.map(metaParaEvento),
     ...ocorrenciasNoPeriodo.map(ocorrenciaParaEvento),
   ];

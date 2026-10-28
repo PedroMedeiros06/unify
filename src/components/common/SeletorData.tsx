@@ -1,4 +1,4 @@
-import { colors } from "@/theme/colors";
+import { useThemeColors } from "@/theme/useThemeColors";
 import { moderateScale } from "@/utils/scale";
 import { Ionicons } from "@expo/vector-icons";
 import { View, Text, Pressable, Platform } from "react-native";
@@ -32,6 +32,7 @@ function formatarExibicao(dataIso: string | null): string {
 }
 
 function SeletorDataBase({ label, valorIso, onChange, minimoHoje }: Props) {
+  const colors = useThemeColors();
   const labelSize = moderateScale(11);
   const valueSize = moderateScale(14);
 

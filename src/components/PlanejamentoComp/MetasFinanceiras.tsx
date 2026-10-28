@@ -1,7 +1,7 @@
 import { moderateScale } from "@/utils/scale";
 import { FormatToCurrency } from "@/utils/formatNumber";
 import { Ionicons } from "@expo/vector-icons";
-import { colors } from "@/theme/colors";
+import { useThemeColors } from "@/theme/useThemeColors";
 import { View, Text, Pressable } from "react-native";
 import { memo, useCallback, useMemo, useState } from "react";
 import { useMetas } from "@/context/MetasContext";
@@ -56,6 +56,7 @@ const MetaItem = memo(function MetaItem({ meta, onLongPress }: { meta: Meta; onL
 });
 
 function MetasFinanceirasBase() {
+  const colors = useThemeColors();
   const cardTitleSize = moderateScale(15);
   const { metas, carregando, adicionarMeta, editarMeta, removerMeta } = useMetas();
 

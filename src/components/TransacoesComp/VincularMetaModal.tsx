@@ -1,4 +1,4 @@
-import { colors } from "@/theme/colors";
+import { useThemeColors } from "@/theme/useThemeColors";
 import { moderateScale } from "@/utils/scale";
 import { FormatToCurrency } from "@/utils/formatNumber";
 import { Ionicons } from "@expo/vector-icons";
@@ -41,6 +41,7 @@ function VincularMetaModalBase({
   onFechar,
   onVinculado,
 }: Props) {
+  const colors = useThemeColors();
   const { avisar } = useDialogo();
   const titleSize = moderateScale(17);
   const labelSize = moderateScale(11);

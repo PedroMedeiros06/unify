@@ -1,5 +1,14 @@
 import { Platform } from "react-native";
 import Constants, { ExecutionEnvironment } from "expo-constants";
+import {
+  OrigemNotificacao,
+  registrarNotificacao,
+  removerPorNotificacaoId,
+  removerAgendadasFuturas,
+} from "./notificacoesHistoricoQueries";
+import { obterPerfil } from "./perfilQueries";
+import { dataHoraLocalIso } from "@/utils/dateUtils";
+import { RepeticaoLembrete, proximasOcorrencias } from "@/utils/repeticaoLembrete";
 
 /**
  * Notificações locais agendadas pelo próprio app — diferente de ler
@@ -47,6 +56,22 @@ function carregarModuloNotifications(): Promise<NotificationsModule> {
 let permissaoSolicitada = false;
 let avisoExpoGoMostrado = false;
 
+/**
+ * Lê a preferência global de notificações do perfil (coluna
+ * `notificacoes_ativas`, migration 19). Se o usuário desativou, o app
+ * não deve agendar nada. Falha de leitura = assume ativo (não silencia
+ * notificação por causa de um erro de banco pontual).
+ */
+async function notificacoesPermitidasPeloUsuario(): Promise<boolean> {
+  try {
+    const perfil = await obterPerfil();
+    return perfil.notificacoesAtivas;
+  } catch (erro) {
+    console.warn("[notificacoes] Falha ao ler preferência de notificações (assumindo ativa):", erro);
+    return true;
+  }
+}
+
 function avisarLimitacaoExpoGo() {
   if (avisoExpoGoMostrado) return;
   avisoExpoGoMostrado = true;
@@ -74,16 +99,24 @@ async function garantirPermissao(Notifications: NotificationsModule): Promise<bo
  * se não foi possível agendar (Expo Go, permissão negada, ou data
  * já passada) — nesses casos o compromisso ainda deve ser salvo
  * normalmente por quem chama esta função.
+ *
+ * Quando agenda com sucesso, também grava a notificação no histórico
+ * (`notificacoes_historico`) para aparecer na tela de notificações da
+ * Home. `refId` é o id do compromisso, usado para casar a linha do
+ * histórico com o item de origem.
  */
 export async function agendarNotificacaoVencimento(
   nomeCompromisso: string,
   valor: number,
-  dataVencimentoIso: string
+  dataVencimentoIso: string,
+  refId: string | null = null
 ): Promise<string | null> {
   if (rodandoNoExpoGo) {
     avisarLimitacaoExpoGo();
     return null;
   }
+
+  if (!(await notificacoesPermitidasPeloUsuario())) return null;
 
   try {
     const Notifications = await carregarModuloNotifications();
@@ -97,11 +130,13 @@ export async function agendarNotificacaoVencimento(
     if (dataNotificacao.getTime() <= Date.now()) return null;
 
     const valorFormatado = valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+    const titulo = "Compromisso vence hoje";
+    const corpo = `${nomeCompromisso} — ${valorFormatado}`;
 
     const notificacaoId = await Notifications.scheduleNotificationAsync({
       content: {
-        title: "Compromisso vence hoje",
-        body: `${nomeCompromisso} — ${valorFormatado}`,
+        title: titulo,
+        body: corpo,
         sound: Platform.OS === "ios" ? "default" : undefined,
       },
       trigger: {
@@ -109,6 +144,21 @@ export async function agendarNotificacaoVencimento(
         date: dataNotificacao,
       },
     });
+
+    // Histórico é acessório: se falhar, a notificação já foi agendada e
+    // o compromisso deve ser salvo do mesmo jeito.
+    try {
+      await registrarNotificacao({
+        titulo,
+        corpo,
+        disparaEm: dataHoraLocalIso(dataNotificacao),
+        notificacaoId,
+        origem: "compromisso",
+        refId,
+      });
+    } catch (erroHistorico) {
+      console.warn("[notificacoes] Falha ao registrar notificação no histórico:", erroHistorico);
+    }
 
     return notificacaoId;
   } catch (erro) {
@@ -120,25 +170,45 @@ export async function agendarNotificacaoVencimento(
   }
 }
 
+// Quantas ocorrências futuras de um lembrete repetido ficam agendadas
+// de uma vez. Cobre o caso do app ficar dias sem ser aberto (só ao abrir
+// o LembretesContext avança e reagenda a janela). Semanal: 2 meses;
+// mensal: meio ano; anual: 2 anos.
+const OCORRENCIAS_AGENDADAS: Record<RepeticaoLembrete, number> = {
+  nenhuma: 1,
+  semanal: 8,
+  mensal: 6,
+  anual: 2,
+};
+
 /**
- * Agenda uma notificação local para um lembrete, na DATA e HORA exatas
- * escolhidas pelo usuário (diferente de `agendarNotificacaoVencimento`,
- * que fixa 9h). Retorna o ID da notificação agendada, ou null se não foi
- * possível agendar (Expo Go, permissão negada, ou data/hora já passada) —
- * nesses casos o lembrete ainda deve ser salvo normalmente por quem chama.
+ * Agenda notificação(ões) local(is) para um lembrete, na DATA e HORA
+ * exatas escolhidas pelo usuário (diferente de
+ * `agendarNotificacaoVencimento`, que fixa 9h). `horaHHMM` em "HH:MM".
  *
- * `horaHHMM` no formato "HH:MM" (24h).
+ * Lembrete repetido: agenda as próximas N ocorrências a partir de
+ * `dataIso` (ver OCORRENCIAS_AGENDADAS) e devolve os ids separados por
+ * vírgula — `cancelarNotificacao` entende esse formato.
+ *
+ * Retorna null se nada foi agendado (Expo Go, permissão negada,
+ * preferência desligada, ou tudo no passado) — o lembrete ainda deve
+ * ser salvo normalmente por quem chama.
  */
 export async function agendarNotificacaoLembrete(
   titulo: string,
   descricao: string | null,
   dataIso: string,
-  horaHHMM: string
+  horaHHMM: string,
+  refId: string | null = null,
+  repeticao: RepeticaoLembrete = "nenhuma",
+  diaBase: number | null = null
 ): Promise<string | null> {
   if (rodandoNoExpoGo) {
     avisarLimitacaoExpoGo();
     return null;
   }
+
+  if (!(await notificacoesPermitidasPeloUsuario())) return null;
 
   try {
     const Notifications = await carregarModuloNotifications();
@@ -146,25 +216,43 @@ export async function agendarNotificacaoLembrete(
     const permitido = await garantirPermissao(Notifications);
     if (!permitido) return null;
 
-    const [ano, mes, dia] = dataIso.split("-").map(Number);
     const [hora, minuto] = horaHHMM.split(":").map(Number);
-    const dataNotificacao = new Date(ano, mes - 1, dia, hora, minuto, 0);
+    const corpo = descricao?.trim() ? descricao.trim() : "Lembrete";
+    const ids: string[] = [];
 
-    if (dataNotificacao.getTime() <= Date.now()) return null;
+    for (const data of proximasOcorrencias(dataIso, repeticao, diaBase, OCORRENCIAS_AGENDADAS[repeticao])) {
+      const [ano, mes, dia] = data.split("-").map(Number);
+      const dataNotificacao = new Date(ano, mes - 1, dia, hora, minuto, 0);
+      if (dataNotificacao.getTime() <= Date.now()) continue;
 
-    const notificacaoId = await Notifications.scheduleNotificationAsync({
-      content: {
-        title: titulo,
-        body: descricao?.trim() ? descricao.trim() : "Lembrete",
-        sound: Platform.OS === "ios" ? "default" : undefined,
-      },
-      trigger: {
-        type: Notifications.SchedulableTriggerInputTypes.DATE,
-        date: dataNotificacao,
-      },
-    });
+      const notificacaoId = await Notifications.scheduleNotificationAsync({
+        content: {
+          title: titulo,
+          body: corpo,
+          sound: Platform.OS === "ios" ? "default" : undefined,
+        },
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.DATE,
+          date: dataNotificacao,
+        },
+      });
+      ids.push(notificacaoId);
 
-    return notificacaoId;
+      try {
+        await registrarNotificacao({
+          titulo,
+          corpo,
+          disparaEm: dataHoraLocalIso(dataNotificacao),
+          notificacaoId,
+          origem: "lembrete",
+          refId,
+        });
+      } catch (erroHistorico) {
+        console.warn("[notificacoes] Falha ao registrar notificação no histórico:", erroHistorico);
+      }
+    }
+
+    return ids.length > 0 ? ids.join(",") : null;
   } catch (erro) {
     console.error("[notificacoes] Falha ao agendar notificação de lembrete:", erro);
     return null;
@@ -172,17 +260,184 @@ export async function agendarNotificacaoLembrete(
 }
 
 /**
+ * Tela que abre ao tocar numa notificação do app. Serializável (vai em
+ * `content.data`).
+ */
+export type DestinoNotificacao =
+  | { tela: "relatorio"; mesAno: string }
+  | { tela: "planejamento"; aba: "Metas" | "Orçamento" };
+
+/**
+ * Chama `aoTocar` quando o usuário toca numa notificação do app que
+ * tenha `destino` — inclusive a que ABRIU o app (cold start, via
+ * getLastNotificationResponseAsync). Devolve a função de cancelar.
+ * No Expo Go não faz nada.
+ */
+export function ouvirToqueEmNotificacao(aoTocar: (destino: DestinoNotificacao) => void): () => void {
+  if (rodandoNoExpoGo) return () => {};
+  let cancelado = false;
+  let remover: (() => void) | null = null;
+
+  const tratar = (data: unknown) => {
+    const destino = (data as { destino?: DestinoNotificacao } | undefined)?.destino;
+    if (destino && !cancelado) aoTocar(destino);
+  };
+
+  carregarModuloNotifications()
+    .then(async (Notifications) => {
+      if (cancelado) return;
+      const sub = Notifications.addNotificationResponseReceivedListener((r) =>
+        tratar(r.notification.request.content.data)
+      );
+      remover = () => sub.remove();
+      const ultima = await Notifications.getLastNotificationResponseAsync();
+      if (ultima) {
+        tratar(ultima.notification.request.content.data);
+        await Notifications.clearLastNotificationResponseAsync?.();
+      }
+    })
+    .catch((e) => console.warn("[notificacoes] Falha ao ouvir toques:", e));
+
+  return () => {
+    cancelado = true;
+    remover?.();
+  };
+}
+
+/**
+ * Notificação avulsa do próprio app (alerta de orçamento, meta
+ * concluída, resumo mensal). `quando` ausente = dispara agora.
+ *
+ * `identificador` fixo (ex: "relatorio-mensal") faz um novo agendamento
+ * SUBSTITUIR o anterior com o mesmo id no sistema — usado para avisos
+ * que são reagendados a cada abertura do app. A linha antiga do
+ * histórico (se ainda não disparou) é removida junto.
+ *
+ * Respeita a preferência global e nunca lança; devolve o id ou null.
+ */
+export async function enviarNotificacaoApp(opcoes: {
+  titulo: string;
+  corpo: string;
+  origem: OrigemNotificacao;
+  refId?: string | null;
+  quando?: Date | null;
+  identificador?: string;
+  // Para onde o toque na notificação leva (ver ouvirToqueEmNotificacao).
+  destino?: DestinoNotificacao;
+}): Promise<string | null> {
+  if (rodandoNoExpoGo) {
+    avisarLimitacaoExpoGo();
+    return null;
+  }
+  if (!(await notificacoesPermitidasPeloUsuario())) return null;
+
+  try {
+    const Notifications = await carregarModuloNotifications();
+    if (!(await garantirPermissao(Notifications))) return null;
+
+    if (opcoes.quando && opcoes.quando.getTime() <= Date.now()) return null;
+
+    if (opcoes.identificador) {
+      try {
+        await removerPorNotificacaoId(opcoes.identificador);
+      } catch (e) {
+        console.warn("[notificacoes] Falha ao limpar histórico do aviso substituído:", e);
+      }
+    }
+
+    const notificacaoId = await Notifications.scheduleNotificationAsync({
+      identifier: opcoes.identificador,
+      content: {
+        title: opcoes.titulo,
+        body: opcoes.corpo,
+        sound: Platform.OS === "ios" ? "default" : undefined,
+        data: opcoes.destino ? { destino: opcoes.destino } : undefined,
+      },
+      trigger: opcoes.quando
+        ? { type: Notifications.SchedulableTriggerInputTypes.DATE, date: opcoes.quando }
+        : null,
+    });
+
+    try {
+      await registrarNotificacao({
+        titulo: opcoes.titulo,
+        corpo: opcoes.corpo,
+        disparaEm: dataHoraLocalIso(opcoes.quando ?? new Date()),
+        notificacaoId,
+        origem: opcoes.origem,
+        refId: opcoes.refId ?? null,
+      });
+    } catch (erroHistorico) {
+      console.warn("[notificacoes] Falha ao registrar notificação no histórico:", erroHistorico);
+    }
+    return notificacaoId;
+  } catch (erro) {
+    console.error("[notificacoes] Falha ao enviar notificação:", erro);
+    return null;
+  }
+}
+
+/**
  * Cancela uma notificação previamente agendada. Seguro chamar mesmo
  * se o ID for null, se já não existir mais, ou se estivermos no Expo Go.
+ *
+ * Também remove a linha correspondente do histórico — MAS só se a
+ * notificação ainda não tiver disparado (ver `removerPorNotificacaoId`).
+ * Se já chegou ao usuário, permanece no histórico mesmo que o
+ * compromisso/lembrete seja editado ou excluído depois.
  */
 export async function cancelarNotificacao(notificacaoId: string | null): Promise<void> {
-  if (!notificacaoId || rodandoNoExpoGo) return;
+  if (!notificacaoId) return;
+
+  // Lembrete repetido guarda vários ids separados por vírgula.
+  if (notificacaoId.includes(",")) {
+    for (const id of notificacaoId.split(",")) await cancelarNotificacao(id.trim() || null);
+    return;
+  }
+
+  // A remoção do histórico independe do Expo Go — a linha pode ter sido
+  // gravada num build anterior (dev/produção) e o app estar rodando no
+  // Expo Go agora.
+  try {
+    await removerPorNotificacaoId(notificacaoId);
+  } catch (erro) {
+    console.warn("[notificacoes] Falha ao remover notificação do histórico:", erro);
+  }
+
+  if (rodandoNoExpoGo) return;
 
   try {
     const Notifications = await carregarModuloNotifications();
     await Notifications.cancelScheduledNotificationAsync(notificacaoId);
   } catch (erro) {
     console.warn("[notificacoes] Não foi possível cancelar notificação:", erro);
+  }
+}
+
+/**
+ * Cancela TODAS as notificações que o app tem agendadas no sistema e
+ * remove do histórico as que ainda não dispararam.
+ *
+ * Usado quando os dados de origem deixam de existir de uma vez só
+ * ("Apagar dados do app") ou são substituídos (restaurar backup): sem
+ * isto, os avisos agendados para lembretes/compromissos apagados
+ * continuavam disparando, porque o agendamento vive no sistema
+ * operacional, fora do SQLite. Nunca lança.
+ */
+export async function cancelarTodasNotificacoes(): Promise<void> {
+  try {
+    await removerAgendadasFuturas();
+  } catch (erro) {
+    console.warn("[notificacoes] Falha ao limpar agendadas do histórico:", erro);
+  }
+
+  if (rodandoNoExpoGo) return;
+
+  try {
+    const Notifications = await carregarModuloNotifications();
+    await Notifications.cancelAllScheduledNotificationsAsync();
+  } catch (erro) {
+    console.warn("[notificacoes] Não foi possível cancelar todas as notificações:", erro);
   }
 }
 

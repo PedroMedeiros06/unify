@@ -11,7 +11,11 @@ export type ScreenType =
   | "importarExtrato"
   | "agenda"
   | "metasConcluidas"
-  | "recorrencias";
+  | "recorrencias"
+  | "notificacoes"
+  | "contas"
+  | "categorias"
+  | "relatorio";
 
 // Parâmetros opcionais que uma tela pode receber ao ser aberta. Cada
 // tela decide se lê algum deles no seu próprio mount. Mantido enxuto de
@@ -20,6 +24,11 @@ export type NavigationParams = {
   // Aba inicial do Planejamento (ex: botão "Ver relatórios" da Home
   // abre direto na aba de análise de Orçamento).
   planejamentoTab?: "Resumo" | "Metas" | "Orçamento" | "Simulações";
+  // Transações abre já filtrada em "sem categoria" (todo o período) —
+  // atalho "Revisar agora" do fim da importação.
+  transacoesSemCategoria?: boolean;
+  // Mês ("aaaa-mm") que o Relatório abre — ex: toque no aviso do dia 1.
+  mesRelatorio?: string;
 };
 
 type NavigationContextValue = {

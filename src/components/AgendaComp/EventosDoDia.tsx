@@ -1,4 +1,4 @@
-import { colors } from "@/theme/colors";
+import { useThemeColors } from "@/theme/useThemeColors";
 import { moderateScale } from "@/utils/scale";
 import { FormatToCurrency } from "@/utils/formatNumber";
 import { Ionicons } from "@expo/vector-icons";
@@ -63,6 +63,7 @@ type Props = {
 };
 
 function EventosDoDiaBase({ dataIso, eventos, carregando }: Props) {
+  const colors = useThemeColors();
   const cardTitleSize = moderateScale(15);
   const dataSize = moderateScale(12);
   const emptyTextSize = moderateScale(12);

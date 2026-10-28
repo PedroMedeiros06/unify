@@ -1,4 +1,4 @@
-import { colors } from "@/theme/colors";
+import { useThemeColors } from "@/theme/useThemeColors";
 import { moderateScale } from "@/utils/scale";
 import { Ionicons } from "@expo/vector-icons";
 import { View, Text, Pressable } from "react-native";
@@ -33,6 +33,7 @@ type Props = {
 };
 
 function DropdownPeriodoBase({ periodoAtivo, rotuloPersonalizado, onSelecionarPreset, onAbrirPersonalizado }: Props) {
+  const colors = useThemeColors();
   const triggerTextSize = moderateScale(12);
   const itemTextSize = moderateScale(13);
 

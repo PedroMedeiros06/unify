@@ -1,5 +1,5 @@
 import { getDatabase, executarNaFila } from "./database";
-import { calcularProgressoDeTodasAsMetas, calcularProgressoMeta } from "./metaTransacoesQueries";
+import { calcularProgressoDeTodasAsMetas } from "./metaTransacoesQueries";
 
 export type Meta = {
   id: string;
@@ -145,17 +145,16 @@ export async function listarMetasComPrazoNoPeriodo(
     );
   });
 
-  // Poucas metas tendem a cair num período específico, então uma
-  // query de progresso por item aqui é aceitável (diferente de
-  // listarMetas(), que carrega TODAS as metas de uma vez).
-  const comProgresso = await Promise.all(
-    linhas.map(async (linha) => ({
-      ...linha,
-      progressoAtual: await calcularProgressoMeta(linha.id),
-    }))
-  );
+  if (linhas.length === 0) return [];
 
-  return comProgresso;
+  // Uma única query agregada (GROUP BY) para o progresso — antes era
+  // uma consulta por meta (N+1), e a Agenda chama esta função duas
+  // vezes por abertura (mês exibido + próximos 90 dias).
+  const progressoPorMeta = await calcularProgressoDeTodasAsMetas();
+  return linhas.map((linha) => ({
+    ...linha,
+    progressoAtual: progressoPorMeta.get(linha.id) ?? 0,
+  }));
 }
 
 /**
@@ -187,6 +186,32 @@ export function calcularRitmoNecessario(meta: Meta): { porDia: number; porMes: n
   const porMes = porDia * 30;
 
   return { porDia, porMes };
+}
+
+export type AporteSugerido =
+  | { tipo: "noPrazo"; restante: number; meses: number; porMes: number; dataAlvo: string }
+  | { tipo: "prazoVencido"; restante: number }
+  | { tipo: "semPrazo"; restante: number };
+
+/**
+ * Quanto guardar por mês para chegar na meta até a data_alvo, em meses
+ * de calendário restantes (o mês corrente conta se ainda falta algum
+ * dia; mínimo 1). Ex.: faltam R$ 1.750 e o prazo é daqui a 5 meses ->
+ * R$ 350/mês. null se a meta já foi atingida.
+ */
+export function calcularAporteSugerido(meta: Meta, hoje: Date = new Date()): AporteSugerido | null {
+  const restante = meta.valorMeta - meta.progressoAtual;
+  if (restante <= 0) return null;
+  if (!meta.dataAlvo) return { tipo: "semPrazo", restante };
+
+  const [ano, mes, dia] = meta.dataAlvo.split("-").map(Number);
+  const alvo = new Date(ano, mes - 1, dia);
+  const inicioHoje = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate());
+  if (alvo.getTime() < inicioHoje.getTime()) return { tipo: "prazoVencido", restante };
+
+  // Meses de calendário entre este mês e o mês do prazo (inclusive o atual).
+  const meses = Math.max(1, (ano - hoje.getFullYear()) * 12 + (mes - 1 - hoje.getMonth()) + 1);
+  return { tipo: "noPrazo", restante, meses, porMes: restante / meses, dataAlvo: meta.dataAlvo };
 }
 
 /**

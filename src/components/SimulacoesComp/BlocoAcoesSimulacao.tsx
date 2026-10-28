@@ -1,6 +1,6 @@
 import { moderateScale } from "@/utils/scale";
 import { Ionicons } from "@expo/vector-icons";
-import { colors } from "@/theme/colors";
+import { useThemeColors } from "@/theme/useThemeColors";
 import { View, Text, Pressable, Share, TextInput } from "react-native";
 import { memo, useCallback, useState } from "react";
 import { useSimulacoes } from "@/context/SimulacoesContext";
@@ -24,6 +24,7 @@ type Props = {
  * antes). Salvar abre um modal para o usuário nomear a simulação.
  */
 function BlocoAcoesSimulacaoBase({ tipo, parametros, resultado, tituloPadrao, textoCompartilhar }: Props) {
+  const colors = useThemeColors();
   const botaoTextSize = moderateScale(13);
   const { salvarSimulacao } = useSimulacoes();
   const { avisar } = useDialogo();

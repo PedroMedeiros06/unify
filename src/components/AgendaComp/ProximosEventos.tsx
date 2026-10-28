@@ -1,4 +1,4 @@
-import { colors } from "@/theme/colors";
+import { useThemeColors } from "@/theme/useThemeColors";
 import { moderateScale } from "@/utils/scale";
 import { FormatToCurrency } from "@/utils/formatNumber";
 import { Ionicons } from "@expo/vector-icons";
@@ -34,6 +34,7 @@ const ProximoEventoItem = memo(function ProximoEventoItem({
   // nesta linha (1 = sem agrupamento).
   repeticoes?: number;
 }) {
+  const colors = useThemeColors();
   const diaSize = moderateScale(18);
   const mesSize = moderateScale(10);
   const tituloSize = moderateScale(13);
@@ -97,6 +98,7 @@ type Props = {
 };
 
 function ProximosEventosBase({ eventos, dataReferenciaIso, onVerTodos }: Props) {
+  const colors = useThemeColors();
   const cardTitleSize = moderateScale(15);
   const actionTextSize = moderateScale(12);
   const emptyTextSize = moderateScale(12);

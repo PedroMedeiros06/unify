@@ -92,10 +92,42 @@ const REGRAS_SISTEMA: { palavras: string[]; categoriaId: CategoriaId }[] = [
   { palavras: ["cartão", "cartao", "compra", "loja", "magazine", "americanas", "shopee", "aliexpress", "mercado livre", "mercadolivre"], categoriaId: "compras" },
 ];
 
+/**
+ * Palavra-chave -> regex com fronteira de palavra. Antes o match era
+ * `includes` puro, que casava dentro de outras palavras: "gas" em
+ * "gastos", "tim" em "último", "metro" em "parâmetro", "max" em "maxi",
+ * "spa" em "espaço", "doc" em "doces"...
+ *
+ * Regras:
+ *  - a palavra é normalizada como a descrição (sem acento, minúscula),
+ *    então "salário" e "salario" viram a mesma chave — antes as versões
+ *    acentuadas nunca casavam, porque a descrição já chega sem acento;
+ *  - fronteira à ESQUERDA sempre (não casa no meio de outra palavra);
+ *  - fronteira à DIREITA só para palavras curtas (até 4 letras), que são
+ *    as perigosas. Palavras longas continuam aceitando sufixo
+ *    ("mcdonald" casa "mcdonalds", "restaurante" casa "restaurantes");
+ *  - fronteira só se aplica quando a ponta da palavra é letra/dígito
+ *    ("99 *" e "apple.com/bill" continuam casando como antes).
+ */
+function compilarPalavra(palavra: string): RegExp {
+  const limpa = normalizarPadraoDescricao(palavra);
+  const escapada = limpa.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const alnum = /[a-z0-9]/;
+  const esquerda = alnum.test(limpa[0] ?? "") ? "(?:^|[^a-z0-9])" : "";
+  const direita = limpa.length <= 4 && alnum.test(limpa[limpa.length - 1] ?? "") ? "(?=$|[^a-z0-9])" : "";
+  return new RegExp(`${esquerda}${escapada}${direita}`);
+}
+
+// Compilado uma vez só, no carregamento do módulo (não por transação).
+const REGRAS_SISTEMA_COMPILADAS = REGRAS_SISTEMA.map((regra) => ({
+  categoriaId: regra.categoriaId,
+  padroes: Array.from(new Set(regra.palavras.map((p) => p.trim()))).map(compilarPalavra),
+}));
+
 /** Aplica só as regras de sistema (código fixo) a uma descrição já normalizada. */
 function categorizarPorRegraDeSistema(padraoNormalizado: string): CategoriaId | null {
-  for (const regra of REGRAS_SISTEMA) {
-    if (regra.palavras.some((palavra) => padraoNormalizado.includes(palavra))) {
+  for (const regra of REGRAS_SISTEMA_COMPILADAS) {
+    if (regra.padroes.some((re) => re.test(padraoNormalizado))) {
       return regra.categoriaId;
     }
   }

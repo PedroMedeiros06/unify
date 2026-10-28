@@ -1,18 +1,16 @@
-import { colors } from "@/theme/colors";
-import { moderateScale, scale } from "@/utils/scale";
-import { Ionicons } from "@expo/vector-icons";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { moderateScale } from "@/utils/scale";
+import { ScrollView, Text, View } from "react-native";
 
 import { PerfilCard } from "@/components/PerfilComp/PerfilCard";
 import { Preferencias } from "@/components/PerfilComp/Preferencias";
+import { Organizacao } from "@/components/PerfilComp/Organizacao";
 import { BackupDados } from "@/components/PerfilComp/BackupDados";
 import { SuporteInformacoes } from "@/components/PerfilComp/SuporteInformacoes";
+import { FerramentasDev } from "@/components/PerfilComp/FerramentasDev";
 
 export function Perfil() {
   const titleSize = moderateScale(22);
   const subtitleSize = moderateScale(12);
-  // Mesmo dimensionamento do botão de sino da Home (avatarSize).
-  const avatarSize = moderateScale(40);
 
   return (
     <ScrollView
@@ -23,44 +21,25 @@ export function Perfil() {
     >
       <View className="flex-col gap-4">
         {/* HEADER */}
-        <View className="w-full flex-row justify-between items-start">
-          <View className="flex-1 pr-3">
-            <Text
-              style={{ fontSize: titleSize, letterSpacing: titleSize * -0.03 }}
-              className="text-main-text font-Inter-SemiBold"
-            >
-              Perfil
-            </Text>
-            <Text
-              style={{ fontSize: subtitleSize }}
-              className="text-second-text mt-1"
-            >
-              Gerencie suas informações e preferências.
-            </Text>
-          </View>
-
-          <Pressable
-            style={{
-              width: avatarSize,
-              height: avatarSize,
-              borderRadius: avatarSize / 2,
-            }}
-            className="bg-input-background border border-input-border/50 items-center justify-center shrink-0"
-            accessibilityRole="button"
-            accessibilityLabel="Abrir notificações"
+        <View className="w-full">
+          <Text
+            style={{ fontSize: titleSize, letterSpacing: titleSize * -0.03 }}
+            className="text-main-text font-Inter-SemiBold"
           >
-            <Ionicons
-              name="notifications-outline"
-              color={colors["desactived-text"]}
-              size={scale(16)}
-            />
-          </Pressable>
+            Perfil
+          </Text>
+          <Text style={{ fontSize: subtitleSize }} className="text-second-text mt-1">
+            Gerencie suas informações e preferências.
+          </Text>
         </View>
 
         <PerfilCard />
+        <Organizacao />
         <Preferencias />
         <BackupDados />
         <SuporteInformacoes />
+        {/* Só em desenvolvimento: massa de dados para medir performance. */}
+        {__DEV__ && <FerramentasDev />}
       </View>
     </ScrollView>
   );

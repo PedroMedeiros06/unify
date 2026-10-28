@@ -1,9 +1,10 @@
 import { ScrollView, Text, View, Pressable } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { colors } from "@/theme/colors";
+import { useThemeColors } from "@/theme/useThemeColors";
 import { moderateScale } from "@/utils/scale";
 import { useNavigation } from "@/context/NavigationContext";
 import { ListaRecorrencias } from "@/components/RecorrenciasComp/ListaRecorrencias";
+import { SugestoesRecorrencia } from "@/components/RecorrenciasComp/SugestoesRecorrencia";
 
 /**
  * Tela de Recorrências — regras de planejamento (receitas/despesas que
@@ -12,6 +13,7 @@ import { ListaRecorrencias } from "@/components/RecorrenciasComp/ListaRecorrenci
  * alimenta a previsão do Orçamento (ver etapas 4-7).
  */
 export function Recorrencias() {
+  const colors = useThemeColors();
   const { goBack } = useNavigation();
 
   const titleSize = moderateScale(22);
@@ -49,6 +51,7 @@ export function Recorrencias() {
           </View>
         </View>
 
+        <SugestoesRecorrencia />
         <ListaRecorrencias />
       </View>
     </ScrollView>

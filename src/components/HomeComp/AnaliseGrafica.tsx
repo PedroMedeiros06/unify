@@ -1,4 +1,4 @@
-import { colors } from "@/theme/colors";
+import { useThemeColors } from "@/theme/useThemeColors";
 import { moderateScale } from "@/utils/scale";
 import { FormatToCurrency } from "@/utils/formatNumber";
 import { Ionicons } from "@expo/vector-icons";
@@ -17,6 +17,8 @@ import {
 import { obterMetaDeMaiorProgresso } from "@/database/metasQueries";
 import { obterCategoriaPorId } from "@/database/categorias";
 import { useNavigation } from "@/context/NavigationContext";
+import { useTransacoes } from "@/context/TransacoesContext";
+import { useMetas } from "@/context/MetasContext";
 import { SeletorJanelaEvolucao } from "@/components/common/SeletorJanelaEvolucao";
 
 type Props = {
@@ -51,10 +53,15 @@ function useFatiasComOffset(fatias: FatiaExibicao[]) {
 }
 
 function AnaliseGraficaBase({ filtrosParaQuery }: Props) {
+  const colors = useThemeColors();
   const { width } = useWindowDimensions();
   const isSmallDevice = width < 375;
 
   const { navigate } = useNavigation();
+  // Gatilhos de recarga: transação criada/editada/excluída (versaoDados)
+  // e metas recarregadas (o card de métricas mostra a de maior progresso).
+  const { versaoDados } = useTransacoes();
+  const { metas } = useMetas();
 
   const cardTitleSize = moderateScale(18);
   const sectionTitleSize = moderateScale(13);
@@ -89,7 +96,11 @@ function AnaliseGraficaBase({ filtrosParaQuery }: Props) {
           const categoria = obterCategoriaPorId(r.categoriaId);
           return {
             nome: categoria?.nome ?? "Sem categoria",
-            cor: categoria?.cor ?? colors["desactived-text"],
+            // Fallback só para "Sem categoria": um cinza neutro fixo,
+            // legível nos dois temas. Não usar `colors` aqui — este
+            // efeito não deve depender do tema (senão vira dep do
+            // useEffect e refaz a query a cada troca de tema).
+            cor: categoria?.cor ?? "#8A94A3",
             valor: r.totalSaidas,
             percentual: totalGeral > 0 ? (r.totalSaidas / totalGeral) * 100 : 0,
           };
@@ -106,12 +117,12 @@ function AnaliseGraficaBase({ filtrosParaQuery }: Props) {
       }
     }
 
-    carregar();
+    carregar().catch((e) => console.warn("[AnaliseGrafica] Falha ao carregar dados:", e));
 
     return () => {
       ativo = false;
     };
-  }, [filtrosParaQuery]);
+  }, [filtrosParaQuery, versaoDados]);
 
   // Evolução mensal: janela própria (últimos 6 meses ou um ano
   // inteiro), escolhida no seletor do header da seção. Não respeita a
@@ -125,6 +136,7 @@ function AnaliseGraficaBase({ filtrosParaQuery }: Props) {
         if (!ativo) return;
         setEvolucao(pontos.map((p) => ({ mes: p.mesLabel, valor: p.totalSaidas })));
       })
+      .catch((e) => console.warn("[AnaliseGrafica] Falha ao carregar dados:", e))
       .finally(() => {
         if (ativo) setCarregandoEvolucao(false);
       });
@@ -132,7 +144,7 @@ function AnaliseGraficaBase({ filtrosParaQuery }: Props) {
     return () => {
       ativo = false;
     };
-  }, [janelaEvolucao]);
+  }, [janelaEvolucao, versaoDados]);
 
   // Métricas (receitas/despesas/economia/meta) — panorama geral do mês
   // atual, também independente da BarraFiltros.
@@ -168,12 +180,12 @@ function AnaliseGraficaBase({ filtrosParaQuery }: Props) {
       });
     }
 
-    carregarPanoramaGeral();
+    carregarPanoramaGeral().catch((e) => console.warn("[AnaliseGrafica] Falha ao carregar dados:", e));
 
     return () => {
       ativo = false;
     };
-  }, []);
+  }, [versaoDados, metas]);
 
   const fatiasComOffset = useFatiasComOffset(fatias);
   const totalFormatado = FormatToCurrency(totalGastos);

@@ -1,4 +1,4 @@
-import { colors } from "@/theme/colors";
+import { useThemeColors } from "@/theme/useThemeColors";
 import { moderateScale } from "@/utils/scale";
 import { FormatToCurrency } from "@/utils/formatNumber";
 import { Ionicons } from "@expo/vector-icons";
@@ -7,6 +7,7 @@ import { memo, useEffect, useMemo, useState } from "react";
 import { obterResumoPrevistoDoMes } from "@/database/orcamentoQueries";
 import { calcularResumoReceitasDespesas, listarResumoPorCategoria } from "@/database/queries";
 import { obterCategoriaPorId } from "@/database/categorias";
+import { useTransacoes } from "@/context/TransacoesContext";
 
 type Props = {
   anoExibido: number;
@@ -82,6 +83,10 @@ function rotuloVariacao(realizado: number, previsto: number): string {
 }
 
 function AnaliseOrcamentoBase({ anoExibido, mesExibido }: Props) {
+  const colors = useThemeColors();
+  // Recarrega quando uma transação é criada/editada/excluída sem
+  // trocar de tela (ex: pelo "+" do footer).
+  const { versaoDados } = useTransacoes();
   const cardTitleSize = moderateScale(15);
   const descricaoSize = moderateScale(11);
 
@@ -134,6 +139,7 @@ function AnaliseOrcamentoBase({ anoExibido, mesExibido }: Props) {
           maiorGastoPercentualDasSaidas: maior ? percentualDe(maior.totalSaidas, totalSaidas) : 0,
         });
       })
+      .catch((e) => console.warn("[AnaliseOrcamento] Falha ao carregar dados:", e))
       .finally(() => {
         if (ativo) setCarregando(false);
       });
@@ -141,7 +147,7 @@ function AnaliseOrcamentoBase({ anoExibido, mesExibido }: Props) {
     return () => {
       ativo = false;
     };
-  }, [mesAnoAnterior, anoAnterior, mesAnterior0a11]);
+  }, [mesAnoAnterior, anoAnterior, mesAnterior0a11, versaoDados]);
 
   const semDados =
     !dados ||

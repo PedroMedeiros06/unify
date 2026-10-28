@@ -502,6 +502,140 @@ const MIGRATIONS: Migration[] = [
       await db.execAsync(`ALTER TABLE perfil_usuario ADD COLUMN avatar_uri TEXT;`);
     },
   },
+  {
+    versao: 18,
+    descricao:
+      "Cria tabela notificacoes_historico: registro das notificações locais que o app agendou (lembretes e vencimentos de compromisso). Uma linha é gravada quando a notificação é AGENDADA (não quando dispara — ela pode disparar com o app fechado). A tela de histórico lista as que já passaram de `disparar_em` como recebidas; `lida` marca se o usuário já abriu o histórico depois dela chegar. `notificacao_id` casa com o id devolvido por scheduleNotificationAsync, para a linha ser removida se a notificação for cancelada antes de disparar; `origem`/`ref_id` apontam o compromisso/lembrete de origem.",
+    async executar(db) {
+      await db.execAsync(`
+        CREATE TABLE notificacoes_historico (
+          id TEXT PRIMARY KEY NOT NULL,
+          titulo TEXT NOT NULL,
+          corpo TEXT NOT NULL,
+          disparar_em TEXT NOT NULL,
+          criada_em TEXT NOT NULL,
+          lida INTEGER NOT NULL DEFAULT 0,
+          notificacao_id TEXT,
+          origem TEXT NOT NULL,
+          ref_id TEXT
+        );
+      `);
+      // Consulta principal da tela e do contador de não-lidas: ordena
+      // por disparar_em e filtra por lida — índice cobre os dois.
+      await db.execAsync(
+        `CREATE INDEX idx_notificacoes_historico_disparar_em ON notificacoes_historico (disparar_em DESC);`
+      );
+      await db.execAsync(
+        `CREATE INDEX idx_notificacoes_historico_notificacao_id ON notificacoes_historico (notificacao_id);`
+      );
+    },
+  },
+  {
+    versao: 19,
+    descricao:
+      "Adiciona notificacoes_ativas em perfil_usuario (single-row): preferência global do usuário para receber ou não notificações locais (lembretes e vencimentos de compromisso). DEFAULT 1 = ativas — comportamento atual preservado para quem já usa o app. Quando 0, agendarNotificacao* não agenda nada.",
+    async executar(db) {
+      await db.execAsync(
+        `ALTER TABLE perfil_usuario ADD COLUMN notificacoes_ativas INTEGER NOT NULL DEFAULT 1;`
+      );
+    },
+  },
+  {
+    versao: 20,
+    descricao:
+      "Adiciona tema_preferido em perfil_usuario (single-row): preferência de aparência escolhida pelo usuário na tela de Perfil. Valores: 'sistema' (segue o tema do aparelho — default), 'claro', 'escuro'. O app era dark-only; DEFAULT 'sistema' preserva o comportamento de quem já usa (que na prática era sempre escuro).",
+    async executar(db) {
+      await db.execAsync(
+        `ALTER TABLE perfil_usuario ADD COLUMN tema_preferido TEXT NOT NULL DEFAULT 'sistema';`
+      );
+    },
+  },
+  {
+    versao: 21,
+    descricao:
+      "Contas e transferências: bancos ganham tipo ('conta' | 'cartao'), saldo_inicial, dias de fechamento/vencimento (cartão), personalizada (criada pelo usuário — 'Outro banco') e arquivada. transacoes ganha transferencia_id: as duas pernas de uma transferência entre contas do próprio usuário (saída na origem + entrada no destino) compartilham o mesmo id e ficam FORA dos totais de entradas/saídas, orçamento e gráficos — só mexem no saldo de cada conta.",
+    async executar(db) {
+      // Uma transferência continua sendo DUAS linhas normais em
+      // `transacoes` (o CHECK de `tipo` em ('entrada','saida') não
+      // precisa mudar — o SQLite não altera CHECK sem recriar a tabela).
+      // O saldo por conta sai certo sem caso especial; as agregações de
+      // receitas/despesas filtram `transferencia_id IS NULL`.
+      //
+      // Cartão de crédito é uma conta tipo 'cartao': compras são saídas
+      // nele (contam no orçamento), o pagamento da fatura é uma
+      // transferência conta -> cartão (não conta de novo). O saldo do
+      // cartão negativo = valor devido.
+      //
+      // saldo_inicial: quanto a conta tinha antes da primeira transação
+      // registrada no app. "Ajustar saldo" recalcula este valor para o
+      // saldo exibido bater com o do banco, sem criar transação fictícia.
+      await db.execAsync(
+        `ALTER TABLE bancos ADD COLUMN tipo TEXT NOT NULL DEFAULT 'conta' CHECK (tipo IN ('conta', 'cartao'));`
+      );
+      await db.execAsync(`ALTER TABLE bancos ADD COLUMN saldo_inicial REAL NOT NULL DEFAULT 0;`);
+      await db.execAsync(`ALTER TABLE bancos ADD COLUMN dia_fechamento INTEGER;`);
+      await db.execAsync(`ALTER TABLE bancos ADD COLUMN dia_vencimento INTEGER;`);
+      await db.execAsync(`ALTER TABLE bancos ADD COLUMN personalizada INTEGER NOT NULL DEFAULT 0;`);
+      await db.execAsync(`ALTER TABLE bancos ADD COLUMN arquivada INTEGER NOT NULL DEFAULT 0;`);
+
+      await db.execAsync(`ALTER TABLE transacoes ADD COLUMN transferencia_id TEXT;`);
+      await db.execAsync(
+        `CREATE INDEX IF NOT EXISTS idx_transacoes_transferencia ON transacoes (transferencia_id);`
+      );
+    },
+  },
+  {
+    versao: 22,
+    descricao:
+      "Cria categorias_personalizadas: categorias criadas pelo usuário, além das fixas de categorias.ts. O id tem prefixo 'u-' (nunca colide com os slugs do sistema) e é o que vai em transacoes.categoria_id, regras_categorizacao, limite_categoria e recorrencias. arquivada=1 esconde dos seletores mas mantém o nome/ícone nas transações antigas.",
+    async executar(db) {
+      await db.execAsync(`
+        CREATE TABLE IF NOT EXISTS categorias_personalizadas (
+          id        TEXT PRIMARY KEY NOT NULL,
+          nome      TEXT NOT NULL,
+          icone     TEXT NOT NULL,
+          cor       TEXT NOT NULL,
+          arquivada INTEGER NOT NULL DEFAULT 0 CHECK (arquivada IN (0, 1)),
+          criado_em TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+      `);
+    },
+  },
+  {
+    versao: 23,
+    descricao:
+      "Compromissos ganham categoria_id (opcional — mostra no Orçamento quanto ainda vai sair por categoria). Lembretes ganham repeticao ('nenhuma' | 'semanal' | 'mensal' | 'anual') e dia_base (dia do mês original, para o mensal/anual não 'encolher' depois de um mês curto). Num lembrete repetido, `data` é sempre a próxima ocorrência.",
+    async executar(db) {
+      await db.execAsync(`ALTER TABLE compromissos ADD COLUMN categoria_id TEXT;`);
+      await db.execAsync(
+        `ALTER TABLE lembretes ADD COLUMN repeticao TEXT NOT NULL DEFAULT 'nenhuma' CHECK (repeticao IN ('nenhuma', 'semanal', 'mensal', 'anual'));`
+      );
+      await db.execAsync(`ALTER TABLE lembretes ADD COLUMN dia_base INTEGER;`);
+    },
+  },
+  {
+    versao: 24,
+    descricao:
+      "Cria alertas_enviados: registro dos avisos automáticos já disparados (limite de orçamento a 80%/100% por categoria e mês, meta concluída) para cada aviso sair UMA vez só. Chave textual livre por tipo — ex: 'orcamento:mercado:2026-10:80', 'meta:<id>'.",
+    async executar(db) {
+      await db.execAsync(`
+        CREATE TABLE IF NOT EXISTS alertas_enviados (
+          chave      TEXT PRIMARY KEY NOT NULL,
+          enviado_em TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+      `);
+    },
+  },
+  {
+    versao: 25,
+    descricao:
+      "Adiciona bloqueio_ativo em perfil_usuario: quando 1, o app pede biometria (ou o PIN/padrão do aparelho) ao abrir e ao voltar depois de um tempo em segundo plano. DEFAULT 0 = sem bloqueio, como antes.",
+    async executar(db) {
+      await db.execAsync(
+        `ALTER TABLE perfil_usuario ADD COLUMN bloqueio_ativo INTEGER NOT NULL DEFAULT 0;`
+      );
+    },
+  },
 ];
 
 export async function rodarMigrations(db: SQLiteDatabase): Promise<void> {

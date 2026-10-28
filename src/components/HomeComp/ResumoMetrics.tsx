@@ -1,4 +1,4 @@
-import { colors } from "@/theme/colors";
+import { useThemeColors } from "@/theme/useThemeColors";
 import { moderateScale } from "@/utils/scale";
 import { FormatToCurrency } from "@/utils/formatNumber";
 import { Ionicons } from "@expo/vector-icons";
@@ -84,6 +84,7 @@ type Props = {
 };
 
 function ResumoMetricsBase({ metricas }: Props) {
+  const colors = useThemeColors();
   const metrics: Metric[] = [
     {
       id: "receitas",

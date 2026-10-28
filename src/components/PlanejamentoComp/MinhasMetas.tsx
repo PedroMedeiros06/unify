@@ -1,4 +1,4 @@
-import { colors } from "@/theme/colors";
+import { useThemeColors } from "@/theme/useThemeColors";
 import { moderateScale } from "@/utils/scale";
 import { FormatToCurrency } from "@/utils/formatNumber";
 import { Ionicons } from "@expo/vector-icons";
@@ -7,7 +7,8 @@ import Svg, { Circle } from "react-native-svg";
 import { memo, useCallback, useMemo, useState } from "react";
 import { useMetas } from "@/context/MetasContext";
 import { useNavigation } from "@/context/NavigationContext";
-import { Meta, CamposMeta, calcularPercentualMeta, metaEstaConcluida } from "@/database/metasQueries";
+import { Meta, CamposMeta, calcularPercentualMeta, metaEstaConcluida, calcularAporteSugerido } from "@/database/metasQueries";
+import { dataIsoParaBR } from "@/utils/dateUtils";
 import { obterIconeMeta } from "@/database/iconesMeta";
 import { EditarMetaModal } from "@/components/PlanejamentoComp/EditarMetaModal";
 import { MetasSkeleton } from "@/components/common/MetasSkeleton";
@@ -23,6 +24,7 @@ const AnelProgressoIcone = memo(function AnelProgressoIcone({
   cor: string;
   icone: keyof typeof Ionicons.glyphMap;
 }) {
+  const colors = useThemeColors();
   const tamanho = moderateScale(58);
   const espessura = moderateScale(4);
   const raio = (tamanho - espessura) / 2;
@@ -58,6 +60,7 @@ const AnelProgressoIcone = memo(function AnelProgressoIcone({
 });
 
 const MetaCard = memo(function MetaCard({ meta, onLongPress }: { meta: Meta; onLongPress: (meta: Meta) => void }) {
+  const colors = useThemeColors();
   const nomeSize = moderateScale(15);
   const percentualSize = moderateScale(11);
   const valorSize = moderateScale(15);
@@ -67,6 +70,7 @@ const MetaCard = memo(function MetaCard({ meta, onLongPress }: { meta: Meta; onL
   const icone = obterIconeMeta(meta.icone);
   const percentual = calcularPercentualMeta(meta);
   const faltam = Math.max(0, meta.valorMeta - meta.progressoAtual);
+  const aporte = calcularAporteSugerido(meta);
 
   return (
     <Pressable
@@ -100,6 +104,19 @@ const MetaCard = memo(function MetaCard({ meta, onLongPress }: { meta: Meta; onL
         <Text style={{ fontSize: faltamSize }} className="text-desactived-text mt-0.5">
           Faltam {FormatToCurrency(faltam)}
         </Text>
+        {/* Aporte sugerido: quanto guardar por mês para bater o prazo. */}
+        {aporte?.tipo === "noPrazo" && (
+          <Text style={{ fontSize: faltamSize, color: icone.cor }} className="font-Inter-Medium mt-0.5" numberOfLines={2}>
+            Guarde {FormatToCurrency(aporte.porMes)}/mês
+            {aporte.meses > 1 ? ` por ${aporte.meses} meses` : " este mês"} para chegar até{" "}
+            {dataIsoParaBR(aporte.dataAlvo)}
+          </Text>
+        )}
+        {aporte?.tipo === "prazoVencido" && (
+          <Text style={{ fontSize: faltamSize, color: colors["warn-color"] }} className="font-Inter-Medium mt-0.5">
+            Prazo passou — ajuste a data ou o valor
+          </Text>
+        )}
       </View>
 
       <Ionicons name="chevron-forward" color={colors["second-text"]} size={18} />
@@ -143,6 +160,7 @@ const CardEstatistica = memo(function CardEstatistica({
 });
 
 function MinhasMetasBase() {
+  const colors = useThemeColors();
   const sectionTitleSize = moderateScale(17);
   const actionTextSize = moderateScale(12);
   const emptyTitleSize = moderateScale(13);

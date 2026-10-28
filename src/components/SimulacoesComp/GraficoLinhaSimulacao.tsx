@@ -1,4 +1,4 @@
-import { colors } from "@/theme/colors";
+import { useThemeColors } from "@/theme/useThemeColors";
 import { moderateScale } from "@/utils/scale";
 import { View, Text } from "react-native";
 import Svg, { Path, Circle, Defs, LinearGradient, Stop, Line } from "react-native-svg";
@@ -28,6 +28,7 @@ function construirPath(pontos: { x: number; y: number }[]): string {
 }
 
 function GraficoLinhaSimulacaoBase({ serie, formatarX, formatarY, altura = 200 }: Props) {
+  const colors = useThemeColors();
   const rotuloSize = moderateScale(9);
 
   // O componente mede a própria largura via layout — mas para simplificar

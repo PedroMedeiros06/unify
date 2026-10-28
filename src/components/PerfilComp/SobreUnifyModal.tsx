@@ -1,4 +1,4 @@
-import { colors } from "@/theme/colors";
+import { useThemeColors } from "@/theme/useThemeColors";
 import { moderateScale } from "@/utils/scale";
 import { Ionicons } from "@expo/vector-icons";
 import { View, Text, Pressable } from "react-native";
@@ -37,6 +37,7 @@ type Props = {
 };
 
 function SobreUnifyModalBase({ visivel, onFechar }: Props) {
+  const colors = useThemeColors();
   const tituloSize = moderateScale(16);
   const versaoSize = moderateScale(12);
   const rotuloSize = moderateScale(11);

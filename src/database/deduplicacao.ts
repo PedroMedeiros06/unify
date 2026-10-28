@@ -1,4 +1,4 @@
-import { listarTransacoesPorPeriodo, existeIdentificadorExterno } from "@/database/queries";
+import { listarTransacoesPorPeriodo, listarIdentificadoresExternosExistentes } from "@/database/queries";
 import { TransacaoImportada } from "@/database/parsers/TransacaoImportada";
 
 export type TransacaoComStatusDuplicata = TransacaoImportada & {
@@ -71,25 +71,21 @@ export async function marcarPossiveisDuplicatas(
 async function marcarDuplicatasPorIdExterno(
   transacoes: TransacaoImportada[]
 ): Promise<TransacaoComStatusDuplicata[]> {
-  const resultado: TransacaoComStatusDuplicata[] = [];
+  // Uma consulta em lote para todos os IDs do arquivo (antes era uma
+  // por linha, sequencial na fila do banco).
+  const jaExistentes = await listarIdentificadoresExternosExistentes(
+    transacoes.map((t) => t.extra?.identificadorExterno ?? "")
+  );
 
-  for (const transacao of transacoes) {
+  return transacoes.map((transacao) => {
     const id = transacao.extra?.identificadorExterno;
-
-    if (!id) {
-      resultado.push({ ...transacao, possivelDuplicata: false, motivoDuplicata: null });
-      continue;
-    }
-
-    const jaExiste = await existeIdentificadorExterno(id);
-    resultado.push({
+    const jaExiste = !!id && jaExistentes.has(id);
+    return {
       ...transacao,
       possivelDuplicata: jaExiste,
       motivoDuplicata: jaExiste ? "Esta transação já foi importada anteriormente" : null,
-    });
-  }
-
-  return resultado;
+    };
+  });
 }
 
 async function marcarDuplicatasPorSimilaridade(

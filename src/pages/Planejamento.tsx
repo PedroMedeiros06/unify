@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { ScrollView, Text, View, Pressable } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { colors } from "@/theme/colors";
+import { useThemeColors } from "@/theme/useThemeColors";
 import { moderateScale } from "@/utils/scale";
 
 import { PlanejamentoTabs, PlanejamentoTab } from "@/components/PlanejamentoComp/PlanejamentoTabs";
@@ -18,9 +18,10 @@ import { BarraFiltros } from "@/components/common/BarraFiltros";
 import { SeletorPeriodoPersonalizado } from "@/components/common/SeletorPeriodoPersonalizado";
 import { useFiltrosTransacao } from "@/hooks/useFiltrosTransacao";
 import { useNavigation } from "@/context/NavigationContext";
-import { listarBancos, Banco } from "@/database/queries";
+import { useContas } from "@/context/ContasContext";
 
 export function Planejamento() {
+  const colors = useThemeColors();
   const { navigate, params } = useNavigation();
 
   // Aba inicial: normalmente "Resumo", mas quem navega até aqui pode
@@ -46,12 +47,10 @@ export function Planejamento() {
     filtrosParaQuery,
   } = useFiltrosTransacao({ presetInicial: "esteMes" });
 
-  const [bancos, setBancos] = useState<Banco[]>([]);
+  // Contas para o filtro de banco — do ContasContext, então uma conta
+  // criada em Minhas contas já aparece aqui sem recarregar a tela.
+  const { contas: bancos } = useContas();
   const [modalPeriodoAberto, setModalPeriodoAberto] = useState(false);
-
-  useEffect(() => {
-    listarBancos().then(setBancos);
-  }, []);
 
   // Todas as abas (inclusive "Orçamento") são renderizadas INLINE aqui,
   // sem sair do Planejamento — assim o header e a barra de abas

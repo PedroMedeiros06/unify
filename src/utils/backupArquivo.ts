@@ -3,6 +3,8 @@ import * as DocumentPicker from "expo-document-picker";
 import * as Sharing from "expo-sharing";
 import Constants from "expo-constants";
 import { exportarDados, validarBackup, restaurarDados, ArquivoBackup } from "@/database/backup";
+import { cancelarTodasNotificacoes } from "@/database/notificacoes";
+import { reagendarNotificacoesDoBanco } from "@/database/reagendarNotificacoes";
 
 /**
  * Ponte entre o backup lógico (src/database/backup.ts) e o sistema de
@@ -116,11 +118,26 @@ export type ResultadoAplicacao =
 
 export async function aplicarBackup(arquivo: ArquivoBackup): Promise<ResultadoAplicacao> {
   try {
+    // Os avisos agendados para os dados que estão sendo substituídos
+    // continuariam disparando — cancela antes de restaurar.
+    await cancelarTodasNotificacoes();
     await restaurarDados(arquivo);
+    // Reagenda a partir dos dados restaurados. Falha aqui não invalida
+    // a restauração (os dados já estão gravados) — só fica sem aviso.
+    try {
+      await reagendarNotificacoesDoBanco();
+    } catch (e) {
+      console.warn("[backupArquivo] Falha ao reagendar notificações após restaurar:", e);
+    }
     const totalLinhas = Object.values(arquivo.tabelas).reduce((s, l) => s + l.length, 0);
     return { status: "ok", totalLinhas };
   } catch (e) {
     console.error("[backupArquivo] Falha ao restaurar:", e);
+    // restaurarDados faz rollback e os dados antigos continuam no banco,
+    // mas os avisos deles já foram cancelados acima — reagenda.
+    await reagendarNotificacoesDoBanco().catch((erro) =>
+      console.warn("[backupArquivo] Falha ao reagendar após erro na restauração:", erro)
+    );
     return { status: "erro", mensagem: e instanceof Error ? e.message : "Erro ao restaurar." };
   }
 }

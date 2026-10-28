@@ -1,9 +1,11 @@
-import { colors } from "@/theme/colors";
+import { useThemeColors } from "@/theme/useThemeColors";
 import { moderateScale } from "@/utils/scale";
 import { Ionicons } from "@expo/vector-icons";
 import { View, Text, Pressable, Modal, FlatList } from "react-native";
 import { memo, useCallback, useState } from "react";
-import { CATEGORIAS, CategoriaId, obterCategoriaPorId } from "@/database/categorias";
+import { CategoriaId, obterCategoriaPorId } from "@/database/categorias";
+import { useCategorias } from "@/context/CategoriasContext";
+import { CategoriaFormModal } from "@/components/CategoriasComp/CategoriaFormModal";
 
 type Props = {
   categoriaSelecionada: CategoriaId | null;
@@ -19,11 +21,12 @@ type Props = {
 
 type ItemLista = { id: CategoriaId | null; nome: string; icone: keyof typeof Ionicons.glyphMap; cor: string };
 
-const ITEM_SEM_CATEGORIA: ItemLista = {
+// A `cor` é resolvida dentro do componente (depende do tema atual); no
+// nível de módulo fica só a estrutura estável do item.
+const ITEM_SEM_CATEGORIA: Omit<ItemLista, "cor"> = {
   id: null,
   nome: "Sem categoria",
   icone: "help-circle-outline",
-  cor: colors["desactived-text"],
 };
 
 function SeletorCategoriaBase({
@@ -33,22 +36,25 @@ function SeletorCategoriaBase({
   permitirSemCategoria = true,
   categoriasOcultas,
 }: Props) {
+  const colors = useThemeColors();
   const labelSize = moderateScale(11);
   const valueSize = moderateScale(14);
   const itemTextSize = moderateScale(14);
   const titleSize = moderateScale(16);
 
   const [aberto, setAberto] = useState(false);
+  const [criando, setCriando] = useState(false);
+  const { categorias } = useCategorias();
 
   const categoriaAtual = obterCategoriaPorId(categoriaSelecionada);
 
   const categoriasVisiveis =
     categoriasOcultas && categoriasOcultas.length > 0
-      ? CATEGORIAS.filter((c) => !categoriasOcultas.includes(c.id))
-      : CATEGORIAS;
+      ? categorias.filter((c) => !categoriasOcultas.includes(c.id))
+      : categorias;
 
   const itens: ItemLista[] = permitirSemCategoria
-    ? [ITEM_SEM_CATEGORIA, ...categoriasVisiveis]
+    ? [{ ...ITEM_SEM_CATEGORIA, cor: colors["desactived-text"] }, ...categoriasVisiveis]
     : [...categoriasVisiveis];
 
   const handleAbrir = useCallback(() => setAberto(true), []);
@@ -92,8 +98,8 @@ function SeletorCategoriaBase({
         <Ionicons name="chevron-down" color={colors["second-text"]} size={16} />
       </Pressable>
 
-      {/* Lista de opções — a única forma de mudar a categoria; não há
-          campo de texto livre, então não é possível criar categoria nova. */}
+      {/* Lista de opções + "Nova categoria" no fim (abre o formulário e,
+          ao criar, já seleciona a nova). */}
       <Modal visible={aberto} transparent animationType="fade" onRequestClose={handleFechar} statusBarTranslucent navigationBarTranslucent>
         <Pressable
           className="flex-1 justify-end bg-black/50"
@@ -140,10 +146,37 @@ function SeletorCategoriaBase({
                   </Pressable>
                 );
               }}
+              ListFooterComponent={
+                <Pressable
+                  onPress={() => {
+                    setAberto(false);
+                    setCriando(true);
+                  }}
+                  className="flex-row items-center gap-3 px-5 py-3.5"
+                  accessibilityRole="button"
+                  accessibilityLabel="Criar nova categoria"
+                >
+                  <View
+                    style={{ borderColor: colors["active-icon"] }}
+                    className="w-8 h-8 rounded-full items-center justify-center border border-dashed"
+                  >
+                    <Ionicons name="add" color={colors["active-icon"]} size={16} />
+                  </View>
+                  <Text style={{ fontSize: itemTextSize, color: colors["active-icon"] }} className="font-Inter-Medium">
+                    Nova categoria
+                  </Text>
+                </Pressable>
+              }
             />
           </Pressable>
         </Pressable>
       </Modal>
+
+      <CategoriaFormModal
+        visivel={criando}
+        onFechar={() => setCriando(false)}
+        onCriada={(id) => onSelecionar(id)}
+      />
     </View>
   );
 }

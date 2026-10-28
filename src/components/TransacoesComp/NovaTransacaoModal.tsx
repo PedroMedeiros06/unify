@@ -1,4 +1,4 @@
-import { colors } from "@/theme/colors";
+import { useThemeColors } from "@/theme/useThemeColors";
 import { moderateScale } from "@/utils/scale";
 import { Ionicons } from "@expo/vector-icons";
 import { View, Text, Pressable, TextInput } from "react-native";
@@ -6,9 +6,9 @@ import { memo, useCallback, useEffect, useState } from "react";
 import { useTransacoes } from "@/context/TransacoesContext";
 import { SeletorData } from "@/components/common/SeletorData";
 import { SeletorCategoria } from "@/components/common/SeletorCategoria";
-import { DropdownMenu } from "@/components/common/DropdownMenu";
 import { CategoriaId, obterCategoriaPorId } from "@/database/categorias";
-import { BANCOS_SUPORTADOS, BancoSuportado } from "@/database/parsers/bancosSuportados";
+import { SeletorConta } from "@/components/ContasComp/SeletorConta";
+import { ContaComSaldo } from "@/database/contasQueries";
 import { dataHojeIso } from "@/utils/dateUtils";
 import { ModalCentralizado } from "@/components/common/ModalCentralizado";
 import { useDialogo } from "@/context/DialogoContext";
@@ -16,6 +16,9 @@ import { useDialogo } from "@/context/DialogoContext";
 type Props = {
   visivel: boolean;
   onFechar: () => void;
+  // "É uma transferência?" — fecha este modal e abre o de transferência
+  // já com a conta escolhida aqui como origem.
+  onTrocarParaTransferencia?: (origemId: string | null) => void;
 };
 
 /**
@@ -24,11 +27,12 @@ type Props = {
  * (entrada/saída) e a categoria. O detalhe/subtítulo antigo foi
  * removido; quando vazio, cai no nome da categoria.
  *
- * O banco é escolhido num dropdown que lista os bancos com suporte a
- * importação de CSV (BANCOS_SUPORTADOS) — os mesmos que aparecem no
- * fluxo de importar extrato.
+ * A conta é escolhida entre TODAS as contas ativas do usuário (bancos
+ * do catálogo, contas personalizadas — "Outro banco" — e cartões), ver
+ * SeletorConta / Minhas contas.
  */
-function NovaTransacaoModalBase({ visivel, onFechar }: Props) {
+function NovaTransacaoModalBase({ visivel, onFechar, onTrocarParaTransferencia }: Props) {
+  const colors = useThemeColors();
   const { avisar } = useDialogo();
   const titleSize = moderateScale(17);
   const labelSize = moderateScale(11);
@@ -37,7 +41,7 @@ function NovaTransacaoModalBase({ visivel, onFechar }: Props) {
 
   const { adicionarTransacao } = useTransacoes();
 
-  const [banco, setBanco] = useState<BancoSuportado | null>(null);
+  const [conta, setConta] = useState<ContaComSaldo | null>(null);
   const [nome, setNome] = useState("");
   const [valorTexto, setValorTexto] = useState("");
   const [tipo, setTipo] = useState<"entrada" | "saida">("saida");
@@ -47,7 +51,7 @@ function NovaTransacaoModalBase({ visivel, onFechar }: Props) {
 
   useEffect(() => {
     if (!visivel) return;
-    setBanco(null);
+    setConta(null);
     setNome("");
     setValorTexto("");
     setTipo("saida");
@@ -65,10 +69,10 @@ function NovaTransacaoModalBase({ visivel, onFechar }: Props) {
     ? valorNumerico.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
     : "R$ 0,00";
 
-  const formularioValido = !!banco && nome.trim().length > 0 && valorNumerico > 0 && !!dataIso;
+  const formularioValido = !!conta && nome.trim().length > 0 && valorNumerico > 0 && !!dataIso;
 
   const handleSalvar = useCallback(async () => {
-    if (!formularioValido || !banco || !dataIso || salvando) return;
+    if (!formularioValido || !conta || !dataIso || salvando) return;
 
     setSalvando(true);
     try {
@@ -79,8 +83,8 @@ function NovaTransacaoModalBase({ visivel, onFechar }: Props) {
         valor: valorNumerico,
         tipo,
         data: dataIso,
-        banco: { sigla: banco.sigla, cor: banco.cor },
-        bancoId: banco.id,
+        banco: { sigla: conta.sigla, cor: conta.cor },
+        bancoId: conta.id,
         status: "concluida",
         categoriaIcone: categoria?.icone,
         categoriaId,
@@ -91,7 +95,7 @@ function NovaTransacaoModalBase({ visivel, onFechar }: Props) {
     } finally {
       setSalvando(false);
     }
-  }, [formularioValido, banco, dataIso, salvando, nome, valorNumerico, tipo, categoriaId, adicionarTransacao, onFechar, avisar]);
+  }, [formularioValido, conta, dataIso, salvando, nome, valorNumerico, tipo, categoriaId, adicionarTransacao, onFechar, avisar]);
 
   return (
     <ModalCentralizado
@@ -109,92 +113,14 @@ function NovaTransacaoModalBase({ visivel, onFechar }: Props) {
         </Pressable>
       </View>
 
-      {/* BANCO — dropdown com os bancos suportados pelo importador de CSV */}
-      <Text style={{ fontSize: labelSize }} className="text-second-text mb-1.5">
-        Banco
-      </Text>
+      {/* CONTA — qualquer conta ativa (catálogo, personalizadas e cartões) */}
       <View className="mb-4">
-        <DropdownMenu
-          larguraDoTrigger
-          alinhamento="esquerda"
-          trigger={({ abrir, aberto }) => (
-            <Pressable
-              onPress={abrir}
-              disabled={salvando}
-              className={`bg-input-background border rounded-xl px-3 py-3 flex-row items-center gap-2 ${
-                aberto ? "border-active-icon" : "border-input-border"
-              }`}
-              accessibilityRole="button"
-              accessibilityLabel={`Banco. ${banco ? banco.nome : "Nenhum selecionado"}`}
-            >
-              {banco ? (
-                <>
-                  <View
-                    style={{ backgroundColor: banco.cor }}
-                    className="w-6 h-6 rounded-md items-center justify-center flex-shrink-0"
-                  >
-                    <Text style={{ fontSize: 10 }} className="text-white font-Inter-Bold">
-                      {banco.sigla}
-                    </Text>
-                  </View>
-                  <Text style={{ fontSize: inputTextSize }} className="text-main-text font-Inter-Medium flex-1" numberOfLines={1}>
-                    {banco.nome}
-                  </Text>
-                </>
-              ) : (
-                <Text style={{ fontSize: inputTextSize }} className="text-desactived-text flex-1">
-                  Selecione o banco
-                </Text>
-              )}
-              <Ionicons
-                name="chevron-down"
-                color={aberto ? colors["active-icon"] : colors["second-text"]}
-                size={16}
-                style={{ flexShrink: 0 }}
-              />
-            </Pressable>
-          )}
-        >
-          {({ fechar }) => (
-            <View className="py-1">
-              {BANCOS_SUPORTADOS.map((b, index) => {
-                const selecionado = b.id === banco?.id;
-                return (
-                  <Pressable
-                    key={b.id}
-                    onPress={() => {
-                      setBanco(b);
-                      fechar();
-                    }}
-                    className={`flex-row items-center gap-3 px-4 py-3 active:opacity-70 ${
-                      index < BANCOS_SUPORTADOS.length - 1 ? "border-b border-lines-divisions/60" : ""
-                    }`}
-                    accessibilityRole="radio"
-                    accessibilityState={{ checked: selecionado }}
-                    accessibilityLabel={b.nome}
-                  >
-                    <View
-                      style={{ backgroundColor: b.cor }}
-                      className="w-7 h-7 rounded-lg items-center justify-center flex-shrink-0"
-                    >
-                      <Text style={{ fontSize: 10 }} className="text-white font-Inter-Bold">
-                        {b.sigla}
-                      </Text>
-                    </View>
-                    <Text
-                      style={{ fontSize: inputTextSize }}
-                      className={selecionado ? "text-active-icon font-Inter-Medium flex-1" : "text-main-text flex-1"}
-                      numberOfLines={1}
-                    >
-                      {b.nome}
-                    </Text>
-                    {selecionado && <Ionicons name="checkmark" color={colors["active-icon"]} size={16} />}
-                  </Pressable>
-                );
-              })}
-            </View>
-          )}
-        </DropdownMenu>
+        <SeletorConta
+          label="Conta"
+          contaId={conta?.id ?? null}
+          onSelecionar={setConta}
+          desabilitado={salvando}
+        />
       </View>
 
       {/* NOME */}
@@ -206,8 +132,8 @@ function NovaTransacaoModalBase({ visivel, onFechar }: Props) {
         onChangeText={setNome}
         placeholder="Ex.: Mercado, Salário..."
         placeholderTextColor={colors["desactived-text"]}
-        style={{ fontSize: inputTextSize, color: colors["main-text"] }}
-        className="bg-input-background border border-input-border rounded-xl px-3 py-3 mb-4"
+        style={{ fontSize: inputTextSize, color: colors["main-text"], backgroundColor: colors["input-background"], borderColor: colors["input-border"] }}
+        className="border rounded-xl px-3 py-3 mb-4"
         editable={!salvando}
         accessibilityLabel="Nome da transação"
       />
@@ -220,8 +146,8 @@ function NovaTransacaoModalBase({ visivel, onFechar }: Props) {
         value={valorExibicao}
         onChangeText={handleValorChange}
         keyboardType="numeric"
-        style={{ fontSize: inputTextSize, color: colors["main-text"] }}
-        className="bg-input-background border border-input-border rounded-xl px-3 py-3 mb-4"
+        style={{ fontSize: inputTextSize, color: colors["main-text"], backgroundColor: colors["input-background"], borderColor: colors["input-border"] }}
+        className="border rounded-xl px-3 py-3 mb-4"
         editable={!salvando}
         accessibilityLabel="Valor da transação"
       />
@@ -263,6 +189,21 @@ function NovaTransacaoModalBase({ visivel, onFechar }: Props) {
           </Text>
         </Pressable>
       </View>
+
+      {onTrocarParaTransferencia && (
+        <Pressable
+          onPress={() => onTrocarParaTransferencia(conta?.id ?? null)}
+          disabled={salvando}
+          className="flex-row items-center gap-1.5 mb-4 -mt-1"
+          hitSlop={6}
+          accessibilityRole="button"
+        >
+          <Ionicons name="swap-horizontal-outline" size={14} color={colors["active-icon"]} />
+          <Text style={{ fontSize: labelSize, color: colors["active-icon"] }}>
+            Movimentação entre suas contas? Use transferência
+          </Text>
+        </Pressable>
+      )}
 
       {/* CATEGORIA */}
       <View className="mb-5">

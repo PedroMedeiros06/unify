@@ -1,6 +1,6 @@
 import { moderateScale } from "@/utils/scale";
 import { Ionicons } from "@expo/vector-icons";
-import { colors } from "@/theme/colors";
+import { useThemeColors } from "@/theme/useThemeColors";
 import { View, Text, Pressable } from "react-native";
 import { memo, useCallback, useState } from "react";
 import { useSimulacoes } from "@/context/SimulacoesContext";
@@ -55,6 +55,7 @@ const SimulacaoItem = memo(function SimulacaoItem({
   simulacao: SimulacaoSalva;
   onAbrirMenu: (s: SimulacaoSalva) => void;
 }) {
+  const colors = useThemeColors();
   const tituloSize = moderateScale(13);
   const subSize = moderateScale(10);
   const valorSize = moderateScale(13);

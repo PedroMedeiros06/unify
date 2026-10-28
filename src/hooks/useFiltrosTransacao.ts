@@ -11,6 +11,7 @@ export type EstadoFiltros = {
   periodoPreset: PeriodoPreset;
   periodoInicioPersonalizado: string | null; // ISO, só relevante quando periodoPreset === "personalizado"
   periodoFimPersonalizado: string | null;
+  textoBusca: string; // "" = sem busca por texto; casa por substring em nome/subtítulo
 };
 
 // "esteMes" é o preset NEUTRO padrão: telas de análise e listas abrem
@@ -19,13 +20,17 @@ export type EstadoFiltros = {
 // ponto de partida passam `presetInicial` para o hook.
 const PRESET_PADRAO: PeriodoPreset = "esteMes";
 
-function montarEstadoInicial(presetInicial: PeriodoPreset): EstadoFiltros {
+function montarEstadoInicial(
+  presetInicial: PeriodoPreset,
+  categoriasIniciais: (CategoriaId | null)[] = []
+): EstadoFiltros {
   return {
     bancosSelecionados: [],
-    categoriasSelecionadas: [],
+    categoriasSelecionadas: categoriasIniciais,
     periodoPreset: presetInicial,
     periodoInicioPersonalizado: null,
     periodoFimPersonalizado: null,
+    textoBusca: "",
   };
 }
 
@@ -79,11 +84,15 @@ type OpcoesHook = {
   // o ponto de partida que faz sentido pra ela (a Home de transações
   // abre em "tudo", os cards de análise em "esteMes").
   presetInicial?: PeriodoPreset;
+  // Categorias já selecionadas ao montar (ex: [null] = "sem categoria").
+  categoriasIniciais?: (CategoriaId | null)[];
 };
 
 export function useFiltrosTransacao(opcoes: OpcoesHook = {}) {
   const presetInicial = opcoes.presetInicial ?? PRESET_PADRAO;
-  const [filtros, setFiltros] = useState<EstadoFiltros>(() => montarEstadoInicial(presetInicial));
+  const [filtros, setFiltros] = useState<EstadoFiltros>(() =>
+    montarEstadoInicial(presetInicial, opcoes.categoriasIniciais)
+  );
 
   // Preset considerado NEUTRO para esta instância — o ponto de partida
   // que NÃO conta como "filtro ativo" e para o qual "Limpar tudo"
@@ -122,6 +131,14 @@ export function useFiltrosTransacao(opcoes: OpcoesHook = {}) {
     setFiltros((prev) => ({ ...prev, categoriasSelecionadas: [] }));
   }, []);
 
+  const definirTextoBusca = useCallback((texto: string) => {
+    setFiltros((prev) => ({ ...prev, textoBusca: texto }));
+  }, []);
+
+  const limparTextoBusca = useCallback(() => {
+    setFiltros((prev) => ({ ...prev, textoBusca: "" }));
+  }, []);
+
   const definirPeriodoPreset = useCallback((preset: PeriodoPreset) => {
     setFiltros((prev) => ({
       ...prev,
@@ -155,14 +172,17 @@ export function useFiltrosTransacao(opcoes: OpcoesHook = {}) {
     filtros.periodoFimPersonalizado
   );
 
+  const textoBuscaNormalizado = filtros.textoBusca.trim();
+
   const filtrosParaQuery: FiltrosTransacao = useMemo(
     () => ({
       bancosIds: filtros.bancosSelecionados.length > 0 ? filtros.bancosSelecionados : null,
       categoriasIds: filtros.categoriasSelecionadas.length > 0 ? filtros.categoriasSelecionadas : null,
       dataInicio: periodoInicio,
       dataFim: periodoFim,
+      texto: textoBuscaNormalizado.length > 0 ? textoBuscaNormalizado : null,
     }),
-    [filtros.bancosSelecionados, filtros.categoriasSelecionadas, periodoInicio, periodoFim]
+    [filtros.bancosSelecionados, filtros.categoriasSelecionadas, periodoInicio, periodoFim, textoBuscaNormalizado]
   );
 
   // "O usuário mexeu em algum filtro?" — banco/categoria escolhidos, ou
@@ -171,7 +191,8 @@ export function useFiltrosTransacao(opcoes: OpcoesHook = {}) {
   const possuiFiltrosAtivos =
     filtros.bancosSelecionados.length > 0 ||
     filtros.categoriasSelecionadas.length > 0 ||
-    filtros.periodoPreset !== presetNeutro;
+    filtros.periodoPreset !== presetNeutro ||
+    textoBuscaNormalizado.length > 0;
 
   // "A consulta precisa de recorte?" — tem banco/categoria, OU o
   // período não é "tudo". Diferente de possuiFiltrosAtivos: uma tela
@@ -181,7 +202,8 @@ export function useFiltrosTransacao(opcoes: OpcoesHook = {}) {
   const consultaTemRecorte =
     filtros.bancosSelecionados.length > 0 ||
     filtros.categoriasSelecionadas.length > 0 ||
-    filtros.periodoPreset !== "tudo";
+    filtros.periodoPreset !== "tudo" ||
+    textoBuscaNormalizado.length > 0;
 
   return {
     filtros,
@@ -189,6 +211,8 @@ export function useFiltrosTransacao(opcoes: OpcoesHook = {}) {
     limparFiltroBanco,
     alternarCategoria,
     limparFiltroCategoria,
+    definirTextoBusca,
+    limparTextoBusca,
     definirPeriodoPreset,
     definirPeriodoPersonalizado,
     limparTodosFiltros,

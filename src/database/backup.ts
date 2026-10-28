@@ -27,6 +27,7 @@ const FORMATO_VERSAO = 1;
 const TABELAS_EM_ORDEM_DE_INSERCAO = [
   "perfil_usuario",
   "bancos",
+  "categorias_personalizadas",
   "metas",
   "transacoes",
   "compromissos",
@@ -38,6 +39,10 @@ const TABELAS_EM_ORDEM_DE_INSERCAO = [
   "limite_categoria",
   "meta_transacoes",
   "regras_categorizacao",
+  // `notificacoes_historico` fica DE FORA de propósito: é registro
+  // transitório de avisos que o app deu neste aparelho (os ids de
+  // notificação nem valeriam em outro device), não dado que o usuário
+  // criou e espera reencontrar após restaurar.
 ] as const;
 
 type LinhaCrua = Record<string, unknown>;
@@ -191,6 +196,12 @@ export async function restaurarDados(arquivo: ArquivoBackup): Promise<void> {
             await db.runAsync(sql, valores as never[]);
           }
         }
+
+        // Os ids de notificação do arquivo são do agendamento de outro
+        // aparelho/momento e não existem aqui. Zerados, quem restaura
+        // reagenda tudo (ver reagendarNotificacoesDoBanco).
+        await db.execAsync(`UPDATE compromissos SET notificacao_id = NULL;`);
+        await db.execAsync(`UPDATE lembretes SET notificacao_id = NULL;`);
       });
     } finally {
       await db.execAsync(`PRAGMA foreign_keys = ON;`);
