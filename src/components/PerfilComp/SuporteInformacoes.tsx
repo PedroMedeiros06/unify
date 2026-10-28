@@ -2,6 +2,7 @@ import { moderateScale } from "@/utils/scale";
 import { View, Text, Modal } from "react-native";
 import { memo, useCallback, useMemo, useState } from "react";
 import Constants from "expo-constants";
+import * as WebBrowser from "expo-web-browser";
 import { MenuItem } from "./MenuItem";
 import { SobreUnifyModal } from "./SobreUnifyModal";
 import { OnboardingFluxo } from "@/components/Onboarding/OnboardingFluxo";
@@ -14,6 +15,11 @@ import { useDialogo } from "@/context/DialogoContext";
 // que é mantido igual ao package.json e às tags de commit (vX.Y.Z).
 // Nunca hardcodar aqui, senão a tela e a versão real divergem.
 const VERSAO_APP = Constants.expoConfig?.version ?? "—";
+
+// Página publicada pelo GitHub Pages a partir de docs/privacidade/ deste
+// repositório. A Play Store exige o mesmo link na ficha da loja e dentro
+// do app — se a URL mudar, atualizar nos dois lugares.
+const URL_POLITICA_PRIVACIDADE = "https://pedromedeiros06.github.io/unify/privacidade/";
 
 // "há 3 dias", "hoje" etc. a partir de um ISO. Aproximação simples —
 // só para dar noção de quão fresco está o dado de câmbio/juros.
@@ -113,6 +119,12 @@ function SuporteInformacoesBase() {
         titulo="Sobre a Unify"
         subtitulo={`Versão ${VERSAO_APP} — ver novidades`}
         onPress={() => setSobreAberto(true)}
+      />
+      <MenuItem
+        icone="shield-checkmark-outline"
+        titulo="Política de privacidade"
+        subtitulo="Como a Unify trata os seus dados"
+        onPress={() => void WebBrowser.openBrowserAsync(URL_POLITICA_PRIVACIDADE)}
       />
       <MenuItem
         icone="trash-outline"
